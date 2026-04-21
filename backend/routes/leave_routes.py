@@ -10,6 +10,22 @@ from utils.recalculate_balances import recalculate_all_balances
 
 leave_bp = Blueprint("leave_bp", __name__)
 
+
+def remove_tea_coffee_orders_for_leave(employee_id, start_date, end_date):
+    """Delete tea/coffee orders that fall within an approved leave range."""
+    if not employee_id or not start_date or not end_date:
+        return 0
+
+    result = mongo.db.tea_coffee_orders.delete_many({
+        "employee_id": str(employee_id),
+        "date": {
+            "$gte": start_date,
+            "$lte": end_date
+        }
+    })
+    return result.deleted_count
+
+
 # Import notification helper
 def create_notification(user_id, notification_type, message, related_leave_id=None):
     """Helper function to create notifications"""
@@ -1296,6 +1312,8 @@ def update_leave_status(leave_id):
                 related_leave_id=leave_id
             )
 
+        removed_orders = 0
+
         if status == "Approved":
             employee = mongo.db.users.find_one({"_id": leave_record["employee_id"]})
             if employee:
@@ -1326,7 +1344,30 @@ def update_leave_status(leave_id):
                     {"$set": {"leaveBalance": leave_balance}}
                 )
 
-        return jsonify({"message": f"Leave {status.lower()} successfully!"}), 200
+            approved_leave_type = normalize_leave_type(leave_record.get("leave_type", ""))
+            is_half_day_leave = leave_record.get("is_half_day", False)
+
+            if approved_leave_type.lower() != "early logout" and not is_half_day_leave:
+                approved_range_start = update_data.get("approved_start_date", leave_record.get("start_date"))
+                approved_range_end = update_data.get("approved_end_date", leave_record.get("end_date"))
+                removed_orders = remove_tea_coffee_orders_for_leave(
+                    leave_record["employee_id"],
+                    approved_range_start,
+                    approved_range_end
+                )
+
+                if removed_orders:
+                    print(
+                        f"☕ Removed {removed_orders} tea/coffee order(s) for employee "
+                        f"{leave_record.get('employee_name', 'Unknown')} due to approved leave "
+                        f"from {approved_range_start} to {approved_range_end}"
+                    )
+
+        response_message = f"Leave {status.lower()} successfully!"
+        if status == "Approved" and removed_orders:
+            response_message += f" {removed_orders} tea/coffee order(s) were discarded for the approved leave dates."
+
+        return jsonify({"message": response_message}), 200
 
     except Exception as e:
         print("❌ Error updating leave status:", str(e))

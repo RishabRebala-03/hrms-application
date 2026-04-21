@@ -1,450 +1,425 @@
-// src/components/EmployeeList.js
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import LeaveStatusDot from './LeaveStatusDot';
+import {
+  Building2,
+  Download,
+  Filter,
+  Mail,
+  Search,
+  ShieldCheck,
+  UserCheck,
+  UserRound,
+  Users,
+} from "lucide-react";
+import LeaveStatusDot from "./LeaveStatusDot";
 
 const EmployeeList = ({ user, onNavigateToProfile, isAdmin = false }) => {
   const [employees, setEmployees] = useState([]);
   const [stats, setStats] = useState({ total: 0, active: 0 });
   const [searchTerm, setSearchTerm] = useState("");
   const [filterDepartment, setFilterDepartment] = useState("All");
+  const [filterStatus, setFilterStatus] = useState("All");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [actionLoadingId, setActionLoadingId] = useState(null);
 
-  const fetchEmployees = async () => {
+  const fetchEmployees = useCallback(async () => {
     try {
       setLoading(true);
-      
+
       let employeeData = [];
-      
+
       if (isAdmin) {
-        // Admin: Fetch ALL users from the system
-        const res = await axios.get(`${process.env.REACT_APP_BACKEND_URL}/api/users/`);
-        employeeData = res.data;
+        const response = await axios.get(`${process.env.REACT_APP_BACKEND_URL}/api/users/`);
+        employeeData = response.data;
       } else if (user.role === "Manager") {
-        // Manager: Fetch only direct reports (team members)
-        const res = await axios.get(
+        const response = await axios.get(
           `${process.env.REACT_APP_BACKEND_URL}/api/users/get_employees_by_manager/${encodeURIComponent(user.email)}`
         );
-        employeeData = res.data;
+        employeeData = response.data;
       } else {
-        // Employee: Cannot see any other employees
         employeeData = [];
         setMessage("Employees cannot view other team members");
       }
 
       setEmployees(employeeData);
-      const activeCount = employeeData.filter((emp) => emp.is_active !== false).length;
+      const activeCount = employeeData.filter((employee) => employee.is_active !== false).length;
       setStats({
         total: employeeData.length,
         active: activeCount,
       });
       setMessage(employeeData.length === 0 && user.role === "Employee" ? "" : "");
-    } catch (err) {
-      console.error("Error fetching employees:", err);
+    } catch (error) {
+      console.error("Error fetching employees:", error);
       setMessage("Failed to load employees");
     } finally {
       setLoading(false);
     }
-  };
+  }, [isAdmin, user]);
 
   useEffect(() => {
     if (isAdmin || (user?.email && user?.role === "Manager")) {
       fetchEmployees();
     } else if (user?.role === "Employee") {
-      // For employees, show empty state immediately
       setEmployees([]);
       setStats({ total: 0, active: 0 });
       setLoading(false);
     }
-  }, [user, isAdmin]);
+  }, [user, isAdmin, fetchEmployees]);
 
   const handleActiveToggle = async (employeeId, nextStatus) => {
     try {
       setActionLoadingId(employeeId);
-      const res = await axios.put(
+      const response = await axios.put(
         `${process.env.REACT_APP_BACKEND_URL}/api/users/set_active/${employeeId}`,
         { is_active: nextStatus }
       );
 
-      if (res.status === 200) {
+      if (response.status === 200) {
         await fetchEmployees();
       }
-    } catch (err) {
-      console.error("Error updating active status:", err);
-      setMessage(err.response?.data?.error || "Failed to update active status");
+    } catch (error) {
+      console.error("Error updating active status:", error);
+      setMessage(error.response?.data?.error || "Failed to update active status");
       setTimeout(() => setMessage(""), 3000);
     } finally {
       setActionLoadingId(null);
     }
   };
 
+  const departments = useMemo(
+    () => ["All", ...new Set(employees.map((employee) => employee.department).filter(Boolean))],
+    [employees]
+  );
 
-const downloadCSV = () => {
-  // Helper function to format date properly
-  const formatDateForCSV = (dateValue) => {
-    if (!dateValue) return "";
-    
-    try {
-      let date;
-      
-      // Handle different date formats
-      if (typeof dateValue === "string") {
-        date = new Date(dateValue.replace("Z", "").replace(/\.\d{3}/, ""));
-      } else if (dateValue.$date) {
-        date = new Date(dateValue.$date);
-      } else {
-        date = new Date(dateValue);
-      }
-      
-      // Check if date is valid
-      if (isNaN(date.getTime())) {
+  const filteredEmployees = useMemo(() => {
+    return employees.filter((employee) => {
+      const matchesSearch =
+        employee.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        employee.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        employee.designation?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        employee.department?.toLowerCase().includes(searchTerm.toLowerCase());
+
+      const matchesDepartment =
+        filterDepartment === "All" || employee.department === filterDepartment;
+
+      const isActive = employee.is_active !== false;
+      const matchesStatus =
+        filterStatus === "All" ||
+        (filterStatus === "Active" && isActive) ||
+        (filterStatus === "Inactive" && !isActive);
+
+      return matchesSearch && matchesDepartment && matchesStatus;
+    });
+  }, [employees, filterDepartment, filterStatus, searchTerm]);
+
+  const downloadCSV = () => {
+    const formatDateForCSV = (dateValue) => {
+      if (!dateValue) return "";
+
+      try {
+        let date;
+
+        if (typeof dateValue === "string") {
+          date = new Date(dateValue.replace("Z", "").replace(/\.\d{3}/, ""));
+        } else if (dateValue.$date) {
+          date = new Date(dateValue.$date);
+        } else {
+          date = new Date(dateValue);
+        }
+
+        if (Number.isNaN(date.getTime())) {
+          return "";
+        }
+
+        const day = String(date.getDate()).padStart(2, "0");
+        const month = String(date.getMonth() + 1).padStart(2, "0");
+        const year = date.getFullYear();
+
+        return `${day}/${month}/${year}`;
+      } catch (error) {
+        console.error("Date formatting error:", error);
         return "";
       }
-      
-      // Format as DD/MM/YYYY for better compatibility
-      const day = String(date.getDate()).padStart(2, '0');
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const year = date.getFullYear();
-      
-      return `${day}/${month}/${year}`;
-    } catch (error) {
-      console.error("Date formatting error:", error);
-      return "";
-    }
-  };
-  
-  // Prepare CSV data
-  const csvHeaders = [
-    "Employee ID",
-    "Name",
-    "Email",
-    "Designation",
-    "Department",
-    "Role",
-    "Shift Timings",
-    "Date of Joining",
-    "Reports To"
-  ];
-  
-  const csvRows = filteredEmployees.map(emp => [
-    emp.employeeId || emp._id,
-    emp.name || "",
-    emp.email || "",
-    emp.designation || "",
-    emp.department || "",
-    emp.role || "Employee",
-    emp.shiftTimings || "",
-    formatDateForCSV(emp.dateOfJoining),  // Use the helper function
-    emp.reportsToEmail || ""
-  ]);
-  
-  // Create CSV content
-  const csvContent = [
-    csvHeaders.join(","),
-    ...csvRows.map(row => row.map(cell => `"${cell}"`).join(","))
-  ].join("\n");
-  
-  // Create blob and download
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-  const link = document.createElement("a");
-  const url = URL.createObjectURL(blob);
-  
-  link.setAttribute("href", url);
-  link.setAttribute("download", `employees_${new Date().toISOString().split('T')[0]}.csv`);
-  link.style.visibility = "hidden";
-  
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  };
+    };
 
-  const departments = ["All", ...new Set(employees.map(emp => emp.department).filter(Boolean))];
+    const csvHeaders = [
+      "Employee ID",
+      "Name",
+      "Email",
+      "Designation",
+      "Department",
+      "Role",
+      "Shift Timings",
+      "Date of Joining",
+      "Reports To",
+      "Status",
+    ];
 
-  const filteredEmployees = employees.filter(emp => {
-    const matchesSearch = emp.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         emp.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         emp.designation?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesDepartment = filterDepartment === "All" || emp.department === filterDepartment;
-    return matchesSearch && matchesDepartment;
-  });
+    const csvRows = filteredEmployees.map((employee) => [
+      employee.employeeId || employee._id,
+      employee.name || "",
+      employee.email || "",
+      employee.designation || "",
+      employee.department || "",
+      employee.role || "Employee",
+      employee.shiftTimings || "",
+      formatDateForCSV(employee.dateOfJoining),
+      employee.reportsToEmail || "",
+      employee.is_active !== false ? "Active" : "Inactive",
+    ]);
+
+    const csvContent = [
+      csvHeaders.join(","),
+      ...csvRows.map((row) => row.map((cell) => `"${cell}"`).join(",")),
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+
+    link.setAttribute("href", url);
+    link.setAttribute("download", `employees_${new Date().toISOString().split("T")[0]}.csv`);
+    link.style.visibility = "hidden";
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   if (loading) {
     return (
-      <div className="panel">
-        <div style={{ textAlign: "center", padding: "60px 20px", color: "#9ca3af" }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>⏳</div>
-          <div style={{ fontSize: 16 }}>Loading employees...</div>
+      <section className="employee-directory">
+        <div className="fiori-loading-card">
+          <Users size={28} />
+          <div>
+            <strong>Loading employee directory</strong>
+            <p>Preparing workforce and reporting information.</p>
+          </div>
         </div>
-      </div>
+      </section>
     );
   }
 
   return (
-    <div className="panel">
-      <div style={{ marginBottom: 24 }}>
-        <h3 style={{ margin: 0, marginBottom: 8 }}>
-          {isAdmin ? "All Employees" : "My Team"}
-        </h3>
-        <p className="muted">
-          {isAdmin 
-            ? "View and manage all employees in the organization" 
-            : "View and manage your team members"}
-        </p>
-      </div>
-
-      {/* Stats Cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 24 }}>
-        <div
-          style={{
-            background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-            color: "white",
-            borderRadius: 12,
-            padding: 20,
-            boxShadow: "0 4px 12px rgba(102, 126, 234, 0.3)",
-          }}
-        >
-          <div style={{ fontSize: 14, opacity: 0.9, marginBottom: 4 }}>
-            {isAdmin ? "Total Employees" : "Team Members"}
+    <section className="employee-directory">
+      <header className="employee-directory-hero">
+        <div>
+          <div className="admin-section-overline">
+            {isAdmin ? "Enterprise Directory" : "Team Directory"}
           </div>
-          <div style={{ fontSize: 36, fontWeight: 700 }}>{stats.total}</div>
+          <h1>{isAdmin ? "Employee Directory" : "Team Members"}</h1>
+          <p>
+            {isAdmin
+              ? "Review the full workforce directory, keep employee records visible, and move quickly into individual profiles."
+              : "Review your reporting structure, filter your team by department or status, and open profiles from one place."}
+          </p>
         </div>
 
-        <div
-          style={{
-            background: "white",
-            border: "1px solid #e5e7eb",
-            borderRadius: 12,
-            padding: 20,
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.05)",
-          }}
-        >
-          <div style={{ fontSize: 14, color: "#6b7280", marginBottom: 4 }}>
-            Active Members
-          </div>
-          <div style={{ fontSize: 36, fontWeight: 700, color: "#10b981" }}>{stats.active}</div>
+        <div className="employee-directory-hero-actions">
+          <button className="fiori-button secondary" onClick={downloadCSV}>
+            <Download size={16} />
+            <span>Export current view</span>
+          </button>
         </div>
+      </header>
+
+      <div className="employee-directory-summary">
+        <article className="fiori-stat-card">
+          <div className="fiori-stat-topline">
+            <span className="fiori-stat-label">{isAdmin ? "Total Workforce" : "Team Size"}</span>
+            <Users size={18} />
+          </div>
+          <div className="fiori-stat-value">{stats.total}</div>
+          <div className="fiori-stat-note">
+            {isAdmin ? "Employees available in the HRMS directory" : "Direct reports in your reporting line"}
+          </div>
+        </article>
+
+        <article className="fiori-stat-card">
+          <div className="fiori-stat-topline">
+            <span className="fiori-stat-label">Active Members</span>
+            <UserCheck size={18} />
+          </div>
+          <div className="fiori-stat-value">{stats.active}</div>
+          <div className="fiori-stat-note">Profiles currently marked active</div>
+        </article>
+
+        <article className="fiori-stat-card">
+          <div className="fiori-stat-topline">
+            <span className="fiori-stat-label">Departments</span>
+            <Building2 size={18} />
+          </div>
+          <div className="fiori-stat-value">{Math.max(departments.length - 1, 0)}</div>
+          <div className="fiori-stat-note">Distinct departments in the current scope</div>
+        </article>
+
+        <article className="fiori-stat-card">
+          <div className="fiori-stat-topline">
+            <span className="fiori-stat-label">Filtered View</span>
+            <Filter size={18} />
+          </div>
+          <div className="fiori-stat-value">{filteredEmployees.length}</div>
+          <div className="fiori-stat-note">Employees matching the active filters</div>
+        </article>
       </div>
 
-      {/* Search and Filter */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 12, marginBottom: 24 }}>
-        <input
-          className="input"
-          placeholder="Search by name, email, or designation..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          style={{ fontSize: 14 }}
-        />
-        <select
-          className="input"
-          value={filterDepartment}
-          onChange={(e) => setFilterDepartment(e.target.value)}
-          style={{ minWidth: 180 }}
-        >
-          {departments.map(dept => (
-            <option key={dept} value={dept}>{dept}</option>
-          ))}
-        </select>
-        <button
-          className="btn"
-          onClick={downloadCSV}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "8px 16px",
-            whiteSpace: "nowrap"
-          }}
-        >
-          <span>📥</span>
-          <span>Download CSV</span>
-        </button>
-      </div>
+      <section className="fiori-panel">
+        <div className="fiori-panel-header">
+          <div>
+            <h3>Filters</h3>
+            <p>Search and narrow the directory without leaving the workspace</p>
+          </div>
+        </div>
 
-      {/* Employee List */}
+        <div className="employee-directory-filters">
+          <label className="employee-filter-field employee-filter-search">
+            <span>Search</span>
+            <div className="employee-filter-input-shell">
+              <Search size={16} />
+              <input
+                className="input"
+                placeholder="Search by name, email, designation, or department"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+              />
+            </div>
+          </label>
+
+          <label className="employee-filter-field">
+            <span>Department</span>
+            <select
+              className="input"
+              value={filterDepartment}
+              onChange={(event) => setFilterDepartment(event.target.value)}
+            >
+              {departments.map((department) => (
+                <option key={department} value={department}>
+                  {department}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="employee-filter-field">
+            <span>Status</span>
+            <select
+              className="input"
+              value={filterStatus}
+              onChange={(event) => setFilterStatus(event.target.value)}
+            >
+              <option value="All">All</option>
+              <option value="Active">Active</option>
+              <option value="Inactive">Inactive</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
       {filteredEmployees.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "60px 20px", color: "#9ca3af" }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>👥</div>
-          <div style={{ fontSize: 16, fontWeight: 500 }}>
-            {searchTerm || filterDepartment !== "All" 
-              ? "No employees match your filters" 
-              : "No employees found"}
+        <div className="admin-empty-state">
+          <UserRound size={28} />
+          <div>
+            <strong>
+              {searchTerm || filterDepartment !== "All" || filterStatus !== "All"
+                ? "No employees match the current filters"
+                : "No employees available"}
+            </strong>
+            <p>Adjust the filters or search terms to expand the directory view.</p>
           </div>
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
-          {filteredEmployees.map((employee) => (
-            <div
-              key={employee._id}
-              className="card"
-              style={{
-                padding: 20,
-                border: "1px solid #e5e7eb",
-                borderRadius: 12,
-                cursor: "pointer",
-                transition: "all 0.2s ease",
-              }}
-              onClick={() => onNavigateToProfile(employee._id)}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = "translateY(-2px)";
-                e.currentTarget.style.boxShadow = "0 8px 16px rgba(0, 0, 0, 0.1)";
-                e.currentTarget.style.borderColor = "#667eea";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.boxShadow = "none";
-                e.currentTarget.style.borderColor = "#e5e7eb";
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-                <div style={{ position: 'relative' }}>
-                  {employee.photoUrl ? (
-                    <img
-                      src={employee.photoUrl}
-                      alt=""
-                      style={{
-                        width: 48,
-                        height: 48,
-                        borderRadius: "50%",
-                        objectFit: "cover",
-                        border: "2px solid #e5e7eb",
-                      }}
-                    />
-                  ) : (
-                    <div
-                      style={{
-                        width: 48,
-                        height: 48,
-                        borderRadius: "50%",
-                        background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        color: "white",
-                        fontWeight: 700,
-                        fontSize: 18,
+        <div className="employee-directory-grid">
+          {filteredEmployees.map((employee) => {
+            const isActive = employee.is_active !== false;
+            return (
+              <article
+                key={employee._id}
+                className="employee-directory-card"
+                onClick={() => onNavigateToProfile(employee._id)}
+              >
+                <div className="employee-card-header">
+                  <div className="employee-card-identity">
+                    <div className="employee-card-avatar-wrap">
+                      {employee.photoUrl ? (
+                        <img
+                          src={employee.photoUrl}
+                          alt={employee.name || "Employee"}
+                          className="employee-card-avatar"
+                        />
+                      ) : (
+                        <div className="employee-card-avatar employee-card-avatar-fallback">
+                          {employee.name?.charAt(0) || "E"}
+                        </div>
+                      )}
+                      <div className="employee-card-leave-status">
+                        <LeaveStatusDot userId={employee._id} size={10} />
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4>{employee.name || "Unnamed employee"}</h4>
+                      <p>{employee.designation || "Designation not available"}</p>
+                    </div>
+                  </div>
+
+                  <div className="employee-card-badges">
+                    <span className={`fiori-status-pill ${isActive ? "is-approved" : "is-rejected"}`}>
+                      {isActive ? "Active" : "Inactive"}
+                    </span>
+                    {employee.role === "Admin" && (
+                      <span className="fiori-status-pill is-neutral">Admin</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="employee-card-details">
+                  <div className="employee-card-detail">
+                    <Mail size={15} />
+                    <span>{employee.email || "No email available"}</span>
+                  </div>
+                  <div className="employee-card-detail">
+                    <Building2 size={15} />
+                    <span>{employee.department || "Unassigned department"}</span>
+                  </div>
+                  <div className="employee-card-detail">
+                    <ShieldCheck size={15} />
+                    <span>{employee.role || "Employee"}</span>
+                  </div>
+                </div>
+
+                <div className="employee-card-footer">
+                  <div className="employee-card-link">Open employee profile</div>
+
+                  {isAdmin && (
+                    <button
+                      className={`fiori-button secondary ${isActive ? "danger" : ""}`}
+                      disabled={actionLoadingId === employee._id}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleActiveToggle(employee._id, !isActive);
                       }}
                     >
-                      {employee.name?.charAt(0) || "E"}
-                    </div>
+                      {actionLoadingId === employee._id
+                        ? "Updating..."
+                        : isActive
+                          ? "Mark inactive"
+                          : "Mark active"}
+                    </button>
                   )}
-                  <div style={{ position: 'absolute', bottom: -2, right: -2, background: 'white', borderRadius: '50%', padding: 2 }}>
-                    <LeaveStatusDot userId={employee._id} size={10} />
-                  </div>
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 16, fontWeight: 600, color: "#111827" }}>
-                    {employee.name}
-                  </div>
-                  <div style={{ fontSize: 13, color: "#6b7280" }}>
-                    {employee.designation}
-                  </div>
-                </div>
-                <div
-                  style={{
-                    background: employee.is_active !== false ? "#dcfce7" : "#fee2e2",
-                    color: employee.is_active !== false ? "#166534" : "#991b1b",
-                    border: `1px solid ${employee.is_active !== false ? "#86efac" : "#fca5a5"}`,
-                    padding: "4px 8px",
-                    borderRadius: 6,
-                    fontSize: 11,
-                    fontWeight: 600,
-                  }}
-                >
-                  {employee.is_active !== false ? "ACTIVE" : "INACTIVE"}
-                </div>
-                {employee.role === "Admin" && (
-                  <div
-                    style={{
-                      background: "#fef3c7",
-                      color: "#92400e",
-                      padding: "4px 8px",
-                      borderRadius: 6,
-                      fontSize: 11,
-                      fontWeight: 600,
-                    }}
-                  >
-                    ADMIN
-                  </div>
-                )}
-              </div>
-
-              <div style={{ fontSize: 13, color: "#6b7280", marginBottom: 8 }}>
-                📧 {employee.email}
-              </div>
-
-              {employee.department && (
-                <div style={{ fontSize: 13, color: "#6b7280", marginBottom: 8 }}>
-                  🏢 {employee.department}
-                </div>
-              )}
-
-              {isAdmin && (
-                <div style={{ marginTop: 10 }}>
-                  <button
-                    className="btn ghost"
-                    disabled={actionLoadingId === employee._id}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleActiveToggle(employee._id, !(employee.is_active !== false));
-                    }}
-                    style={{
-                      width: "100%",
-                      border: "1px solid #d1d5db",
-                      borderRadius: 8,
-                      padding: "8px 10px",
-                      cursor: actionLoadingId === employee._id ? "not-allowed" : "pointer",
-                      background: employee.is_active !== false ? "#fff5f5" : "#f0fdf4",
-                      color: employee.is_active !== false ? "#b91c1c" : "#166534",
-                      fontWeight: 600,
-                      fontSize: 12,
-                    }}
-                  >
-                    {actionLoadingId === employee._id
-                      ? "Updating..."
-                      : employee.is_active !== false
-                      ? "Mark Inactive"
-                      : "Mark Active"}
-                  </button>
-                </div>
-              )}
-
-
-              <div
-                style={{
-                  marginTop: 12,
-                  padding: "8px 12px",
-                  background: "#f3f4f6",
-                  borderRadius: 8,
-                  fontSize: 12,
-                  color: "#6b7280",
-                  textAlign: "center",
-                  fontWeight: 500,
-                }}
-              >
-                Click to view profile →
-              </div>
-            </div>
-          ))}
+              </article>
+            );
+          })}
         </div>
       )}
 
       {message && (
-        <div
-          style={{
-            marginTop: 16,
-            padding: 12,
-            background: "#fef2f2",
-            borderRadius: 8,
-            color: "#ef4444",
-            fontSize: 14,
-          }}
-        >
+        <div className="admin-toast is-error" style={{ position: "static", maxWidth: "100%" }}>
           {message}
         </div>
       )}
-    </div>
+    </section>
   );
 };
 

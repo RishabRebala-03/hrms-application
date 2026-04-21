@@ -10,6 +10,39 @@ CORS(tea_coffee_bp)
 MORNING_CUTOFF_TIME = "10:30"  # 10:30 AM cutoff for morning slot
 EVENING_CUTOFF_TIME = "14:30"  # 2:30 PM cutoff for evening slot
 
+
+def get_approved_leave_for_date(employee_id, date):
+    """Return an approved full-day leave record if the employee is on leave for the given date."""
+    return mongo.db.leaves.find_one({
+        "employee_id": ObjectId(employee_id),
+        "status": "Approved",
+        "leave_type": {"$ne": "Early Logout"},
+        "$and": [
+            {
+                "$or": [
+                    {"is_half_day": {"$exists": False}},
+                    {"is_half_day": False}
+                ]
+            }
+        ],
+        "$or": [
+            {
+                "is_partial_approval": True,
+                "approved_start_date": {"$lte": date},
+                "approved_end_date": {"$gte": date}
+            },
+            {
+                "$or": [
+                    {"is_partial_approval": {"$exists": False}},
+                    {"is_partial_approval": False}
+                ],
+                "start_date": {"$lte": date},
+                "end_date": {"$gte": date}
+            }
+        ]
+    })
+
+
 # -------------------------------
 # Get Blocked Dates
 # -------------------------------
@@ -219,6 +252,13 @@ def place_order():
 
         if not employee:
             return jsonify({"error": "Employee not found"}), 404
+
+        approved_leave = get_approved_leave_for_date(employee_id, date)
+        if approved_leave:
+            leave_type = approved_leave.get("leave_type", "leave")
+            return jsonify({
+                "error": f"Tea/Coffee order not allowed on {date}. {employee.get('name', 'Employee')} is on approved {leave_type}."
+            }), 400
 
         # Check for existing order
         existing = mongo.db.tea_coffee_orders.find_one({

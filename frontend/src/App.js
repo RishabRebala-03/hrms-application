@@ -280,7 +280,7 @@ function App() {
 
   const AccessDenied = () => (
     <div style={{ padding: 40, color: "#ef4444" }}>
-      <h2>🚫 Access Denied</h2>
+      <h2>Access Denied</h2>
       <p>You do not have permission to access this section.</p>
     </div>
   );
@@ -289,7 +289,7 @@ function App() {
     switch (section) {
       case "dashboard":
         if (role === "Admin") {
-          return <AdminDashboard user={currentUser} />;
+          return <AdminDashboard user={currentUser} onNavigate={handleSectionChange} />;
         } else if (role === "Manager") {
           return (
             <ManagerDashboard
@@ -366,7 +366,7 @@ function App() {
 
       default:
         if (role === "Admin") {
-          return <AdminDashboard user={currentUser} />;
+          return <AdminDashboard user={currentUser} onNavigate={handleSectionChange} />;
         } else if (role === "Manager") {
           return <ManagerDashboard user={currentUser} onNavigateToProfile={handleNavigateToProfile} />;
         } else {

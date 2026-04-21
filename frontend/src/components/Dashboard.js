@@ -1,324 +1,195 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
+import {
+  Building2,
+  CalendarRange,
+  CheckCircle2,
+  ChevronRight,
+  Clock3,
+  GitBranch,
+  ShieldCheck,
+  Users,
+} from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import OrganizationHierarchy from "./OrganizationHierarchy";
-import diwaliBanner from "../assets/diwali.png";
-import AdminHolidays from "./AdminHolidays";
-import BannerImage from "../assets/banner.jpg";
 
+const statusToneMap = {
+  Approved: "is-approved",
+  Rejected: "is-rejected",
+  Cancelled: "is-neutral",
+  Pending: "is-pending",
+};
+
+const fioriChartPalette = ["#0a6ed1", "#5b738b", "#8fb5d9", "#d1e3f8", "#0f2742", "#91c8f6"];
 
 const getTimeBasedGreeting = () => {
   const hour = new Date().getHours();
-  
-  if (hour >= 5 && hour < 12) {
-    return "Good Morning";
-  } else if (hour >= 12 && hour < 17) {
-    return "Good Afternoon";
-  } else if (hour >= 17 && hour < 21) {
-    return "Good Evening";
-  } else {
-    return "Good Night";
+
+  if (hour >= 5 && hour < 12) return "Good morning";
+  if (hour >= 12 && hour < 17) return "Good afternoon";
+  if (hour >= 17 && hour < 21) return "Good evening";
+  return "Good night";
+};
+
+const formatDate = (dateStr) => {
+  if (!dateStr) return "Not available";
+
+  try {
+    const value = typeof dateStr === "object" && dateStr.$date ? dateStr.$date : dateStr;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "Not available";
+
+    return date.toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return "Not available";
   }
 };
 
+const shortLabel = (value, max = 12) => {
+  if (!value) return "Unassigned";
+  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
+};
 
-// ========== NEW: On Leave Employees Modal ==========
+const leaveCoverageForToday = (leave) => {
+  if (leave.status !== "Approved") return false;
+
+  const today = new Date().toISOString().split("T")[0];
+
+  if (leave.is_partial_approval) {
+    return leave.approved_start_date <= today && leave.approved_end_date >= today;
+  }
+
+  return leave.start_date <= today && leave.end_date >= today;
+};
+
+const ChartTooltip = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null;
+
+  return (
+    <div className="fiori-chart-tooltip">
+      {label ? <div className="fiori-chart-tooltip-label">{label}</div> : null}
+      {payload.map((entry) => (
+        <div key={entry.name} className="fiori-chart-tooltip-row">
+          <span>{entry.name}</span>
+          <strong>{entry.value}</strong>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 const OnLeaveEmployeesModal = ({ employees, onClose }) => {
-  const formatDate = (dateStr) => {
-    if (!dateStr) return "N/A";
-    try {
-      let val = dateStr;
-      if (typeof dateStr === "object" && dateStr.$date) val = dateStr.$date;
-      const date = new Date(val);
-      if (isNaN(date.getTime())) return "N/A";
-      return date.toLocaleDateString("en-IN", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      });
-    } catch {
-      return "N/A";
-    }
-  };
-
-  const getLeaveTypeIcon = (leaveType) => {
-    switch(leaveType?.toLowerCase()) {
-      case "casual": return "🖖";
-      case "sick": return "🤒";
-      case "optional": return "⭐";
-      case "planned": return "📅";
-      case "lwp": return "💼";
-      default: return "📋";
-    }
-  };
-
-  const getLeaveTypeColor = (leaveType) => {
-    switch(leaveType?.toLowerCase()) {
-      case "casual": return "#10b981";
-      case "sick": return "#ef4444";
-      case "optional": return "#f59e0b";
-      case "planned": return "#3b82f6";
-      case "lwp": return "#6b7280";
-      default: return "#9ca3af";
-    }
-  };
-
-  // Group employees by leave type
-  const groupedByType = employees.reduce((acc, emp) => {
-    const type = emp.leave_type || "Other";
-    if (!acc[type]) acc[type] = [];
-    acc[type].push(emp);
-    return acc;
+  const groupedByType = employees.reduce((accumulator, employee) => {
+    const type = employee.leave_type || "Other";
+    accumulator[type] = accumulator[type] || [];
+    accumulator[type].push(employee);
+    return accumulator;
   }, {});
 
   return (
-    <div style={{
-      position: "fixed",
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      background: "rgba(0,0,0,0.5)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      zIndex: 1000,
-      padding: 20
-    }}>
-      <div style={{
-        background: "white",
-        borderRadius: 16,
-        maxWidth: 900,
-        width: "100%",
-        maxHeight: "90vh",
-        overflow: "auto",
-        boxShadow: "0 20px 60px rgba(0,0,0,0.3)"
-      }}>
-        {/* Header */}
-        <div style={{
-          padding: 24,
-          borderBottom: "2px solid #e5e7eb",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          position: "sticky",
-          top: 0,
-          background: "white",
-          zIndex: 10
-        }}>
+    <div className="admin-modal-overlay" onClick={onClose}>
+      <div className="admin-modal admin-modal-wide" onClick={(event) => event.stopPropagation()}>
+        <div className="admin-modal-header">
           <div>
-            <h2 style={{ margin: 0, fontSize: 24, display: "flex", alignItems: "center", gap: 12 }}>
-              🖖 Employees On Leave Today
-            </h2>
-            <p style={{ margin: "8px 0 0 0", color: "#6b7280", fontSize: 14 }}>
+            <div className="admin-section-overline">Daily workforce status</div>
+            <h2>Employees on approved leave today</h2>
+            <p>
               {new Date().toLocaleDateString("en-IN", {
                 weekday: "long",
                 day: "numeric",
                 month: "long",
-                year: "numeric"
-              })} • {employees.length} employee{employees.length !== 1 ? 's' : ''} on leave
+                year: "numeric",
+              })}
             </p>
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              padding: "8px 16px",
-              background: "#ef4444",
-              color: "white",
-              border: "none",
-              borderRadius: 8,
-              cursor: "pointer",
-              fontWeight: 600,
-              fontSize: 14
-            }}
-          >
-            ✕ Close
-          </button>
-        </div>
-
-        {/* Summary Statistics */}
-        <div style={{
-          padding: 24,
-          background: "#f9fafb",
-          borderBottom: "1px solid #e5e7eb"
-        }}>
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-            gap: 16
-          }}>
-            {Object.entries(groupedByType).map(([type, emps]) => (
-              <div key={type} style={{
-                background: "white",
-                padding: 16,
-                borderRadius: 12,
-                border: "1px solid #e5e7eb",
-                textAlign: "center"
-              }}>
-                <div style={{ fontSize: 28, marginBottom: 4 }}>
-                  {getLeaveTypeIcon(type)}
-                </div>
-                <div style={{ 
-                  fontSize: 24, 
-                  fontWeight: 700, 
-                  color: getLeaveTypeColor(type),
-                  marginBottom: 4
-                }}>
-                  {emps.length}
-                </div>
-                <div style={{ fontSize: 13, color: "#6b7280", fontWeight: 600 }}>
-                  {type}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Employee List */}
-        <div style={{ padding: 24 }}>
-          {employees.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 60, color: "#9ca3af" }}>
-              <div style={{ fontSize: 48, marginBottom: 16 }}>✅</div>
-              <div style={{ fontSize: 16, fontWeight: 500 }}>Everyone is present!</div>
-              <div style={{ fontSize: 14, marginTop: 8 }}>No employees on leave today</div>
-            </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              {employees.map((employee, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    padding: 20,
-                    background: "#f9fafb",
-                    borderRadius: 12,
-                    border: "2px solid #e5e7eb",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "start"
-                  }}
-                >
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
-                      <div style={{ fontSize: 32 }}>
-                        {getLeaveTypeIcon(employee.leave_type)}
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 18, fontWeight: 700, color: "#111827" }}>
-                          {employee.employee_name || "Unknown"}
-                        </div>
-                        <div style={{ fontSize: 13, color: "#6b7280", marginTop: 2 }}>
-                          {employee.employee_designation} • {employee.employee_department}
-                        </div>
-                        <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2, fontFamily: "monospace" }}>
-                          {employee.employee_email}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div style={{ 
-                      display: "grid", 
-                      gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", 
-                      gap: 12,
-                      marginTop: 12,
-                      padding: 12,
-                      background: "white",
-                      borderRadius: 8,
-                      border: "1px solid #e5e7eb"
-                    }}>
-                      <div>
-                        <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 4, fontWeight: 600 }}>
-                          Leave Type
-                        </div>
-                        <div style={{ 
-                          fontSize: 14, 
-                          fontWeight: 700,
-                          color: getLeaveTypeColor(employee.leave_type)
-                        }}>
-                          {employee.leave_type}
-                        </div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 4, fontWeight: 600 }}>
-                          Start Date
-                        </div>
-                        <div style={{ fontSize: 14, fontWeight: 600 }}>
-                          {formatDate(employee.start_date)}
-                        </div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 4, fontWeight: 600 }}>
-                          End Date
-                        </div>
-                        <div style={{ fontSize: 14, fontWeight: 600 }}>
-                          {formatDate(employee.end_date)}
-                        </div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 4, fontWeight: 600 }}>
-                          Duration
-                        </div>
-                        <div style={{ fontSize: 14, fontWeight: 600 }}>
-                          {employee.days} {employee.days === 1 ? "day" : "days"}
-                        </div>
-                      </div>
-                    </div>
-
-                    {employee.reason && (
-                      <div style={{ 
-                        marginTop: 12,
-                        padding: 12,
-                        background: "#fffbeb",
-                        borderRadius: 8,
-                        border: "1px solid #fcd34d"
-                      }}>
-                        <div style={{ fontSize: 11, color: "#92400e", marginBottom: 4, fontWeight: 600 }}>
-                          Reason
-                        </div>
-                        <div style={{ fontSize: 13, color: "#78350f", fontStyle: "italic" }}>
-                          {employee.reason}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div style={{
-          padding: 24,
-          borderTop: "2px solid #e5e7eb",
-          background: "#f9fafb",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center"
-        }}>
-          <div style={{ fontSize: 13, color: "#6b7280" }}>
-            💡 Tip: Click on a leave type above to filter employees
-          </div>
-          <button
-            onClick={onClose}
-            style={{
-              padding: "10px 20px",
-              background: "#6b7280",
-              color: "white",
-              border: "none",
-              borderRadius: 8,
-              cursor: "pointer",
-              fontWeight: 600
-            }}
-          >
+          <button className="fiori-button secondary" onClick={onClose}>
             Close
           </button>
+        </div>
+
+        <div className="admin-dashboard-grid admin-dashboard-grid-compact">
+          {Object.entries(groupedByType).map(([type, members]) => (
+            <article key={type} className="fiori-stat-card">
+              <div className="fiori-stat-label">{type}</div>
+              <div className="fiori-stat-value">{members.length}</div>
+              <div className="fiori-stat-note">Approved leave records</div>
+            </article>
+          ))}
+        </div>
+
+        <div className="fiori-panel">
+          <div className="fiori-panel-header">
+            <div>
+              <h3>Leave roster</h3>
+              <p>Current day absences with role and leave details</p>
+            </div>
+          </div>
+
+          {employees.length === 0 ? (
+            <div className="admin-empty-state">
+              <CheckCircle2 size={28} />
+              <div>
+                <strong>No employees are on leave today</strong>
+                <p>The workforce is fully available for the current day.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="fiori-table-shell">
+              <table className="fiori-table">
+                <thead>
+                  <tr>
+                    <th>Employee</th>
+                    <th>Department</th>
+                    <th>Leave Type</th>
+                    <th>From</th>
+                    <th>To</th>
+                    <th>Duration</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {employees.map((employee) => (
+                    <tr key={employee._id}>
+                      <td>
+                        <div className="fiori-primary-cell">
+                          <strong>{employee.employee_name || "Unknown employee"}</strong>
+                          <span>{employee.employee_email || "No email"}</span>
+                        </div>
+                      </td>
+                      <td>{employee.employee_department || "Unassigned"}</td>
+                      <td>{employee.leave_type || "Not specified"}</td>
+                      <td>{formatDate(employee.start_date)}</td>
+                      <td>{formatDate(employee.end_date)}</td>
+                      <td>{employee.days || 0}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 };
 
-
-const AdminDashboard = ({ user }) => {
+const AdminDashboard = ({ user, onNavigate }) => {
   const [stats, setStats] = useState({
     totalEmployees: 0,
     pendingLeaves: 0,
@@ -334,122 +205,68 @@ const AdminDashboard = ({ user }) => {
   const [showHierarchy, setShowHierarchy] = useState(false);
   const [showOnLeaveModal, setShowOnLeaveModal] = useState(false);
   const [employeesOnLeave, setEmployeesOnLeave] = useState([]);
+  const [allEmployees, setAllEmployees] = useState([]);
+  const [allLeaves, setAllLeaves] = useState([]);
+
+  const handleNavigate = useCallback((target) => {
+    if (target) {
+      onNavigate?.(target);
+    }
+  }, [onNavigate]);
 
   const fetchAdminData = async () => {
     try {
       setLoading(true);
 
-      console.log("🔍 Fetching admin dashboard data");
-
-      // Fetch all employees
       const employeesRes = await axios.get(
         `${process.env.REACT_APP_BACKEND_URL}/api/users/get_all_employees`
       );
+      const employees = Array.isArray(employeesRes.data)
+        ? employeesRes.data.filter((employee) => employee && employee._id)
+        : [];
 
-      // CRITICAL FIX: Same validation
-      let allEmployees = [];
-      if (Array.isArray(employeesRes.data)) {
-        allEmployees = employeesRes.data;
-      } else {
-        console.error("❌ Unexpected employees response:", employeesRes.data);
-      }
+      const adminsRes = await axios.get(`${process.env.REACT_APP_BACKEND_URL}/api/users/`);
+      const adminIds = (adminsRes.data || [])
+        .filter((admin) => admin.role === "Admin")
+        .map((admin) => admin._id);
 
-      console.log("✅ All employees fetched:", allEmployees.length);
-      allEmployees = allEmployees.filter(emp => emp && emp._id);
+      const allLeavesRes = await axios.get(`${process.env.REACT_APP_BACKEND_URL}/api/leaves/all`);
+      const leaves = allLeavesRes.data || [];
 
-      // ⭐ FIX: Use the admin-specific endpoint
-      // Get ALL admin user IDs first
-      const adminsRes = await axios.get(
-        `${process.env.REACT_APP_BACKEND_URL}/api/users/`
+      const pending = leaves.filter(
+        (leave) => adminIds.includes(leave.current_approver_id) && leave.status === "Pending"
       );
-      const admins = adminsRes.data.filter(u => u.role === "Admin");
-      const adminIds = admins.map(a => a._id);
-
-      console.log("✅ Found admin IDs:", adminIds);
-
-      // CRITICAL: Get ALL pending leaves
-      const allPendingRes = await axios.get(
-        `${process.env.REACT_APP_BACKEND_URL}/api/leaves/all`
-      );
-
-      // CRITICAL: Filter for leaves where current_approver_id matches ANY admin
-      const pending = allPendingRes.data.filter(leave => {
-        const isForAdmin = adminIds.includes(leave.current_approver_id);
-        const isPending = leave.status === "Pending";
-        
-        if (isForAdmin && isPending) {
-          console.log("✅ Admin pending leave found:", {
-            employee: leave.employee_name,
-            escalation_level: leave.escalation_level,
-            current_approver_id: leave.current_approver_id
-          });
-        }
-        
-        return isForAdmin && isPending;
-      });
-
-      console.log("✅ Admin pending leaves found:", pending.length);
-      setPendingLeaves(pending);
-
-      // Fetch all leaves to get recent actions
-      const allLeavesRes = await axios.get(
-        `${process.env.REACT_APP_BACKEND_URL}/api/leaves/all`
-      );
-      const allLeaves = allLeavesRes.data || [];
-      console.log("✅ All leaves fetched:", allLeaves.length);
-
-      // Get recent actions (last 5 approved/rejected leaves)
-      const recent = allLeaves
-        .filter(leave => leave.status !== "Pending")
-        .sort((a, b) => {
-          const dateA = a.approved_on || a.rejected_on || a.applied_on;
-          const dateB = b.approved_on || b.rejected_on || b.applied_on;
-          return new Date(dateB) - new Date(dateA);
+      const recent = leaves
+        .filter((leave) => leave.status !== "Pending")
+        .sort((first, second) => {
+          const firstDate = first.approved_on || first.rejected_on || first.applied_on;
+          const secondDate = second.approved_on || second.rejected_on || second.applied_on;
+          return new Date(secondDate) - new Date(firstDate);
         })
-        .slice(0, 5);
+        .slice(0, 6);
+      const onLeaveToday = leaves.filter(leaveCoverageForToday);
+
+      setAllEmployees(employees);
+      setAllLeaves(leaves);
+      setPendingLeaves(pending);
       setRecentActions(recent);
-
-      // Calculate who's on leave today
-      const today = new Date().toISOString().split('T')[0];
-      const onLeaveToday = allLeaves.filter((l) => {
-        if (l.status !== "Approved") return false;
-        const startDate = l.start_date;
-        const endDate = l.end_date;
-        return startDate <= today && endDate >= today;
-      });
-
-      // ⭐ NEW: Store employees on leave for the modal
       setEmployeesOnLeave(onLeaveToday);
-
-      const workingToday = Math.max(0, allEmployees.length - onLeaveToday.length);
-
-      console.log("📊 Stats calculated:", {
-        totalEmployees: allEmployees.length,
-        pendingLeaves: pending.length,
-        onLeaveToday: onLeaveToday.length,
-        workingToday: workingToday
-      });
-
-      // ⭐ FIX: Set all stats together
       setStats({
-        totalEmployees: allEmployees.length,
+        totalEmployees: employees.length,
         pendingLeaves: pending.length,
         onLeaveToday: onLeaveToday.length,
-        workingToday: workingToday,
+        workingToday: Math.max(0, employees.length - onLeaveToday.length),
       });
-
-    } catch (err) {
-      console.error("❌ Error loading admin dashboard:", err);
-      console.error("Error details:", err.response?.data || err.message);
-      setMessage("Failed to load dashboard data");
-      
-      // Set empty stats on error
+    } catch (error) {
+      setMessage("Unable to load administration dashboard data.");
       setStats({
         totalEmployees: 0,
         pendingLeaves: 0,
         onLeaveToday: 0,
         workingToday: 0,
       });
+      setAllEmployees([]);
+      setAllLeaves([]);
     } finally {
       setLoading(false);
     }
@@ -459,6 +276,115 @@ const AdminDashboard = ({ user }) => {
     fetchAdminData();
   }, []);
 
+  const summaryCards = useMemo(
+    () => [
+      {
+        title: "Total Headcount",
+        value: stats.totalEmployees,
+        note: "Employees registered in the HRMS",
+        icon: Users,
+        linkLabel: "Open employee directory",
+        action: () => handleNavigate("employees"),
+      },
+      {
+        title: "Working Today",
+        value: stats.workingToday,
+        note: "Available workforce for current operations",
+        icon: ShieldCheck,
+        linkLabel: "Review employee roster",
+        action: () => handleNavigate("employees"),
+      },
+      {
+        title: "On Leave Today",
+        value: stats.onLeaveToday,
+        note: "Approved absences for the current day",
+        icon: CalendarRange,
+        linkLabel: "Open leave workspace",
+        action: () => handleNavigate("leaves"),
+      },
+      {
+        title: "Pending Approvals",
+        value: stats.pendingLeaves,
+        note: "Requests awaiting administration review",
+        icon: Clock3,
+        linkLabel: "Review pending requests",
+        action: () => handleNavigate("leaves"),
+      },
+    ],
+    [stats, handleNavigate]
+  );
+
+  const departmentHeadcountData = useMemo(() => {
+    const counts = allEmployees.reduce((accumulator, employee) => {
+      const department = employee.department || "Unassigned";
+      accumulator[department] = (accumulator[department] || 0) + 1;
+      return accumulator;
+    }, {});
+
+    return Object.entries(counts)
+      .map(([name, value]) => ({ name: shortLabel(name), fullName: name, value }))
+      .sort((first, second) => second.value - first.value)
+      .slice(0, 6);
+  }, [allEmployees]);
+
+  const leaveStatusData = useMemo(() => {
+    const statusOrder = ["Pending", "Approved", "Rejected", "Cancelled"];
+    const counts = allLeaves.reduce((accumulator, leave) => {
+      const status = leave.status || "Pending";
+      accumulator[status] = (accumulator[status] || 0) + 1;
+      return accumulator;
+    }, {});
+
+    return statusOrder
+      .filter((status) => counts[status])
+      .map((status, index) => ({
+        name: status,
+        value: counts[status],
+        color: fioriChartPalette[index % fioriChartPalette.length],
+      }));
+  }, [allLeaves]);
+
+  const monthlyTrendData = useMemo(() => {
+    const months = [];
+    const today = new Date();
+
+    for (let index = 5; index >= 0; index -= 1) {
+      const date = new Date(today.getFullYear(), today.getMonth() - index, 1);
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+      months.push({
+        key,
+        name: date.toLocaleDateString("en-IN", { month: "short" }),
+        requests: 0,
+        approved: 0,
+      });
+    }
+
+    const monthMap = months.reduce((accumulator, month) => {
+      accumulator[month.key] = month;
+      return accumulator;
+    }, {});
+
+    allLeaves.forEach((leave) => {
+      const appliedDate = new Date(leave.applied_on || leave.start_date);
+      if (!Number.isNaN(appliedDate.getTime())) {
+        const appliedKey = `${appliedDate.getFullYear()}-${String(appliedDate.getMonth() + 1).padStart(2, "0")}`;
+        if (monthMap[appliedKey]) {
+          monthMap[appliedKey].requests += 1;
+        }
+      }
+
+      const approvalDate = new Date(leave.approved_on || "");
+      if (!Number.isNaN(approvalDate.getTime())) {
+        const approvalKey = `${approvalDate.getFullYear()}-${String(approvalDate.getMonth() + 1).padStart(2, "0")}`;
+        if (monthMap[approvalKey] && leave.status === "Approved") {
+          monthMap[approvalKey].approved += 1;
+        }
+      }
+    });
+
+    return months;
+  }, [allLeaves]);
+
   const today = new Date().toLocaleDateString("en-IN", {
     weekday: "long",
     day: "numeric",
@@ -466,612 +392,421 @@ const AdminDashboard = ({ user }) => {
     year: "numeric",
   });
 
-  
-
-  const formatDate = (dateStr) => {
-    if (!dateStr) return "N/A";
-    try {
-      let val = dateStr;
-      if (typeof dateStr === "object" && dateStr.$date) val = dateStr.$date;
-      const date = new Date(val);
-      if (isNaN(date.getTime())) return "N/A";
-      return date.toLocaleDateString("en-IN", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      });
-    } catch {
-      return "N/A";
-    }
-  };
-
-  const Sidebar = ({ role, active, onSelect }) => {
-  return (
-    <aside className="sidebar">
-      <ul className="nav">
-        {/* ...your existing items */}
-
-        {/* Admin-only */}
-        {role === "Admin" && (
-          <li
-            className={active === "holidays" ? "active" : ""}
-            onClick={() => onSelect("holidays")}
-            title="Manage Holidays"
-          >
-            <span style={{ marginRight: 8 }}>🎉</span> Holidays
-          </li>
-        )}
-      </ul>
-    </aside>
-  );
-};
-
-  const handleReject = (leaveId) => {
-    setRejectModal({ show: true, leaveId, reason: "" });
-  };
-
-  const confirmReject = async () => {
-    if (!rejectModal.reason.trim()) {
-      setMessage("Please enter a rejection reason");
-      return;
-    }
-    await updateStatus(rejectModal.leaveId, "Rejected", rejectModal.reason);
-  };
-
   const updateStatus = async (leaveId, status, rejectionReason = "") => {
     try {
-      const payload = { status };
-      if (status === "Rejected" && rejectionReason.trim()) {
+      const payload = {
+        status,
+        approved_by: user?.name || user?.email || "Administrator",
+      };
+
+      if (status === "Rejected") {
         payload.rejection_reason = rejectionReason;
       }
 
-      const res = await axios.put(
+      const response = await axios.put(
         `${process.env.REACT_APP_BACKEND_URL}/api/leaves/update_status/${leaveId}`,
         payload
       );
 
-      if (res.status === 200) {
-        setMessage(`Leave ${status.toLowerCase()} successfully ✓`);
+      if (response.status === 200) {
+        setMessage(response.data?.message || `Leave ${status.toLowerCase()} successfully.`);
         setRejectModal({ show: false, leaveId: null, reason: "" });
         fetchAdminData();
         setTimeout(() => setMessage(""), 3000);
       }
-    } catch (err) {
-      console.error(err);
-      setMessage("Error updating leave status");
+    } catch (error) {
+      setMessage(error.response?.data?.error || "Unable to update leave status.");
       setTimeout(() => setMessage(""), 3000);
     }
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "Approved":
-        return { bg: "#d1f4dd", text: "#0a5d2c", border: "#7de3a6" };
-      case "Rejected":
-        return { bg: "#ffe0e0", text: "#c41e3a", border: "#ffb3b3" };
-      case "Cancelled":
-        return { bg: "#ffe0e0", text: "#c41e3a", border: "#ffb3b3" };
-      default:
-        return { bg: "#fff4e6", text: "#d97706", border: "#fbbf24" };
+  const confirmReject = async () => {
+    if (!rejectModal.reason.trim()) {
+      setMessage("A rejection reason is required.");
+      setTimeout(() => setMessage(""), 3000);
+      return;
     }
+
+    await updateStatus(rejectModal.leaveId, "Rejected", rejectModal.reason);
   };
 
   if (loading) {
     return (
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          minHeight: "100vh",
-          background: "linear-gradient(135deg, #667eea, #764ba2)",
-        }}
-      >
-        <div style={{ textAlign: "center", color: "white" }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>⏳</div>
-          <div style={{ fontSize: 18 }}>Loading dashboard...</div>
+      <section className="admin-dashboard admin-dashboard-loading">
+        <div className="fiori-loading-card">
+          <Clock3 size={28} />
+          <div>
+            <strong>Loading administration workspace</strong>
+            <p>Preparing workforce metrics and approval data.</p>
+          </div>
         </div>
-      </div>
+      </section>
     );
   }
 
   return (
-    <div
-      style={{
-        background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-        minHeight: "100vh",
-        padding: "24px",
-        fontFamily: "Inter, system-ui, sans-serif",
-      }}
-    >
-      <div style={{ maxWidth: 1400, margin: "0 auto" }}>
-        {/* Header */}
-        <div style={{ marginBottom: 32 }}>
-          <div
-            style={{
-              background: "rgba(255,255,255,0.15)",
-              backdropFilter: "blur(10px)",
-              borderRadius: 16,
-              padding: "28px 32px",
-              border: "1px solid rgba(255,255,255,0.2)",
-              boxShadow: "0 8px 32px rgba(0,0,0,0.1)",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
-              <div>
-                <h1
-                  style={{
-                    margin: 0,
-                    marginBottom: 8,
-                    fontSize: 32,
-                    fontWeight: 700,
-                    color: "white",
-                    textShadow: "0 2px 4px rgba(0,0,0,0.1)",
-                  }}
-                >
-                  {getTimeBasedGreeting()}, {user?.name?.split(" ")[0] || "Admin"} 👋
-                </h1>
-                <p
-                  style={{
-                    margin: 0,
-                    fontSize: 16,
-                    color: "rgba(255,255,255,0.9)",
-                    marginBottom: 4,
-                  }}
-                >
-                  {user?.designation} • {user?.department}
-                </p>
-                <p
-                  style={{
-                    margin: 0,
-                    fontSize: 14,
-                    color: "rgba(255,255,255,0.75)",
-                  }}
-                >
-                  {today}
-                </p>
-              </div>
-              <div
-                style={{
-                  background: "rgba(255,255,255,0.2)",
-                  padding: "12px 24px",
-                  borderRadius: 12,
-                  border: "1px solid rgba(255,255,255,0.3)",
-                }}
-              >
-                <div style={{ fontSize: 13, color: "rgba(255,255,255,0.8)", marginBottom: 4 }}>
-                  Total Employees
-                </div>
-                <div style={{ fontSize: 36, fontWeight: 700, color: "white", textAlign: "center" }}>
-                  {stats.totalEmployees}
-                </div>
-              </div>
-            </div>
-          </div>
+    <section className="admin-dashboard">
+      <header className="admin-hero">
+        <div>
+          <div className="admin-section-overline">Administration Overview</div>
+          <h1>
+            {getTimeBasedGreeting()}, {user?.name?.split(" ")[0] || "Administrator"}
+          </h1>
+          <p>
+            Monitor workforce capacity, review approvals, and keep the HR operations model aligned
+            across the enterprise.
+          </p>
         </div>
 
-        {/* Banner Section */}
-        <div style={{ marginBottom: 32 }}>
-          <div
-            style={{
-              background: "white",
-              borderRadius: 16,
-              overflow: "hidden",
-              boxShadow: "0 4px 20px rgba(0, 0, 0, 0.08)",
-              border: "1px solid #e5e7eb",
-              position: "relative",
-              height: 280,
-            }}
-          >
-            <img
-              src={BannerImage}
-              alt="Festival Banner"
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-              }}
-            />
-
-            {/* Corner Badge */}
-            <div
-              style={{
-                position: "absolute",
-                top: 16,
-                right: 16,
-                background: "rgba(102, 126, 234, 0.9)",
-                color: "white",
-                padding: "8px 16px",
-                borderRadius: 20,
-                fontSize: 12,
-                fontWeight: 600,
-                boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15)",
-              }}
-            >
-              📢 Festival Announcement
-            </div>
+        <div className="admin-hero-meta">
+          <div className="admin-hero-meta-item">
+            <span>Role</span>
+            <strong>{user?.designation || "Administrator"}</strong>
+          </div>
+          <div className="admin-hero-meta-item">
+            <span>Department</span>
+            <strong>{user?.department || "Human Resources"}</strong>
+          </div>
+          <div className="admin-hero-meta-item">
+            <span>Date</span>
+            <strong>{today}</strong>
           </div>
         </div>
+      </header>
 
-        {/* Stats Cards - UPDATED WITH CLICK HANDLER */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-            gap: 20,
-            marginBottom: 32,
-          }}
-        >
-          {[
-            { title: "Working Today", value: stats.workingToday, icon: "✅", color: "#10b981", clickable: false },
-            { 
-              title: "On Leave Today", 
-              value: stats.onLeaveToday, 
-              icon: "🖖", 
-              color: "#0dcaf0", 
-              clickable: true,
-              onClick: () => setShowOnLeaveModal(true)
-            },
-            { title: "Pending Approvals", value: stats.pendingLeaves, icon: "⏳", color: "#f59e0b", clickable: false },
-          ].map((card) => (
-            <div
+      <div className="admin-dashboard-grid">
+        {summaryCards.map((card) => {
+          const Icon = card.icon;
+          return (
+            <article
               key={card.title}
-              onClick={card.clickable ? card.onClick : undefined}
-              style={{
-                background: "white",
-                borderRadius: 16,
-                padding: "24px",
-                boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
-                border: "1px solid #e5e7eb",
-                position: "relative",
-                overflow: "hidden",
-                cursor: card.clickable ? "pointer" : "default",
-                transition: "all 0.2s ease",
-              }}
-              onMouseEnter={(e) => {
-                if (card.clickable) {
-                  e.currentTarget.style.transform = "translateY(-4px)";
-                  e.currentTarget.style.boxShadow = "0 8px 32px rgba(0,0,0,0.12)";
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (card.clickable) {
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.boxShadow = "0 4px 20px rgba(0,0,0,0.08)";
+              className="fiori-stat-card is-actionable"
+              onClick={card.action}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  card.action();
                 }
               }}
             >
-              <div
-                style={{
-                  position: "absolute",
-                  top: -20,
-                  right: -20,
-                  width: 100,
-                  height: 100,
-                  borderRadius: "50%",
-                  background: card.color,
-                  opacity: 0.1,
-                }}
-              />
-              <div style={{ fontSize: 40, marginBottom: 12 }}>{card.icon}</div>
-              <div style={{ fontSize: 14, color: "#6b7280", marginBottom: 4, fontWeight: 500 }}>
-                {card.title}
-                {card.clickable && card.value > 0 && (
-                  <span style={{ fontSize: 12, marginLeft: 8, color: "#3b82f6" }}>
-                    👁️ Click to view
-                  </span>
-                )}
+              <div className="fiori-stat-topline">
+                <span className="fiori-stat-label">{card.title}</span>
+                <Icon size={18} />
               </div>
-              <div style={{ fontSize: 32, fontWeight: 700, color: card.color }}>
-                {card.value}
-              </div>
-            </div>
-          ))}
-        </div>
+              <div className="fiori-stat-value">{card.value}</div>
+              <div className="fiori-stat-note">{card.note}</div>
+              <div className="fiori-inline-link">{card.linkLabel}</div>
+            </article>
+          );
+        })}
+      </div>
 
-        {/* Main Grid */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 24 }}>
-          {/* Pending Approvals */}
-          <div
-            style={{
-              background: "white",
-              borderRadius: 16,
-              padding: "28px",
-              boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
-              border: "1px solid #e5e7eb",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-              <h3 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: "#111827" }}>
-                Pending Approvals
-              </h3>
-              <span
-                style={{
-                  background: "#fff4e6",
-                  color: "#d97706",
-                  padding: "4px 12px",
-                  borderRadius: 8,
-                  fontSize: 13,
-                  fontWeight: 600,
-                }}
-              >
-                {pendingLeaves.length} pending
-              </span>
+      <div className="admin-analytics-grid">
+        <article className="fiori-panel fiori-chart-card is-clickable" onClick={() => handleNavigate("employees")}>
+          <div className="fiori-panel-header">
+            <div>
+              <h3>Department headcount</h3>
+              <p>Headcount distribution across the largest departments</p>
+            </div>
+            <div className="fiori-card-link">Open employee directory</div>
+          </div>
+          <div className="fiori-chart-shell">
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={departmentHeadcountData} barCategoryGap={18}>
+                <CartesianGrid stroke="#e8edf3" vertical={false} />
+                <XAxis dataKey="name" tickLine={false} axisLine={false} />
+                <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
+                <Tooltip content={<ChartTooltip />} />
+                <Bar dataKey="value" radius={[8, 8, 0, 0]} fill="#0a6ed1" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </article>
+
+        <article className="fiori-panel fiori-chart-card is-clickable" onClick={() => handleNavigate("leaves")}>
+          <div className="fiori-panel-header">
+            <div>
+              <h3>Leave status mix</h3>
+              <p>Current distribution of request outcomes across the system</p>
+            </div>
+            <div className="fiori-card-link">Open leave workspace</div>
+          </div>
+          <div className="fiori-chart-shell">
+            <ResponsiveContainer width="100%" height={260}>
+              <PieChart>
+                <Pie
+                  data={leaveStatusData}
+                  dataKey="value"
+                  nameKey="name"
+                  innerRadius={62}
+                  outerRadius={94}
+                  paddingAngle={3}
+                >
+                  {leaveStatusData.map((entry) => (
+                    <Cell key={entry.name} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip content={<ChartTooltip />} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </article>
+
+        <article className="fiori-panel fiori-chart-card is-clickable" onClick={() => handleNavigate("logs")}>
+          <div className="fiori-panel-header">
+            <div>
+              <h3>Monthly leave activity</h3>
+              <p>Submitted versus approved requests over the last six months</p>
+            </div>
+            <div className="fiori-card-link">Open audit logs</div>
+          </div>
+          <div className="fiori-chart-shell">
+            <ResponsiveContainer width="100%" height={260}>
+              <AreaChart data={monthlyTrendData}>
+                <CartesianGrid stroke="#e8edf3" vertical={false} />
+                <XAxis dataKey="name" tickLine={false} axisLine={false} />
+                <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
+                <Tooltip content={<ChartTooltip />} />
+                <Area
+                  type="monotone"
+                  dataKey="requests"
+                  stroke="#0a6ed1"
+                  fill="rgba(10, 110, 209, 0.18)"
+                  strokeWidth={2}
+                  name="Requests"
+                />
+                <Area
+                  type="monotone"
+                  dataKey="approved"
+                  stroke="#5b738b"
+                  fill="rgba(91, 115, 139, 0.14)"
+                  strokeWidth={2}
+                  name="Approved"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </article>
+      </div>
+
+      <div className="admin-dashboard-layout">
+        <div className="admin-dashboard-primary">
+          <section className="fiori-panel">
+            <div className="fiori-panel-header">
+              <div>
+                <h3>Pending leave approvals</h3>
+                <p>Administration-level requests escalated for action</p>
+              </div>
+              <div className="fiori-counter">{pendingLeaves.length}</div>
             </div>
 
             {pendingLeaves.length === 0 ? (
-              <div style={{ textAlign: "center", padding: "60px 20px", color: "#9ca3af" }}>
-                <div style={{ fontSize: 48, marginBottom: 16 }}>✅</div>
-                <div style={{ fontSize: 16, fontWeight: 500 }}>All caught up!</div>
-                <div style={{ fontSize: 14, marginTop: 8 }}>No pending leave requests</div>
+              <div className="admin-empty-state">
+                <CheckCircle2 size={28} />
+                <div>
+                  <strong>No pending leave approvals</strong>
+                  <p>All escalated requests have been processed.</p>
+                </div>
               </div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div className="admin-approval-list">
                 {pendingLeaves.map((leave) => (
-                  <div
+                  <article
                     key={leave._id}
-                    style={{
-                      padding: 20,
-                      background: "#fffbeb",
-                      borderRadius: 12,
-                      border: "2px solid #fbbf24",
-                    }}
+                    className="admin-approval-card is-clickable"
+                    onClick={() => handleNavigate("leaves")}
                   >
-                    <div style={{ marginBottom: 12 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                        <div>
-                          <div style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>
-                            {leave.employee_name || "Unknown"}
-                          </div>
-                          <div style={{ fontSize: 13, color: "#6b7280", marginTop: 2 }}>
-                            {leave.employee_designation} • {leave.employee_department}
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => setExpandedLeave(expandedLeave === leave._id ? null : leave._id)}
-                          style={{
-                            background: "white",
-                            border: "1px solid #e5e7eb",
-                            borderRadius: 8,
-                            padding: "6px 12px",
-                            fontSize: 12,
-                            cursor: "pointer",
-                            height: 32,
-                          }}
-                        >
-                          {expandedLeave === leave._id ? "Hide" : "Details"}
-                        </button>
+                    <div className="admin-approval-card-header">
+                      <div>
+                        <h4>{leave.employee_name || "Unknown employee"}</h4>
+                        <p>
+                          {leave.employee_designation || "Role not set"} |{" "}
+                          {leave.employee_department || "Department not set"}
+                        </p>
                       </div>
+                      <button
+                        className="fiori-inline-button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setExpandedLeave(expandedLeave === leave._id ? null : leave._id);
+                        }}
+                      >
+                        {expandedLeave === leave._id ? "Hide details" : "Show details"}
+                        <ChevronRight size={16} />
+                      </button>
+                    </div>
 
-                      <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 13 }}>
-                        <span style={{ fontSize: 20 }}>
-                          {leave.leave_type === "Casual" ? "🖖" : leave.leave_type === "Sick" ? "🤒" : "⭐"}
-                        </span>
-                        <span style={{ fontWeight: 600, color: "#111827" }}>{leave.leave_type} Leave</span>
-                        <span style={{ color: "#6b7280" }}>•</span>
-                        <span style={{ color: "#6b7280" }}>
-                          {leave.days} {leave.days === 1 ? "day" : "days"}
-                        </span>
-                      </div>
+                    <div className="admin-approval-metadata">
+                      <span>{leave.leave_type || "Leave"}</span>
+                      <span>{leave.days} day(s)</span>
+                      <span>{formatDate(leave.start_date)} to {formatDate(leave.end_date)}</span>
                     </div>
 
                     {expandedLeave === leave._id && (
-                      <div
-                        style={{
-                          marginBottom: 12,
-                          padding: 12,
-                          background: "white",
-                          borderRadius: 8,
-                          border: "1px solid #e5e7eb",
-                        }}
-                      >
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, fontSize: 13 }}>
-                          <div>
-                            <div style={{ color: "#6b7280", marginBottom: 4 }}>Start Date</div>
-                            <div style={{ fontWeight: 600 }}>{formatDate(leave.start_date)}</div>
-                          </div>
-                          <div>
-                            <div style={{ color: "#6b7280", marginBottom: 4 }}>End Date</div>
-                            <div style={{ fontWeight: 600 }}>{formatDate(leave.end_date)}</div>
-                          </div>
-                          {leave.reason && (
-                            <div style={{ gridColumn: "1 / -1" }}>
-                              <div style={{ color: "#6b7280", marginBottom: 4 }}>Reason</div>
-                              <div style={{ fontStyle: "italic" }}>{leave.reason}</div>
-                            </div>
-                          )}
+                      <div className="admin-approval-details">
+                        <div>
+                          <span>Requested On</span>
+                          <strong>{formatDate(leave.applied_on)}</strong>
+                        </div>
+                        <div>
+                          <span>Escalation Level</span>
+                          <strong>{leave.escalation_level ?? 0}</strong>
+                        </div>
+                        <div className="is-wide">
+                          <span>Reason</span>
+                          <strong>{leave.reason || "No reason provided"}</strong>
                         </div>
                       </div>
                     )}
 
-                    <div style={{ display: "flex", gap: 8 }}>
+                    <div className="admin-approval-actions">
                       <button
-                        onClick={() => updateStatus(leave._id, "Approved")}
-                        style={{
-                          flex: 1,
-                          background: "#10b981",
-                          color: "white",
-                          border: "none",
-                          padding: "10px",
-                          borderRadius: 8,
-                          fontSize: 14,
-                          fontWeight: 600,
-                          cursor: "pointer",
+                        className="fiori-button primary"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          updateStatus(leave._id, "Approved");
                         }}
                       >
-                        ✓ Approve
+                        Approve
                       </button>
                       <button
-                        onClick={() => handleReject(leave._id)}
-                        style={{
-                          flex: 1,
-                          background: "#ef4444",
-                          color: "white",
-                          border: "none",
-                          padding: "10px",
-                          borderRadius: 8,
-                          fontSize: 14,
-                          fontWeight: 600,
-                          cursor: "pointer",
+                        className="fiori-button secondary danger"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setRejectModal({ show: true, leaveId: leave._id, reason: "" });
                         }}
                       >
-                        ✗ Reject
+                        Reject
                       </button>
                     </div>
-                  </div>
+                  </article>
                 ))}
               </div>
             )}
-          </div>
+          </section>
 
-          {/* Recent Actions */}
-          <div
-            style={{
-              background: "white",
-              borderRadius: 16,
-              padding: "28px",
-              boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
-              border: "1px solid #e5e7eb",
-            }}
-          >
-            <h3 style={{ margin: 0, marginBottom: 20, fontSize: 20, fontWeight: 700, color: "#111827" }}>
-              Recent Actions
-            </h3>
+          <section className="fiori-panel is-clickable" onClick={() => handleNavigate("logs")}>
+            <div className="fiori-panel-header">
+              <div>
+                <h3>Recent decision log</h3>
+                <p>Latest approved and rejected leave actions</p>
+              </div>
+              <div className="fiori-card-link">Open audit logs</div>
+            </div>
+
             {recentActions.length === 0 ? (
-              <div style={{ textAlign: "center", padding: "60px 20px", color: "#9ca3af" }}>
-                <div style={{ fontSize: 48, marginBottom: 16 }}>📋</div>
-                <div style={{ fontSize: 14 }}>No recent activity</div>
+              <div className="admin-empty-state">
+                <GitBranch size={28} />
+                <div>
+                  <strong>No recent leave decisions</strong>
+                  <p>Approved and rejected requests will appear here.</p>
+                </div>
               </div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                {recentActions.map((action) => {
-                  const statusColors = getStatusColor(action.status);
-                  return (
-                    <div
-                      key={action._id}
-                      style={{
-                        padding: 14,
-                        background: statusColors.bg,
-                        borderRadius: 10,
-                        border: `1px solid ${statusColors.border}`,
-                      }}
-                    >
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>
-                            {action.employee_name}
+              <div className="fiori-table-shell">
+                <table className="fiori-table">
+                  <thead>
+                    <tr>
+                      <th>Employee</th>
+                      <th>Leave Type</th>
+                      <th>Period</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentActions.map((action) => (
+                      <tr key={action._id}>
+                        <td>
+                          <div className="fiori-primary-cell">
+                            <strong>{action.employee_name || "Unknown employee"}</strong>
+                            <span>{formatDate(action.approved_on || action.rejected_on || action.applied_on)}</span>
                           </div>
-                          <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
-                            {action.leave_type} • {formatDate(action.start_date)}
-                          </div>
-                        </div>
-                        <div
-                          style={{
-                            padding: "4px 10px",
-                            borderRadius: 6,
-                            background: statusColors.text,
-                            color: "white",
-                            fontSize: 11,
-                            fontWeight: 700,
-                          }}
-                        >
-                          {action.status}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                        </td>
+                        <td>{action.leave_type || "Leave"}</td>
+                        <td>
+                          {formatDate(action.start_date)} to {formatDate(action.end_date)}
+                        </td>
+                        <td>
+                          <span className={`fiori-status-pill ${statusToneMap[action.status] || "is-neutral"}`}>
+                            {action.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
-          </div>
+          </section>
         </div>
-        
-        {/* Quick Actions - Organization */}
-        <div
-          style={{
-            background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-            borderRadius: 16,
-            padding: "28px",
-            boxShadow: "0 4px 20px rgba(102, 126, 234, 0.4)",
-            border: "1px solid rgba(255, 255, 255, 0.2)",
-          }}
-        >
-          <h3
-            style={{
-              margin: 0,
-              marginBottom: 16,
-              fontSize: 18,
-              fontWeight: 700,
-              color: "white",
-            }}
-          >
-            Organization
-          </h3>
-          <button
-            onClick={() => setShowHierarchy(true)}
-            style={{
-              width: "100%",
-              background: "white",
-              color: "#667eea",
-              border: "none",
-              padding: "14px 20px",
-              borderRadius: 10,
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 10,
-              transition: "all 0.2s ease",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = "translateY(-2px)";
-              e.currentTarget.style.boxShadow = "0 8px 16px rgba(0, 0, 0, 0.2)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = "translateY(0)";
-              e.currentTarget.style.boxShadow = "none";
-            }}
-          >
-            <span style={{ fontSize: 20 }}>🏢</span>
-            <span>View Organization Hierarchy</span>
-          </button>
-        </div>      
 
+        <aside className="admin-dashboard-secondary">
+          <section className="fiori-panel">
+            <div className="fiori-panel-header">
+              <div>
+                <h3>Administration priorities</h3>
+                <p>Operational indicators for daily review</p>
+              </div>
+            </div>
 
-        {/* Message Display */}
-        {message && (
-          <div
-            style={{
-              position: "fixed",
-              bottom: 24,
-              right: 24,
-              background: message.includes("Error") ? "#fef2f2" : "#d1f4dd",
-              color: message.includes("Error") ? "#ef4444" : "#0a5d2c",
-              padding: "16px 24px",
-              borderRadius: 12,
-              border: `2px solid ${message.includes("Error") ? "#ffb3b3" : "#7de3a6"}`,
-              boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
-              fontSize: 14,
-              fontWeight: 600,
-              zIndex: 1000,
-            }}
-          >
-            {message}
-          </div>
-        )}
+            <div className="admin-priority-list">
+              <div className="admin-priority-item is-clickable" onClick={() => handleNavigate("employees")}>
+                <Building2 size={18} />
+                <div>
+                  <strong>Workforce availability</strong>
+                  <p>{stats.workingToday} employees are currently available for allocation.</p>
+                </div>
+              </div>
+              <div className="admin-priority-item is-clickable" onClick={() => handleNavigate("leaves")}>
+                <Clock3 size={18} />
+                <div>
+                  <strong>Approval queue</strong>
+                  <p>{stats.pendingLeaves} requests require review at the administration layer.</p>
+                </div>
+              </div>
+              <div className="admin-priority-item is-clickable" onClick={() => setShowOnLeaveModal(true)}>
+                <CalendarRange size={18} />
+                <div>
+                  <strong>Approved absences</strong>
+                  <p>{stats.onLeaveToday} employees are marked unavailable for the current day.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="fiori-panel is-clickable" onClick={() => setShowHierarchy(true)}>
+            <div className="fiori-panel-header">
+              <div>
+                <h3>Organization governance</h3>
+                <p>Access the enterprise reporting structure</p>
+              </div>
+              <div className="fiori-card-link">Open organization hierarchy</div>
+            </div>
+            <button
+              className="fiori-button primary full-width"
+              onClick={(event) => {
+                event.stopPropagation();
+                setShowHierarchy(true);
+              }}
+            >
+              Open organization hierarchy
+            </button>
+          </section>
+        </aside>
       </div>
-      
-      {/* Organization Hierarchy Modal */}
-      {showHierarchy && (
-        <OrganizationHierarchy 
-          user={user} 
-          onClose={() => setShowHierarchy(false)} 
-        />
+
+      {message && (
+        <div
+          className={`admin-toast ${message.toLowerCase().includes("unable") || message.toLowerCase().includes("required") ? "is-error" : "is-success"}`}
+        >
+          {message}
+        </div>
       )}
 
-      {/* ⭐ NEW: On Leave Employees Modal */}
+      {showHierarchy && <OrganizationHierarchy user={user} onClose={() => setShowHierarchy(false)} />}
+
       {showOnLeaveModal && (
         <OnLeaveEmployeesModal
           employees={employeesOnLeave}
@@ -1079,97 +814,59 @@ const AdminDashboard = ({ user }) => {
         />
       )}
 
-      {/* Rejection Modal */}
       {rejectModal.show && (
         <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: "rgba(0,0,0,0.6)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 9999,
-          }}
+          className="admin-modal-overlay"
           onClick={() => setRejectModal({ show: false, leaveId: null, reason: "" })}
         >
-          <div
-            style={{
-              background: "white",
-              padding: 32,
-              borderRadius: 16,
-              maxWidth: 500,
-              width: "90%",
-              boxShadow: "0 25px 50px rgba(0,0,0,0.4)",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 style={{ marginTop: 0, marginBottom: 16, color: "#ef4444", fontSize: 22 }}>
-              Reject Leave Request
-            </h3>
-            <p style={{ marginBottom: 16, fontSize: 14, color: "#6b7280" }}>
-              Please provide a detailed reason for rejecting this leave request:
-            </p>
-            <textarea
-              placeholder="Enter rejection reason..."
-              value={rejectModal.reason}
-              onChange={(e) => setRejectModal({ ...rejectModal, reason: e.target.value })}
-              rows={5}
-              style={{
-                width: "100%",
-                resize: "vertical",
-                fontFamily: "inherit",
-                marginBottom: 20,
-                padding: 12,
-                fontSize: 14,
-                border: "2px solid #e5e7eb",
-                borderRadius: 8,
-                outline: "none",
-              }}
-              autoFocus
-            />
-            <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
+          <div className="admin-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="admin-modal-header">
+              <div>
+                <div className="admin-section-overline">Leave action</div>
+                <h2>Reject leave request</h2>
+                <p>Provide a clear audit reason for the decision.</p>
+              </div>
               <button
+                className="fiori-button secondary"
                 onClick={() => setRejectModal({ show: false, leaveId: null, reason: "" })}
-                style={{
-                  background: "#f3f4f6",
-                  color: "#374151",
-                  border: "none",
-                  padding: "10px 20px",
-                  borderRadius: 8,
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                }}
               >
                 Cancel
               </button>
+            </div>
+
+            <div className="fiori-form-field">
+              <label htmlFor="reject-reason">Rejection reason</label>
+              <textarea
+                id="reject-reason"
+                placeholder="Enter the business reason for rejection"
+                value={rejectModal.reason}
+                onChange={(event) =>
+                  setRejectModal((previous) => ({ ...previous, reason: event.target.value }))
+                }
+                rows={6}
+              />
+            </div>
+
+            <div className="admin-modal-actions">
               <button
+                className="fiori-button secondary"
+                onClick={() => setRejectModal({ show: false, leaveId: null, reason: "" })}
+              >
+                Dismiss
+              </button>
+              <button
+                className="fiori-button primary danger"
                 onClick={confirmReject}
                 disabled={!rejectModal.reason.trim()}
-                style={{
-                  background: rejectModal.reason.trim() ? "#ef4444" : "#cbd5e1",
-                  color: "white",
-                  border: "none",
-                  padding: "10px 20px",
-                  borderRadius: 8,
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: rejectModal.reason.trim() ? "pointer" : "not-allowed",
-                }}
               >
-                Confirm Rejection
+                Confirm rejection
               </button>
             </div>
           </div>
         </div>
       )}
-    </div>
+    </section>
   );
 };
-
 
 export default AdminDashboard;
