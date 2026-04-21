@@ -110,6 +110,7 @@ function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [section, setSection] = useState("dashboard");
   const [viewEmployeeId, setViewEmployeeId] = useState(null);
+  const [profileReturnSection, setProfileReturnSection] = useState("dashboard");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Session recovery on app load
@@ -158,6 +159,7 @@ function App() {
     setIsAuthenticated(false);
     setSection("dashboard");
     setViewEmployeeId(null);
+    setProfileReturnSection("dashboard");
   };
 
   const handleNavigateToProfile = (employeeId) => {
@@ -210,6 +212,7 @@ function App() {
     }
 
     console.log("✅ All validations passed, navigating to profile:", targetId);
+    setProfileReturnSection(section);
     setViewEmployeeId(targetId);
     setSection("profile");
   };
@@ -222,6 +225,9 @@ function App() {
       newSection === "progress"
     ) {
       setViewEmployeeId(null);
+    }
+    if (newSection !== "profile") {
+      setProfileReturnSection(newSection);
     }
     setSection(newSection);
   };
@@ -346,7 +352,18 @@ function App() {
         }
 
       case "profile":
-        return <Profile user={currentUser} role={role} viewEmployeeId={viewEmployeeId} />;
+        return (
+          <Profile
+            user={currentUser}
+            role={role}
+            viewEmployeeId={viewEmployeeId}
+            onUserUpdate={handleUserUpdate}
+            onBack={() => {
+              setViewEmployeeId(null);
+              setSection(viewEmployeeId ? profileReturnSection || "dashboard" : "dashboard");
+            }}
+          />
+        );
 
       case "calendar":
         return <Calendar user={currentUser} />;
