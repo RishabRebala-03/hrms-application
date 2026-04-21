@@ -1,210 +1,552 @@
-// src/components/AdminLeaves.js
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
+import {
+  Activity,
+  BarChart3,
+  CalendarClock,
+  CheckCircle2,
+  ChevronRight,
+  Clock3,
+  Filter,
+  GitBranch,
+  Search,
+  ShieldAlert,
+  Users,
+} from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+
+const chartPalette = ["#0a6ed1", "#5b738b", "#8fb5d9", "#d1e3f8", "#0f2742", "#91c8f6"];
+
+const statusToneMap = {
+  Approved: "is-approved",
+  Rejected: "is-rejected",
+  Cancelled: "is-neutral",
+  Pending: "is-pending",
+};
+
+const formatDate = (value) => {
+  if (!value) return "Not available";
+
+  try {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "Not available";
+
+    return date.toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return "Not available";
+  }
+};
+
+const formatDateTime = (value) => {
+  if (!value) return "Not available";
+
+  try {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "Not available";
+
+    return date.toLocaleString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "Not available";
+  }
+};
+
+const shortLabel = (value, max = 12) => {
+  if (!value) return "Unassigned";
+  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
+};
+
+const dayDiff = (start, end) => {
+  const first = new Date(start);
+  const second = new Date(end);
+  if (Number.isNaN(first.getTime()) || Number.isNaN(second.getTime())) return null;
+  return Math.max(0, Math.round((second - first) / (1000 * 60 * 60 * 24)));
+};
+
+const getLeaveWindow = (leave) => {
+  if (leave.is_partial_approval && leave.approved_start_date && leave.approved_end_date) {
+    return `${formatDate(leave.approved_start_date)} to ${formatDate(leave.approved_end_date)}`;
+  }
+
+  return `${formatDate(leave.start_date)} to ${formatDate(leave.end_date)}`;
+};
+
+const getDaysLabel = (leave) => {
+  if (leave.leave_type === "Early Logout") {
+    return leave.logout_time ? `Logout at ${leave.logout_time}` : "Early logout";
+  }
+
+  const days = leave.approved_days || leave.days || 0;
+  return `${days} day${days === 1 ? "" : "s"}`;
+};
+
+const getApproverLabel = (approverId, userMap, fallbackLabel) => {
+  if (fallbackLabel) return fallbackLabel;
+  if (approverId && userMap[approverId]?.name) return userMap[approverId].name;
+  if (approverId && userMap[approverId]?.email) return userMap[approverId].email;
+  return "Unknown approver";
+};
+
+const ChartTooltip = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null;
+
+  return (
+    <div className="fiori-chart-tooltip">
+      {label ? <div className="fiori-chart-tooltip-label">{label}</div> : null}
+      {payload.map((entry) => (
+        <div key={`${entry.name}-${entry.dataKey}`} className="fiori-chart-tooltip-row">
+          <span>{entry.name}</span>
+          <strong>{entry.value}</strong>
+        </div>
+      ))}
+    </div>
+  );
+};
 
 const AdminLeaves = ({ user }) => {
+  const [activeTab, setActiveTab] = useState("pending");
   const [pendingLeaves, setPendingLeaves] = useState([]);
   const [allLeaves, setAllLeaves] = useState([]);
-  const [activeTab, setActiveTab] = useState("pending");
+  const [allUsers, setAllUsers] = useState([]);
   const [expandedLeave, setExpandedLeave] = useState(null);
-  const [rejectModal, setRejectModal] = useState({ show: false, leaveId: null, reason: "" });
   const [message, setMessage] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [sortBy, setSortBy] = useState("newest"); // newest, oldest, name, department
-  const [approveModal, setApproveModal] = useState({ show: false, leaveId: null, approverName: "" });
-  const [partialApprovalModal, setPartialApprovalModal] = useState({
-  show: false,
-  leaveId: null,
-  originalStart: "",
-  originalEnd: "",
-  approvedStart: "",
-  approvedEnd: "",
-  approverName: ""
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [departmentFilter, setDepartmentFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("newest");
+  const [escalationSearch, setEscalationSearch] = useState("");
+  const [selectedEscalationOwner, setSelectedEscalationOwner] = useState(null);
+  const [rejectModal, setRejectModal] = useState({ show: false, leaveId: null, reason: "" });
+  const [approvalModal, setApprovalModal] = useState({
+    show: false,
+    leaveId: null,
+    approverName: user?.name || user?.email || "",
+    originalStart: "",
+    originalEnd: "",
+    approvedStart: "",
+    approvedEnd: "",
   });
 
-  // ========== ⭐ NEW ESCALATION HELPER FUNCTION ⭐ ==========
-  const getEscalationInfo = (leave) => {
-    const escalationLevel = leave.escalation_level || 0;
-    const appliedOn = new Date(leave.applied_on);
-    const now = new Date();
-    const daysPending = Math.floor((now - appliedOn) / (1000 * 60 * 60 * 24));
-    
-    if (escalationLevel === 0) {
-      const daysUntilEscalation = Math.max(0, 2 - daysPending);
-      return {
-        level: "Manager",
-        status: daysPending >= 2 ? "overdue" : "pending",
-        message: daysPending >= 2 
-          ? "⚠️ Overdue - Will escalate soon"
-          : `⏱️ ${daysUntilEscalation} day${daysUntilEscalation !== 1 ? 's' : ''} until escalation`,
-        color: daysPending >= 2 ? "#dc2626" : "#f59e0b"
-      };
-    } else if (escalationLevel === 1) {
-      return {
-        level: "Admin (Escalated)",
-        status: "escalated",
-        message: "⚠️ Escalated after 2-day timeout",
-        color: "#dc2626"
-      };
-    }
-    return null;
-  };
-  // ========== END OF HELPER FUNCTION ==========
-
-  const fetchLeaves = async () => {
+  const fetchLeaveWorkspace = async () => {
     try {
       setLoading(true);
-      console.log("🔍 Fetching admin leaves...");
-      
-      // ⭐ FIX: Fetch admin-specific pending leaves using the correct endpoint
-      const pendingRes = await axios.get(
-        `${process.env.REACT_APP_BACKEND_URL}/api/leaves/pending/admin`
-      );
-      console.log("✅ Admin pending leaves response:", pendingRes.data);
-      
-      // ⭐ FIX: Fetch all leaves for the "All Leaves" tab
-      const allRes = await axios.get(
-        `${process.env.REACT_APP_BACKEND_URL}/api/leaves/all`
-      );
-      console.log("✅ All leaves response:", allRes.data.length);
-      
-      // ⭐ CRITICAL FIX: Use the pending/admin endpoint data for Pending tab
-      const adminPending = Array.isArray(pendingRes.data) ? pendingRes.data : [];
-      const allLeaves = Array.isArray(allRes.data) ? allRes.data : [];
-      
-      console.log(`📊 Admin pending leaves: ${adminPending.length}`);
-      console.log(`📊 All leaves: ${allLeaves.length}`);
-      
-      // ⭐ FIX: Set the correct data to the correct state
-      setPendingLeaves(adminPending);  // Only escalated admin leaves
-      setAllLeaves(allLeaves.sort((a, b) => new Date(b.applied_on) - new Date(a.applied_on)));
-      
-      console.log(`✅ State updated: ${adminPending.length} in Pending tab, ${allLeaves.length} in All tab`);
-    } catch (err) {
-      console.error("❌ Error fetching leaves:", err);
-      console.error("Error details:", err.response?.data);
-      setMessage("Failed to load leaves");
-      
+
+      const [pendingRes, allLeavesRes, usersRes] = await Promise.all([
+        axios.get(`${process.env.REACT_APP_BACKEND_URL}/api/leaves/pending/admin`),
+        axios.get(`${process.env.REACT_APP_BACKEND_URL}/api/leaves/all`),
+        axios.get(`${process.env.REACT_APP_BACKEND_URL}/api/users/`),
+      ]);
+
+      setPendingLeaves(Array.isArray(pendingRes.data) ? pendingRes.data : []);
+      setAllLeaves(Array.isArray(allLeavesRes.data) ? allLeavesRes.data : []);
+      setAllUsers(Array.isArray(usersRes.data) ? usersRes.data : []);
+    } catch (error) {
       setPendingLeaves([]);
       setAllLeaves([]);
+      setAllUsers([]);
+      setMessage(error.response?.data?.error || "Unable to load leave workspace.");
+      setTimeout(() => setMessage(""), 3000);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchLeaves();
+    fetchLeaveWorkspace();
   }, []);
 
-  const formatDate = (dateStr) => {
-    if (!dateStr) return "N/A";
-    try {
-      let val = dateStr;
-      if (typeof dateStr === "object" && dateStr.$date) val = dateStr.$date;
-      const date = new Date(val);
-      if (isNaN(date.getTime())) return "N/A";
-      return date.toLocaleDateString("en-IN", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
+  const userMap = useMemo(
+    () =>
+      allUsers.reduce((accumulator, person) => {
+        if (person?._id) {
+          accumulator[person._id] = person;
+        }
+        return accumulator;
+      }, {}),
+    [allUsers]
+  );
+
+  const summaryMetrics = useMemo(() => {
+    const totalRequests = allLeaves.length;
+    const approved = allLeaves.filter((leave) => leave.status === "Approved").length;
+    const rejected = allLeaves.filter((leave) => leave.status === "Rejected").length;
+    const escalated = allLeaves.filter(
+      (leave) => Array.isArray(leave.escalation_history) && leave.escalation_history.length > 0
+    ).length;
+
+    const openOverdue = allLeaves.filter((leave) => {
+      if (leave.status !== "Pending") return false;
+      const referenceDate = leave.escalated_on || leave.applied_on;
+      const pendingDays = dayDiff(referenceDate, new Date());
+      const threshold = (leave.escalation_level || 0) > 0 ? 1 : 2;
+      return pendingDays !== null && pendingDays >= threshold;
+    }).length;
+
+    return {
+      totalRequests,
+      approved,
+      rejected,
+      escalated,
+      pending: pendingLeaves.length,
+      approvalRate: totalRequests ? Math.round((approved / totalRequests) * 100) : 0,
+      openOverdue,
+    };
+  }, [allLeaves, pendingLeaves]);
+
+  const availableDepartments = useMemo(() => {
+    const values = new Set(
+      allLeaves.map((leave) => leave.employee_department).filter(Boolean)
+    );
+    return ["all", ...Array.from(values).sort((first, second) => first.localeCompare(second))];
+  }, [allLeaves]);
+
+  const availableTypes = useMemo(() => {
+    const values = new Set(allLeaves.map((leave) => leave.leave_type).filter(Boolean));
+    return ["all", ...Array.from(values).sort((first, second) => first.localeCompare(second))];
+  }, [allLeaves]);
+
+  const filteredLeaves = useMemo(() => {
+    const source = activeTab === "pending" ? pendingLeaves : allLeaves;
+    const query = searchTerm.trim().toLowerCase();
+
+    return [...source]
+      .filter((leave) => {
+        if (
+          query &&
+          ![
+            leave.employee_name,
+            leave.employee_email,
+            leave.employee_designation,
+            leave.employee_department,
+            leave.leave_type,
+            leave.approved_by,
+          ]
+            .filter(Boolean)
+            .some((value) => String(value).toLowerCase().includes(query))
+        ) {
+          return false;
+        }
+
+        if (statusFilter !== "all" && leave.status !== statusFilter) return false;
+        if (departmentFilter !== "all" && leave.employee_department !== departmentFilter) return false;
+        if (typeFilter !== "all" && leave.leave_type !== typeFilter) return false;
+
+        return true;
+      })
+      .sort((first, second) => {
+        switch (sortBy) {
+          case "oldest":
+            return new Date(first.applied_on) - new Date(second.applied_on);
+          case "name":
+            return (first.employee_name || "").localeCompare(second.employee_name || "");
+          case "department":
+            return (first.employee_department || "").localeCompare(second.employee_department || "");
+          case "status":
+            return (first.status || "").localeCompare(second.status || "");
+          case "newest":
+          default:
+            return new Date(second.applied_on) - new Date(first.applied_on);
+        }
       });
-    } catch {
-      return "N/A";
+  }, [activeTab, allLeaves, departmentFilter, pendingLeaves, searchTerm, sortBy, statusFilter, typeFilter]);
+
+  const leaveStatusData = useMemo(() => {
+    const orderedStatuses = ["Pending", "Approved", "Rejected", "Cancelled"];
+    const counts = allLeaves.reduce((accumulator, leave) => {
+      const key = leave.status || "Pending";
+      accumulator[key] = (accumulator[key] || 0) + 1;
+      return accumulator;
+    }, {});
+
+    return orderedStatuses
+      .filter((status) => counts[status])
+      .map((status, index) => ({
+        name: status,
+        value: counts[status],
+        color: chartPalette[index % chartPalette.length],
+      }));
+  }, [allLeaves]);
+
+  const leaveTypeData = useMemo(() => {
+    const counts = allLeaves.reduce((accumulator, leave) => {
+      const key = leave.leave_type || "Other";
+      accumulator[key] = (accumulator[key] || 0) + 1;
+      return accumulator;
+    }, {});
+
+    return Object.entries(counts)
+      .map(([name, value]) => ({ name: shortLabel(name, 14), fullName: name, value }))
+      .sort((first, second) => second.value - first.value);
+  }, [allLeaves]);
+
+  const departmentLoadData = useMemo(() => {
+    const counts = allLeaves.reduce((accumulator, leave) => {
+      const key = leave.employee_department || "Unassigned";
+      accumulator[key] = (accumulator[key] || 0) + 1;
+      return accumulator;
+    }, {});
+
+    return Object.entries(counts)
+      .map(([name, value]) => ({ name: shortLabel(name, 14), fullName: name, value }))
+      .sort((first, second) => second.value - first.value)
+      .slice(0, 8);
+  }, [allLeaves]);
+
+  const monthlyTrendData = useMemo(() => {
+    const buckets = [];
+    const today = new Date();
+
+    for (let index = 5; index >= 0; index -= 1) {
+      const date = new Date(today.getFullYear(), today.getMonth() - index, 1);
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+      buckets.push({
+        key,
+        name: date.toLocaleDateString("en-IN", { month: "short" }),
+        requests: 0,
+        approved: 0,
+        rejected: 0,
+      });
     }
-  };
 
-  // 🎂 Check if start_date matches employee birthday
-  const isBirthdayLeave = (leave) => {
-    if (!leave.employee_dateOfBirth) return false;
-    try {
-      const dob = new Date(leave.employee_dateOfBirth);
-      const start = new Date(leave.start_date);
+    const bucketMap = buckets.reduce((accumulator, bucket) => {
+      accumulator[bucket.key] = bucket;
+      return accumulator;
+    }, {});
 
-      return (
-        dob.getMonth() === start.getMonth() &&
-        dob.getDate() === start.getDate()
-      );
-    } catch {
-      return false;
+    allLeaves.forEach((leave) => {
+      const applied = new Date(leave.applied_on || leave.start_date);
+      if (!Number.isNaN(applied.getTime())) {
+        const key = `${applied.getFullYear()}-${String(applied.getMonth() + 1).padStart(2, "0")}`;
+        if (bucketMap[key]) bucketMap[key].requests += 1;
+      }
+
+      const approved = new Date(leave.approved_on || "");
+      if (!Number.isNaN(approved.getTime()) && leave.status === "Approved") {
+        const key = `${approved.getFullYear()}-${String(approved.getMonth() + 1).padStart(2, "0")}`;
+        if (bucketMap[key]) bucketMap[key].approved += 1;
+      }
+
+      const rejected = new Date(leave.rejected_on || "");
+      if (!Number.isNaN(rejected.getTime()) && leave.status === "Rejected") {
+        const key = `${rejected.getFullYear()}-${String(rejected.getMonth() + 1).padStart(2, "0")}`;
+        if (bucketMap[key]) bucketMap[key].rejected += 1;
+      }
+    });
+
+    return buckets;
+  }, [allLeaves]);
+
+  const escalationEvents = useMemo(() => {
+    return allLeaves.flatMap((leave) => {
+      const history = Array.isArray(leave.escalation_history) ? leave.escalation_history : [];
+      return history.map((entry, index) => {
+        const employeeRecord = userMap[leave.employee_id];
+        const offenderId =
+          entry.from_approver || (index === 0 ? employeeRecord?.reportsTo || null : null);
+        const offender = offenderId ? userMap[offenderId] : null;
+        const escalatedToId = entry.to_approver || entry.approver_id || null;
+        const escalatedTo = escalatedToId ? userMap[escalatedToId] : null;
+
+        return {
+          key: `${leave._id}-${index}`,
+          leaveId: leave._id,
+          employeeId: leave.employee_id,
+          employeeName: leave.employee_name || "Unknown employee",
+          employeeDepartment: leave.employee_department || "Unassigned",
+          leaveType: leave.leave_type || "Leave",
+          requestedFrom: leave.start_date,
+          requestedTo: leave.end_date,
+          appliedOn: leave.applied_on,
+          escalatedAt: entry.escalated_at,
+          escalationLevel: entry.to_level || entry.level || leave.escalation_level || 1,
+          status: leave.status || "Pending",
+          offenderId,
+          offenderName: offender?.name || "Unresolved approver",
+          offenderEmail: offender?.email || "",
+          offenderRole: offender?.role || "",
+          escalatedToName:
+            entry.to_approver_name || escalatedTo?.name || (escalatedTo ? escalatedTo.email : "Unknown"),
+          reason: entry.reason || "Approval SLA exceeded",
+        };
+      });
+    });
+  }, [allLeaves, userMap]);
+
+  const escalationMonthlyData = useMemo(() => {
+    const buckets = [];
+    const today = new Date();
+
+    for (let index = 5; index >= 0; index -= 1) {
+      const date = new Date(today.getFullYear(), today.getMonth() - index, 1);
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+      buckets.push({
+        key,
+        name: date.toLocaleDateString("en-IN", { month: "short" }),
+        escalations: 0,
+      });
     }
-  };
 
-  const handleApprove = (leave) => {
-    // Open modal with date range
-    setPartialApprovalModal({
+    const bucketMap = buckets.reduce((accumulator, bucket) => {
+      accumulator[bucket.key] = bucket;
+      return accumulator;
+    }, {});
+
+    escalationEvents.forEach((event) => {
+      const escalatedAt = new Date(event.escalatedAt);
+      if (Number.isNaN(escalatedAt.getTime())) return;
+
+      const key = `${escalatedAt.getFullYear()}-${String(escalatedAt.getMonth() + 1).padStart(2, "0")}`;
+      if (bucketMap[key]) bucketMap[key].escalations += 1;
+    });
+
+    return buckets;
+  }, [escalationEvents]);
+
+  const resolutionTurnaroundData = useMemo(() => {
+    const grouped = {};
+
+    allLeaves.forEach((leave) => {
+      if (!["Approved", "Rejected"].includes(leave.status)) return;
+
+      const appliedOn = new Date(leave.applied_on);
+      const resolvedOn = new Date(leave.approved_on || leave.rejected_on || "");
+      if (Number.isNaN(appliedOn.getTime()) || Number.isNaN(resolvedOn.getTime())) return;
+
+      const key = leave.leave_type || "Other";
+      grouped[key] = grouped[key] || { totalDays: 0, count: 0 };
+      grouped[key].totalDays += Math.max(0, (resolvedOn - appliedOn) / (1000 * 60 * 60 * 24));
+      grouped[key].count += 1;
+    });
+
+    return Object.entries(grouped)
+      .map(([name, bucket]) => ({
+        name: shortLabel(name, 14),
+        fullName: name,
+        value: Number((bucket.totalDays / bucket.count).toFixed(1)),
+      }))
+      .sort((first, second) => second.value - first.value);
+  }, [allLeaves]);
+
+  const escalationOwners = useMemo(() => {
+    const grouped = escalationEvents.reduce((accumulator, event) => {
+      const key = event.offenderId || event.offenderName;
+      if (!accumulator[key]) {
+        accumulator[key] = {
+          id: key,
+          approverId: event.offenderId,
+          name: event.offenderName,
+          email: event.offenderEmail,
+          role: event.offenderRole,
+          count: 0,
+          pendingCount: 0,
+          employees: new Set(),
+          departments: new Set(),
+          latestEscalation: null,
+          events: [],
+        };
+      }
+
+      accumulator[key].count += 1;
+      if (event.status === "Pending") {
+        accumulator[key].pendingCount += 1;
+      }
+      accumulator[key].employees.add(event.employeeName);
+      accumulator[key].departments.add(event.employeeDepartment);
+      accumulator[key].events.push(event);
+
+      const latest = accumulator[key].latestEscalation
+        ? new Date(accumulator[key].latestEscalation)
+        : null;
+      const current = new Date(event.escalatedAt || 0);
+      if (!latest || current > latest) {
+        accumulator[key].latestEscalation = event.escalatedAt;
+      }
+
+      return accumulator;
+    }, {});
+
+    return Object.values(grouped)
+      .map((entry) => ({
+        ...entry,
+        employeesAffected: entry.employees.size,
+        departmentCount: entry.departments.size,
+        departments: Array.from(entry.departments),
+        events: entry.events.sort((first, second) => new Date(second.escalatedAt) - new Date(first.escalatedAt)),
+      }))
+      .filter((entry) => {
+        if (!escalationSearch.trim()) return true;
+        const query = escalationSearch.toLowerCase();
+        return [entry.name, entry.email, ...entry.departments]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(query));
+      })
+      .sort((first, second) => {
+        if (second.count !== first.count) return second.count - first.count;
+        return new Date(second.latestEscalation || 0) - new Date(first.latestEscalation || 0);
+      });
+  }, [escalationEvents, escalationSearch]);
+
+  const openApproveModal = (leave) => {
+    setApprovalModal({
       show: true,
       leaveId: leave._id,
+      approverName: user?.name || user?.email || "",
       originalStart: leave.start_date,
       originalEnd: leave.end_date,
-      approvedStart: leave.start_date, // Default to full approval
+      approvedStart: leave.start_date,
       approvedEnd: leave.end_date,
-      approverName: ""
     });
   };
 
-  const handleReject = (leaveId) => {
-    setRejectModal({ show: true, leaveId, reason: "" });
-  };
-
-  const confirmApprove = async () => {
-    if (!approveModal.approverName.trim()) {
-      setMessage("Please enter the approver's name");
-      return;
-    }
-    await updateStatus(approveModal.leaveId, "Approved", "", approveModal.approverName);
-  };
-
-  const confirmPartialApproval = async () => {
-    if (!partialApprovalModal.approverName.trim()) {
-      setMessage("Please enter the approver's name");
-      return;
-    }
-
-    const isPartial = 
-      partialApprovalModal.approvedStart !== partialApprovalModal.originalStart ||
-      partialApprovalModal.approvedEnd !== partialApprovalModal.originalEnd;
-
-    await updateStatus(
-      partialApprovalModal.leaveId,
-      "Approved",
-      "",
-      partialApprovalModal.approverName,
-      isPartial,
-      partialApprovalModal.approvedStart,
-      partialApprovalModal.approvedEnd
-    );
-  };
-
-  const confirmReject = async () => {
-    if (!rejectModal.reason.trim()) {
-      setMessage("Please enter a rejection reason");
-      return;
-    }
-    await updateStatus(rejectModal.leaveId, "Rejected", rejectModal.reason);
-  };
-
-  const updateStatus = async (
-    leaveId, 
-    status, 
-    rejectionReason = "", 
+  const updateStatus = async ({
+    leaveId,
+    status,
+    rejectionReason = "",
     approverName = "",
-    isPartial = false,
     approvedStart = null,
-    approvedEnd = null
-  ) => {
+    approvedEnd = null,
+  }) => {
     try {
       const payload = { status };
-      
-      if (status === "Rejected" && rejectionReason.trim()) {
+
+      if (status === "Rejected") {
         payload.rejection_reason = rejectionReason;
       }
-      
-      if (status === "Approved" && approverName.trim()) {
-        payload.approved_by = approverName;
-        payload.approved_on = new Date().toISOString();
-        
-        // Add partial approval data
+
+      if (status === "Approved") {
+        payload.approved_by = approverName.trim();
+
+        const isPartial =
+          approvedStart &&
+          approvedEnd &&
+          (approvedStart !== approvalModal.originalStart || approvedEnd !== approvalModal.originalEnd);
+
         if (isPartial) {
           payload.is_partial = true;
           payload.approved_start_date = approvedStart;
@@ -212,919 +554,821 @@ const AdminLeaves = ({ user }) => {
         }
       }
 
-      const res = await axios.put(
+      const response = await axios.put(
         `${process.env.REACT_APP_BACKEND_URL}/api/leaves/update_status/${leaveId}`,
         payload
       );
 
-      if (res.status === 200) {
-        setMessage(`Leave ${status.toLowerCase()} successfully ✓`);
-        setRejectModal({ show: false, leaveId: null, reason: "" });
-        setApproveModal({ show: false, leaveId: null, approverName: "" });
-        setPartialApprovalModal({ 
-          show: false, 
-          leaveId: null, 
-          originalStart: "", 
-          originalEnd: "", 
-          approvedStart: "", 
-          approvedEnd: "",
-          approverName: ""
-        });
-        fetchLeaves();
-        setTimeout(() => setMessage(""), 3000);
-      }
-    } catch (err) {
-      console.error(err);
-      setMessage("Error updating leave status");
+      setMessage(response.data?.message || `Leave ${status.toLowerCase()} successfully.`);
+      setRejectModal({ show: false, leaveId: null, reason: "" });
+      setApprovalModal({
+        show: false,
+        leaveId: null,
+        approverName: user?.name || user?.email || "",
+        originalStart: "",
+        originalEnd: "",
+        approvedStart: "",
+        approvedEnd: "",
+      });
+      fetchLeaveWorkspace();
+      setTimeout(() => setMessage(""), 3000);
+    } catch (error) {
+      setMessage(error.response?.data?.error || "Unable to update leave status.");
       setTimeout(() => setMessage(""), 3000);
     }
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "Approved":
-        return { bg: "#d1f4dd", text: "#0a5d2c", border: "#7de3a6" };
-      case "Rejected":
-        return { bg: "#ffe0e0", text: "#c41e3a", border: "#ffb3b3" };
-      default:
-        return { bg: "#fff4e6", text: "#d97706", border: "#fbbf24" };
+  const confirmReject = async () => {
+    if (!rejectModal.reason.trim()) {
+      setMessage("A rejection reason is required.");
+      setTimeout(() => setMessage(""), 3000);
+      return;
     }
-  };
 
-  // Filter and sort logic
-  const getFilteredAndSortedLeaves = (leaves) => {
-    let filtered = leaves;
-    
-    // Apply search filter
-    if (searchTerm.trim()) {
-      filtered = filtered.filter(leave => 
-        (leave.employee_name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (leave.employee_email || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (leave.employee_designation || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (leave.employee_department || "").toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-    
-    // Apply sorting
-    const sorted = [...filtered].sort((a, b) => {
-      switch (sortBy) {
-        case "newest":
-          return new Date(b.applied_on) - new Date(a.applied_on);
-        case "oldest":
-          return new Date(a.applied_on) - new Date(b.applied_on);
-        case "name":
-          return (a.employee_name || "").localeCompare(b.employee_name || "");
-        case "department":
-          return (a.employee_department || "").localeCompare(b.employee_department || "");
-        default:
-          return 0;
-      }
+    await updateStatus({
+      leaveId: rejectModal.leaveId,
+      status: "Rejected",
+      rejectionReason: rejectModal.reason,
     });
-    
-    return sorted;
   };
 
-  const displayLeaves = getFilteredAndSortedLeaves(
-    activeTab === "pending" ? pendingLeaves : allLeaves
-  );
+  const confirmApprove = async () => {
+    if (!approvalModal.approverName.trim()) {
+      setMessage("Approver name is required.");
+      setTimeout(() => setMessage(""), 3000);
+      return;
+    }
+
+    await updateStatus({
+      leaveId: approvalModal.leaveId,
+      status: "Approved",
+      approverName: approvalModal.approverName,
+      approvedStart: approvalModal.approvedStart,
+      approvedEnd: approvalModal.approvedEnd,
+    });
+  };
+
+  if (loading) {
+    return (
+      <section className="leave-workspace">
+        <div className="fiori-loading-card">
+          <Clock3 size={28} />
+          <div>
+            <strong>Loading leave workspace</strong>
+            <p>Preparing approvals, records, analytics, and escalation history.</p>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   return (
-    <div className="panel">
-      <div style={{ marginBottom: 24 }}>
-        <h3 style={{ margin: 0, marginBottom: 8 }}>Leave Management</h3>
-        <p className="muted">Review and manage all leave requests across the organization</p>
-      </div>
-
-      {/* Tabs */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 24, borderBottom: "2px solid #e5e7eb" }}>
-        <button
-          onClick={() => setActiveTab("pending")}
-          style={{
-            padding: "12px 24px",
-            background: activeTab === "pending" ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" : "transparent",
-            color: activeTab === "pending" ? "white" : "#6b7280",
-            border: "none",
-            borderBottom: activeTab === "pending" ? "3px solid #667eea" : "none",
-            cursor: "pointer",
-            fontWeight: 600,
-            fontSize: 14,
-            borderRadius: "8px 8px 0 0",
-          }}
-        >
-          ⏳ Pending Approvals ({pendingLeaves.length})
-        </button>
-        <button
-          onClick={() => setActiveTab("all")}
-          style={{
-            padding: "12px 24px",
-            background: activeTab === "all" ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" : "transparent",
-            color: activeTab === "all" ? "white" : "#6b7280",
-            border: "none",
-            borderBottom: activeTab === "all" ? "3px solid #667eea" : "none",
-            cursor: "pointer",
-            fontWeight: 600,
-            fontSize: 14,
-            borderRadius: "8px 8px 0 0",
-          }}
-        >
-          📋 All Leaves ({allLeaves.length})
-        </button>
-      </div>
-      
-      {/* Search and Filter Bar */}
-      <div style={{ 
-        display: "grid", 
-        gridTemplateColumns: "1fr auto", 
-        gap: 12, 
-        marginBottom: 24,
-        padding: "16px",
-        background: "#f9fafb",
-        borderRadius: 12,
-        border: "1px solid #e5e7eb"
-      }}>
-        <input
-          className="input"
-          placeholder="🔍 Search by name, email, designation, or department..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          style={{ fontSize: 14 }}
-        />
-        <select
-          className="input"
-          value={sortBy}
-          onChange={(e) => setSortBy(e.target.value)}
-          style={{ minWidth: 180 }}
-        >
-          <option value="newest">📅 Newest First</option>
-          <option value="oldest">📅 Oldest First</option>
-          <option value="name">👤 Name (A-Z)</option>
-          <option value="department">🏢 Department (A-Z)</option>
-        </select>
-      </div>
-
-      {/* Show result count */}
-      {(searchTerm || sortBy !== "newest") && (
-        <div style={{ 
-          marginBottom: 16, 
-          fontSize: 13, 
-          color: "#6b7280",
-          padding: "8px 12px",
-          background: "#eff6ff",
-          borderRadius: 8,
-          border: "1px solid #bfdbfe"
-        }}>
-          📊 Showing {displayLeaves.length} of {activeTab === "pending" ? pendingLeaves.length : allLeaves.length} leaves
-          {searchTerm && ` matching "${searchTerm}"`}
+    <section className="leave-workspace">
+      <header className="admin-hero">
+        <div>
+          <div className="admin-section-overline">Leave Operations</div>
+          <h1>Leave management</h1>
+          <p>
+            Review pending approvals, monitor leave demand, and track escalation performance
+            across the organization from one enterprise workspace.
+          </p>
         </div>
-      )}
 
-      {/* Leaves List */}
-      {displayLeaves.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "60px 20px", color: "#9ca3af" }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>
-            {activeTab === "pending" ? "✅" : "📋"}
+        <div className="admin-hero-meta">
+          <div className="admin-hero-meta-item">
+            <span>Pending approvals</span>
+            <strong>{summaryMetrics.pending}</strong>
           </div>
-          <div style={{ fontSize: 16, fontWeight: 500 }}>
-            {activeTab === "pending" ? "All caught up!" : "No leave records"}
+          <div className="admin-hero-meta-item">
+            <span>Approval rate</span>
+            <strong>{summaryMetrics.approvalRate}%</strong>
           </div>
-          <div style={{ fontSize: 14, marginTop: 8 }}>
-            {activeTab === "pending" ? "No pending leave requests" : "Leave history will appear here"}
+          <div className="admin-hero-meta-item">
+            <span>Escalated cases</span>
+            <strong>{summaryMetrics.escalated}</strong>
           </div>
         </div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          {displayLeaves.map((leave) => {
-            const statusColors = getStatusColor(leave.status);
-            const isPending = leave.status === "Pending";
+      </header>
 
-            return (
-              <div
-                key={leave._id}
-                style={{
-                  padding: 20,
-                  background: statusColors.bg,
-                  borderRadius: 12,
-                  border: `2px solid ${statusColors.border}`,
-                }}
-              >
-                <div style={{ marginBottom: 12 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                    <div>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>
-                        {leave.employee_name || "Unknown"}
+      <div className="admin-dashboard-grid">
+        <article className="fiori-stat-card">
+          <div className="fiori-stat-topline">
+            <span className="fiori-stat-label">Admin queue</span>
+            <Clock3 size={18} />
+          </div>
+          <div className="fiori-stat-value">{summaryMetrics.pending}</div>
+          <div className="fiori-stat-note">Leave requests waiting for administration action</div>
+        </article>
 
-                        {/* ⭐ ESCALATION BADGE */}
-                        {leave.escalation_level === 1 && (
-                          <span
-                            style={{
-                              marginLeft: 8,
-                              background: "#dc2626",
-                              color: "white",
-                              padding: "4px 10px",
-                              borderRadius: 6,
-                              fontSize: 12,
-                              fontWeight: 600,
-                            }}
-                          >
-                            ⚠️ ESCALATED
-                          </span>
-                        )}
+        <article className="fiori-stat-card">
+          <div className="fiori-stat-topline">
+            <span className="fiori-stat-label">Total requests</span>
+            <CalendarClock size={18} />
+          </div>
+          <div className="fiori-stat-value">{summaryMetrics.totalRequests}</div>
+          <div className="fiori-stat-note">All leave records currently maintained in the system</div>
+        </article>
 
-                        {/* 🎂 BIRTHDAY BADGE */}
-                        {isBirthdayLeave(leave) && (
-                          <span
-                            style={{
-                              marginLeft: 8,
-                              background: "#ffe5f0",
-                              color: "#d6336c",
-                              padding: "4px 8px",
-                              borderRadius: 6,
-                              fontSize: 12,
-                              fontWeight: 600,
-                            }}
-                          >
-                            🎂 Birthday Leave
-                          </span>
-                        )}
+        <article className="fiori-stat-card">
+          <div className="fiori-stat-topline">
+            <span className="fiori-stat-label">Resolved requests</span>
+            <CheckCircle2 size={18} />
+          </div>
+          <div className="fiori-stat-value">{summaryMetrics.approved + summaryMetrics.rejected}</div>
+          <div className="fiori-stat-note">Approved and rejected requests already closed out</div>
+        </article>
+
+        <article className="fiori-stat-card">
+          <div className="fiori-stat-topline">
+            <span className="fiori-stat-label">Open SLA breaches</span>
+            <ShieldAlert size={18} />
+          </div>
+          <div className="fiori-stat-value">{summaryMetrics.openOverdue}</div>
+          <div className="fiori-stat-note">Pending requests currently beyond configured SLA</div>
+        </article>
+      </div>
+
+      <section className="fiori-panel">
+        <div className="leave-tab-strip" role="tablist" aria-label="Leave workspace tabs">
+          {[
+            { id: "pending", label: `Pending Approvals (${pendingLeaves.length})` },
+            { id: "records", label: `All Records (${allLeaves.length})` },
+            { id: "analytics", label: "Leave Analytics" },
+            { id: "escalations", label: `Leave Escalations (${escalationEvents.length})` },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              className={`leave-tab-button ${activeTab === tab.id ? "active" : ""}`}
+              onClick={() => setActiveTab(tab.id)}
+              role="tab"
+              aria-selected={activeTab === tab.id}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {(activeTab === "pending" || activeTab === "records") && (
+        <>
+          <section className="fiori-panel">
+            <div className="fiori-panel-header">
+              <div>
+                <h3>{activeTab === "pending" ? "Approval queue" : "Leave records"}</h3>
+                <p>
+                  {activeTab === "pending"
+                    ? "Escalated requests currently assigned for administration review"
+                    : "Complete leave history with enterprise-grade filtering"}
+                </p>
+              </div>
+            </div>
+
+            <div className="leave-filter-grid">
+              <label className="fiori-form-field">
+                <span className="leave-field-label">Search</span>
+                <div className="leave-search-field">
+                  <Search size={16} />
+                  <input
+                    className="input"
+                    placeholder="Search by employee, email, designation, department, or approver"
+                    value={searchTerm}
+                    onChange={(event) => setSearchTerm(event.target.value)}
+                  />
+                </div>
+              </label>
+
+              <label className="fiori-form-field">
+                <span className="leave-field-label">Status</span>
+                <select className="input" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+                  <option value="all">All statuses</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Approved">Approved</option>
+                  <option value="Rejected">Rejected</option>
+                  <option value="Cancelled">Cancelled</option>
+                </select>
+              </label>
+
+              <label className="fiori-form-field">
+                <span className="leave-field-label">Department</span>
+                <select
+                  className="input"
+                  value={departmentFilter}
+                  onChange={(event) => setDepartmentFilter(event.target.value)}
+                >
+                  {availableDepartments.map((department) => (
+                    <option key={department} value={department}>
+                      {department === "all" ? "All departments" : department}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="fiori-form-field">
+                <span className="leave-field-label">Leave type</span>
+                <select className="input" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
+                  {availableTypes.map((type) => (
+                    <option key={type} value={type}>
+                      {type === "all" ? "All leave types" : type}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="fiori-form-field">
+                <span className="leave-field-label">Sort by</span>
+                <select className="input" value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
+                  <option value="newest">Newest first</option>
+                  <option value="oldest">Oldest first</option>
+                  <option value="name">Employee name</option>
+                  <option value="department">Department</option>
+                  <option value="status">Status</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="leave-results-bar">
+              <div className="leave-results-meta">
+                <Filter size={15} />
+                <span>
+                  Showing {filteredLeaves.length} of {activeTab === "pending" ? pendingLeaves.length : allLeaves.length} records
+                </span>
+              </div>
+              <button className="fiori-button secondary" onClick={fetchLeaveWorkspace}>
+                Refresh
+              </button>
+            </div>
+          </section>
+
+          <section className="leave-record-list">
+            {filteredLeaves.length === 0 ? (
+              <div className="admin-empty-state">
+                <CheckCircle2 size={28} />
+                <div>
+                  <strong>No leave records match the current view</strong>
+                  <p>Adjust the filters or refresh the workspace to review more records.</p>
+                </div>
+              </div>
+            ) : (
+              filteredLeaves.map((leave) => {
+                const isExpanded = expandedLeave === leave._id;
+                const isPending = leave.status === "Pending";
+                const toneClass = statusToneMap[leave.status] || "is-neutral";
+                const escalationCount = Array.isArray(leave.escalation_history)
+                  ? leave.escalation_history.length
+                  : 0;
+
+                return (
+                  <article key={leave._id} className="admin-approval-card">
+                    <div className="admin-approval-card-header">
+                      <div>
+                        <h4>{leave.employee_name || "Unknown employee"}</h4>
+                        <p>
+                          {leave.employee_designation || "Designation unavailable"} •{" "}
+                          {leave.employee_department || "Department unavailable"}
+                        </p>
                       </div>
-                      <div style={{ fontSize: 13, color: "#6b7280", marginTop: 2 }}>
-                        {leave.employee_designation} • {leave.employee_department}
-                      </div>
-                      {leave.employee_dateOfBirth && (() => {
-                        const dob = new Date(leave.employee_dateOfBirth);
-                        const start = new Date(leave.start_date);
 
-                        if (dob.getMonth() === start.getMonth() && dob.getDate() === start.getDate()) {
-                          return (
-                            <span style={{
-                              background: "#ffebc8",
-                              color: "#b45309",
-                              fontSize: "12px",
-                              padding: "3px 8px",
-                              borderRadius: "6px",
-                              display: "inline-block",
-                              marginTop: "6px",
-                              fontWeight: 600
-                            }}>
-                              🎂 Birthday Leave
-                            </span>
-                          );
-                        }
-                        return null;
-                      })()}
-                      <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2, fontFamily: "monospace" }}>
-                        {leave.employee_email}
-                      </div>
+                      <div className={`fiori-status-pill ${toneClass}`}>{leave.status || "Pending"}</div>
                     </div>
-                    <div style={{ textAlign: "right" }}>
-                      <div
-                        style={{
-                          padding: "6px 16px",
-                          borderRadius: 8,
-                          background: statusColors.text,
-                          color: "white",
-                          fontSize: 13,
-                          fontWeight: 700,
-                          marginBottom: 8,
-                        }}
-                      >
-                        {leave.status}
+
+                    <div className="admin-approval-metadata">
+                      <span>{leave.leave_type || "Leave"}</span>
+                      <span>{getDaysLabel(leave)}</span>
+                      <span>{getLeaveWindow(leave)}</span>
+                      <span>Applied {formatDate(leave.applied_on)}</span>
+                      {escalationCount > 0 ? <span>{escalationCount} escalation event(s)</span> : null}
+                    </div>
+
+                    <div className="leave-record-toolbar">
+                      <div className="leave-results-meta">
+                        <Users size={15} />
+                        <span>{leave.employee_email || "No email on record"}</span>
                       </div>
+
                       <button
-                        onClick={() => setExpandedLeave(expandedLeave === leave._id ? null : leave._id)}
-                        style={{
-                          background: "white",
-                          border: "1px solid #e5e7eb",
-                          borderRadius: 8,
-                          padding: "6px 12px",
-                          fontSize: 12,
-                          cursor: "pointer",
-                        }}
+                        className="fiori-inline-button"
+                        onClick={() => setExpandedLeave(isExpanded ? null : leave._id)}
                       >
-                        {expandedLeave === leave._id ? "Hide" : "Details"}
+                        <span>{isExpanded ? "Hide details" : "Show details"}</span>
+                        <ChevronRight size={14} />
                       </button>
                     </div>
-                  </div>
 
-                  <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 13 }}>
-                    <span style={{ fontSize: 20 }}>
-                      {leave.leave_type === "Casual" ? "🖖" : leave.leave_type === "Sick" ? "🤒" : "⭐"}
-                    </span>
-                    <span style={{ fontWeight: 600, color: "#111827" }}>{leave.leave_type} Leave</span>
-                    <span style={{ color: "#6b7280" }}>•</span>
-                    {leave.leave_type === "Early Logout" ? (
-                      <span style={{ color: "#6b7280" }}>
-                        🕐 Logout at {leave.logout_time || "N/A"}
-                      </span>
-                    ) : (
-                      <span style={{ color: "#6b7280" }}>
-                        {leave.days} {leave.days === 1 ? "day" : "days"}
-                      </span>
+                    {isExpanded && (
+                      <div className="admin-approval-details">
+                        <div>
+                          <span>Requested period</span>
+                          <strong>{`${formatDate(leave.start_date)} to ${formatDate(leave.end_date)}`}</strong>
+                        </div>
+                        <div>
+                          <span>Current approver</span>
+                          <strong>{userMap[leave.current_approver_id]?.name || "Administration queue"}</strong>
+                        </div>
+                        <div>
+                          <span>Approved by</span>
+                          <strong>{leave.approved_by || "Not resolved yet"}</strong>
+                        </div>
+                        <div>
+                          <span>Resolved on</span>
+                          <strong>{formatDate(leave.approved_on || leave.rejected_on)}</strong>
+                        </div>
+                        {leave.reason ? (
+                          <div className="is-wide">
+                            <span>Employee reason</span>
+                            <strong>{leave.reason}</strong>
+                          </div>
+                        ) : null}
+                        {leave.rejection_reason ? (
+                          <div className="is-wide">
+                            <span>Rejection reason</span>
+                            <strong>{leave.rejection_reason}</strong>
+                          </div>
+                        ) : null}
+                        {escalationCount > 0 ? (
+                          <div className="is-wide leave-escalation-history-block">
+                            <span>Escalation history</span>
+                            <div className="leave-escalation-history-compact">
+                              {leave.escalation_history.map((entry, index) => {
+                                const fromApprover =
+                                  getApproverLabel(entry.from_approver, userMap) ||
+                                  (index === 0
+                                    ? getApproverLabel(userMap[leave.employee_id]?.reportsTo, userMap)
+                                    : "Previous approver");
+                                const toApprover = getApproverLabel(
+                                  entry.to_approver || entry.approver_id,
+                                  userMap,
+                                  entry.to_approver_name || entry.approver_name
+                                );
+
+                                return (
+                                  <div key={`${leave._id}-history-${index}`} className="leave-escalation-compact-row">
+                                    <strong>{fromApprover}</strong>
+                                    <span>to</span>
+                                    <strong>{toApprover}</strong>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
                     )}
+
+                    {isPending ? (
+                      <div className="admin-approval-actions">
+                        <button className="fiori-button secondary danger" onClick={() => setRejectModal({ show: true, leaveId: leave._id, reason: "" })}>
+                          Reject
+                        </button>
+                        <button className="fiori-button primary" onClick={() => openApproveModal(leave)}>
+                          Approve
+                        </button>
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })
+            )}
+          </section>
+        </>
+      )}
+
+      {activeTab === "analytics" && (
+        <>
+          <div className="admin-analytics-grid leave-analytics-grid">
+            <article className="fiori-panel fiori-chart-card">
+              <div className="fiori-panel-header">
+                <div>
+                  <h3>Leave status mix</h3>
+                  <p>Distribution of request outcomes across all leave records</p>
+                </div>
+                <BarChart3 size={18} />
+              </div>
+              <div className="fiori-chart-shell">
+                <ResponsiveContainer width="100%" height={260}>
+                  <PieChart>
+                    <Pie data={leaveStatusData} dataKey="value" nameKey="name" innerRadius={60} outerRadius={94} paddingAngle={3}>
+                      {leaveStatusData.map((entry) => (
+                        <Cell key={entry.name} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip content={<ChartTooltip />} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </article>
+
+            <article className="fiori-panel fiori-chart-card">
+              <div className="fiori-panel-header">
+                <div>
+                  <h3>Monthly leave trend</h3>
+                  <p>Requests, approvals, and rejections across the last six months</p>
+                </div>
+                <Activity size={18} />
+              </div>
+              <div className="fiori-chart-shell">
+                <ResponsiveContainer width="100%" height={260}>
+                  <AreaChart data={monthlyTrendData}>
+                    <CartesianGrid stroke="#e8edf3" vertical={false} />
+                    <XAxis dataKey="name" tickLine={false} axisLine={false} />
+                    <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
+                    <Tooltip content={<ChartTooltip />} />
+                    <Area type="monotone" dataKey="requests" stroke="#0a6ed1" fill="rgba(10, 110, 209, 0.18)" name="Requests" strokeWidth={2} />
+                    <Area type="monotone" dataKey="approved" stroke="#5b738b" fill="rgba(91, 115, 139, 0.14)" name="Approved" strokeWidth={2} />
+                    <Area type="monotone" dataKey="rejected" stroke="#bb0000" fill="rgba(187, 0, 0, 0.08)" name="Rejected" strokeWidth={2} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </article>
+
+            <article className="fiori-panel fiori-chart-card">
+              <div className="fiori-panel-header">
+                <div>
+                  <h3>Leave type demand</h3>
+                  <p>Volume by leave category across the current dataset</p>
+                </div>
+                <CalendarClock size={18} />
+              </div>
+              <div className="fiori-chart-shell">
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart data={leaveTypeData} barCategoryGap={18}>
+                    <CartesianGrid stroke="#e8edf3" vertical={false} />
+                    <XAxis dataKey="name" tickLine={false} axisLine={false} />
+                    <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
+                    <Tooltip content={<ChartTooltip />} />
+                    <Bar dataKey="value" fill="#0a6ed1" radius={[8, 8, 0, 0]} name="Requests" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </article>
+
+            <article className="fiori-panel fiori-chart-card">
+              <div className="fiori-panel-header">
+                <div>
+                  <h3>Department leave load</h3>
+                  <p>Departments with the highest leave request volume</p>
+                </div>
+                <Users size={18} />
+              </div>
+              <div className="fiori-chart-shell">
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart data={departmentLoadData} barCategoryGap={18}>
+                    <CartesianGrid stroke="#e8edf3" vertical={false} />
+                    <XAxis dataKey="name" tickLine={false} axisLine={false} />
+                    <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
+                    <Tooltip content={<ChartTooltip />} />
+                    <Bar dataKey="value" fill="#5b738b" radius={[8, 8, 0, 0]} name="Requests" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </article>
+
+            <article className="fiori-panel fiori-chart-card">
+              <div className="fiori-panel-header">
+                <div>
+                  <h3>Escalation trend</h3>
+                  <p>Monthly count of leave requests that breached approval SLA</p>
+                </div>
+                <GitBranch size={18} />
+              </div>
+              <div className="fiori-chart-shell">
+                <ResponsiveContainer width="100%" height={260}>
+                  <LineChart data={escalationMonthlyData}>
+                    <CartesianGrid stroke="#e8edf3" vertical={false} />
+                    <XAxis dataKey="name" tickLine={false} axisLine={false} />
+                    <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
+                    <Tooltip content={<ChartTooltip />} />
+                    <Line type="monotone" dataKey="escalations" stroke="#0f2742" strokeWidth={2.5} dot={{ r: 4 }} name="Escalations" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </article>
+
+            <article className="fiori-panel fiori-chart-card">
+              <div className="fiori-panel-header">
+                <div>
+                  <h3>Resolution turnaround</h3>
+                  <p>Average resolution time in days by leave type</p>
+                </div>
+                <Clock3 size={18} />
+              </div>
+              <div className="fiori-chart-shell">
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart data={resolutionTurnaroundData} barCategoryGap={18}>
+                    <CartesianGrid stroke="#e8edf3" vertical={false} />
+                    <XAxis dataKey="name" tickLine={false} axisLine={false} />
+                    <YAxis tickLine={false} axisLine={false} />
+                    <Tooltip content={<ChartTooltip />} />
+                    <Bar dataKey="value" fill="#91c8f6" radius={[8, 8, 0, 0]} name="Avg days" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </article>
+          </div>
+        </>
+      )}
+
+      {activeTab === "escalations" && (
+        <>
+          <section className="fiori-panel">
+            <div className="fiori-panel-header">
+              <div>
+                <h3>Approver escalation ledger</h3>
+                <p>
+                  Counts are attributed to the approver who did not act before the request escalated,
+                  not to the employee who applied for leave.
+                </p>
+              </div>
+            </div>
+
+            <div className="leave-filter-grid leave-filter-grid-compact">
+              <label className="fiori-form-field">
+                <span className="leave-field-label">Search approver</span>
+                <div className="leave-search-field">
+                  <Search size={16} />
+                  <input
+                    className="input"
+                    placeholder="Search by approver name, email, or department"
+                    value={escalationSearch}
+                    onChange={(event) => setEscalationSearch(event.target.value)}
+                  />
+                </div>
+              </label>
+            </div>
+          </section>
+
+          <section className="leave-escalation-grid">
+            {escalationOwners.length === 0 ? (
+              <div className="admin-empty-state">
+                <CheckCircle2 size={28} />
+                <div>
+                  <strong>No escalation records found</strong>
+                  <p>Either no leave request has escalated yet or the current search returned no matches.</p>
+                </div>
+              </div>
+            ) : (
+              escalationOwners.map((owner) => (
+                <article
+                  key={owner.id}
+                  className="fiori-panel escalation-owner-card"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setSelectedEscalationOwner(owner)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setSelectedEscalationOwner(owner);
+                    }
+                  }}
+                >
+                  <div className="fiori-panel-header">
+                    <div>
+                      <h3>{owner.name}</h3>
+                      <p>{owner.email || "Email unavailable"}</p>
+                    </div>
+                    <div className="fiori-counter">{owner.count}</div>
                   </div>
 
-                  {/* ⭐ ESCALATION STATUS BOX */}
-                  {leave.status === "Pending" && (() => {
-                    const escalationInfo = getEscalationInfo(leave);
-                    if (!escalationInfo) return null;
-                    
-                    return (
-                      <div style={{
-                        marginTop: 12,
-                        padding: "12px 16px",
-                        background: escalationInfo.status === "escalated" ? "#fef2f2" : "#fffbeb",
-                        borderRadius: 8,
-                        border: `2px solid ${escalationInfo.status === "escalated" ? "#fca5a5" : "#fcd34d"}`,
-                      }}>
-                        <div style={{ 
-                          display: "flex", 
-                          alignItems: "center", 
-                          gap: 8,
-                          marginBottom: 6
-                        }}>
-                          <span style={{ fontSize: 18 }}>
-                            {escalationInfo.status === "escalated" ? "⚠️" : "📊"}
-                          </span>
-                          <div style={{ 
-                            fontWeight: 600, 
-                            color: escalationInfo.color,
-                            fontSize: 14
-                          }}>
-                            Approval Level: {escalationInfo.level}
-                          </div>
-                        </div>
-                        <div style={{ 
-                          color: escalationInfo.color,
-                          fontSize: 13 
-                        }}>
-                          {escalationInfo.message}
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
+                  <div className="admin-approval-metadata">
+                    <span>{owner.role || "Approver"}</span>
+                    <span>{owner.employeesAffected} employee(s) impacted</span>
+                    <span>{owner.pendingCount} escalated request(s) still open</span>
+                    <span>Latest on {formatDate(owner.latestEscalation)}</span>
+                  </div>
 
-                {expandedLeave === leave._id && (
-                  <div
-                    style={{
-                      marginBottom: 12,
-                      padding: 12,
-                      background: "white",
-                      borderRadius: 8,
-                      border: "1px solid #e5e7eb",
-                    }}
-                  >
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, fontSize: 13 }}>
-                      <div>
-                        <div style={{ color: "#6b7280", marginBottom: 4 }}>Start Date</div>
-                        <div style={{ fontWeight: 600 }}>{formatDate(leave.start_date)}</div>
-                      </div>
-                      <div>
-                        <div style={{ color: "#6b7280", marginBottom: 4 }}>End Date</div>
-                        <div style={{ fontWeight: 600 }}>{formatDate(leave.end_date)}</div>
-                      </div>
-                      <div style={{ gridColumn: "1 / -1" }}>
-                        <div style={{ color: "#6b7280", marginBottom: 4 }}>Applied On</div>
-                        <div style={{ fontWeight: 600 }}>{formatDate(leave.applied_on)}</div>
-                      </div>
-                      {leave.reason && (
-                        <div style={{ gridColumn: "1 / -1" }}>
-                          <div style={{ color: "#6b7280", marginBottom: 4 }}>Reason</div>
-                          <div style={{ fontStyle: "italic" }}>{leave.reason}</div>
-                        </div>
-                      )}
-                      {leave.approved_by && (
-                        <div style={{ gridColumn: "1 / -1" }}>
-                          <div style={{ color: "#6b7280", marginBottom: 4 }}>Approved By</div>
-                          <div style={{ fontWeight: 600, color: "#10b981" }}>
-                            ✓ {leave.approved_by}
-                          </div>
-                        </div>
-                      )}
+                  <div className="leave-escalation-summary">
+                    <div>
+                      <span>Departments impacted</span>
+                      <strong>{owner.departments.join(", ") || "Not available"}</strong>
+                    </div>
+                    <div>
+                      <span>Open detailed ledger</span>
+                      <strong>Review date, time, employee, and escalation path</strong>
                     </div>
                   </div>
-                )}
+                </article>
+              ))
+            )}
+          </section>
+        </>
+      )}
 
-                {leave.rejection_reason && (
-                  <div
-                    style={{
-                      padding: 12,
-                      background: "rgba(220, 38, 38, 0.1)",
-                      borderRadius: 8,
-                      fontSize: 13,
-                      color: "#dc2626",
-                      border: "1px solid rgba(220, 38, 38, 0.3)",
-                      marginBottom: 12,
-                    }}
-                  >
-                    <strong>✗ Rejection Reason:</strong> {leave.rejection_reason}
-                  </div>
-                )}
-
-                {isPending && (
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button
-                      onClick={() => handleApprove(leave)}
-                      style={{
-                        flex: 1,
-                        background: "#10b981",
-                        color: "white",
-                        border: "none",
-                        padding: "10px",
-                        borderRadius: 8,
-                        fontSize: 14,
-                        fontWeight: 600,
-                        cursor: "pointer",
-                      }}
-                    >
-                      ✓ Approve
-                    </button>
-                    <button
-                      onClick={() => handleReject(leave._id)}
-                      style={{
-                        flex: 1,
-                        background: "#ef4444",
-                        color: "white",
-                        border: "none",
-                        padding: "10px",
-                        borderRadius: 8,
-                        fontSize: 14,
-                        fontWeight: 600,
-                        cursor: "pointer",
-                      }}
-                    >
-                      ✗ Reject
-                    </button>
-                  </div>
-                )}
+      {selectedEscalationOwner && (
+        <div className="admin-modal-overlay" onClick={() => setSelectedEscalationOwner(null)}>
+          <div className="admin-modal admin-modal-wide" onClick={(event) => event.stopPropagation()}>
+            <div className="admin-modal-header">
+              <div>
+                <div className="admin-section-overline">Leave Escalations</div>
+                <h2>{selectedEscalationOwner.name}</h2>
+                <p>
+                  Detailed escalation history for approvals that were not actioned within SLA
+                </p>
               </div>
-            );
-          })}
+              <button className="fiori-button secondary" onClick={() => setSelectedEscalationOwner(null)}>
+                Close
+              </button>
+            </div>
+
+            <div className="admin-dashboard-grid admin-dashboard-grid-compact">
+              <article className="fiori-stat-card">
+                <div className="fiori-stat-label">Total escalations</div>
+                <div className="fiori-stat-value">{selectedEscalationOwner.count}</div>
+                <div className="fiori-stat-note">Requests escalated away from this approver</div>
+              </article>
+              <article className="fiori-stat-card">
+                <div className="fiori-stat-label">Open escalations</div>
+                <div className="fiori-stat-value">{selectedEscalationOwner.pendingCount}</div>
+                <div className="fiori-stat-note">Cases still unresolved at the time of review</div>
+              </article>
+              <article className="fiori-stat-card">
+                <div className="fiori-stat-label">Employees affected</div>
+                <div className="fiori-stat-value">{selectedEscalationOwner.employeesAffected}</div>
+                <div className="fiori-stat-note">Unique employees impacted by delayed approval</div>
+              </article>
+            </div>
+
+            <div className="fiori-table-shell">
+              <table className="fiori-table">
+                <thead>
+                  <tr>
+                    <th>Escalated On</th>
+                    <th>Employee</th>
+                    <th>Department</th>
+                    <th>Leave Type</th>
+                    <th>Requested Period</th>
+                    <th>Escalated To</th>
+                    <th>Current Status</th>
+                    <th>Reason</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedEscalationOwner.events.map((event) => (
+                    <tr key={event.key}>
+                      <td>{formatDateTime(event.escalatedAt)}</td>
+                      <td>
+                        <div className="fiori-primary-cell">
+                          <strong>{event.employeeName}</strong>
+                          <span>Applied {formatDate(event.appliedOn)}</span>
+                        </div>
+                      </td>
+                      <td>{event.employeeDepartment}</td>
+                      <td>{event.leaveType}</td>
+                      <td>{`${formatDate(event.requestedFrom)} to ${formatDate(event.requestedTo)}`}</td>
+                      <td>{event.escalatedToName}</td>
+                      <td>
+                        <div className={`fiori-status-pill ${statusToneMap[event.status] || "is-neutral"}`}>
+                          {event.status}
+                        </div>
+                      </td>
+                      <td>{event.reason}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Message Display */}
+      {rejectModal.show && (
+        <div className="admin-modal-overlay" onClick={() => setRejectModal({ show: false, leaveId: null, reason: "" })}>
+          <div className="admin-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="admin-modal-header">
+              <div>
+                <div className="admin-section-overline">Leave Action</div>
+                <h2>Reject leave request</h2>
+                <p>Provide a rejection reason for audit traceability and employee communication.</p>
+              </div>
+            </div>
+
+            <label className="fiori-form-field">
+              <label>Rejection reason</label>
+              <textarea
+                className="input leave-textarea"
+                rows={5}
+                value={rejectModal.reason}
+                onChange={(event) => setRejectModal((previous) => ({ ...previous, reason: event.target.value }))}
+              />
+            </label>
+
+            <div className="admin-modal-actions">
+              <button className="fiori-button secondary" onClick={() => setRejectModal({ show: false, leaveId: null, reason: "" })}>
+                Cancel
+              </button>
+              <button className="fiori-button danger" onClick={confirmReject}>
+                Confirm rejection
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {approvalModal.show && (
+        <div
+          className="admin-modal-overlay"
+          onClick={() =>
+            setApprovalModal({
+              show: false,
+              leaveId: null,
+              approverName: user?.name || user?.email || "",
+              originalStart: "",
+              originalEnd: "",
+              approvedStart: "",
+              approvedEnd: "",
+            })
+          }
+        >
+          <div className="admin-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="admin-modal-header">
+              <div>
+                <div className="admin-section-overline">Leave Action</div>
+                <h2>Approve leave request</h2>
+                <p>Approve the full request or narrow the approved date range for partial approval.</p>
+              </div>
+            </div>
+
+            <div className="leave-modal-grid">
+              <label className="fiori-form-field">
+                <label>Approver name</label>
+                <input
+                  className="input"
+                  value={approvalModal.approverName}
+                  onChange={(event) =>
+                    setApprovalModal((previous) => ({ ...previous, approverName: event.target.value }))
+                  }
+                />
+              </label>
+
+              <div className="leave-static-card">
+                <span>Requested range</span>
+                <strong>{`${formatDate(approvalModal.originalStart)} to ${formatDate(approvalModal.originalEnd)}`}</strong>
+              </div>
+
+              <label className="fiori-form-field">
+                <label>Approved start date</label>
+                <input
+                  className="input"
+                  type="date"
+                  min={approvalModal.originalStart}
+                  max={approvalModal.originalEnd}
+                  value={approvalModal.approvedStart}
+                  onChange={(event) =>
+                    setApprovalModal((previous) => ({ ...previous, approvedStart: event.target.value }))
+                  }
+                />
+              </label>
+
+              <label className="fiori-form-field">
+                <label>Approved end date</label>
+                <input
+                  className="input"
+                  type="date"
+                  min={approvalModal.approvedStart || approvalModal.originalStart}
+                  max={approvalModal.originalEnd}
+                  value={approvalModal.approvedEnd}
+                  onChange={(event) =>
+                    setApprovalModal((previous) => ({ ...previous, approvedEnd: event.target.value }))
+                  }
+                />
+              </label>
+            </div>
+
+            <div className="admin-modal-actions">
+              <button
+                className="fiori-button secondary"
+                onClick={() =>
+                  setApprovalModal({
+                    show: false,
+                    leaveId: null,
+                    approverName: user?.name || user?.email || "",
+                    originalStart: "",
+                    originalEnd: "",
+                    approvedStart: "",
+                    approvedEnd: "",
+                  })
+                }
+              >
+                Cancel
+              </button>
+              <button className="fiori-button primary" onClick={confirmApprove}>
+                Confirm approval
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {message && (
         <div
-          style={{
-            position: "fixed",
-            bottom: 24,
-            right: 24,
-            background: message.includes("Error") ? "#fef2f2" : "#d1f4dd",
-            color: message.includes("Error") ? "#ef4444" : "#0a5d2c",
-            padding: "16px 24px",
-            borderRadius: 12,
-            border: `2px solid ${message.includes("Error") ? "#ffb3b3" : "#7de3a6"}`,
-            boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
-            fontSize: 14,
-            fontWeight: 600,
-            zIndex: 1000,
-          }}
+          className={`admin-toast ${
+            message.toLowerCase().includes("unable") || message.toLowerCase().includes("required")
+              ? "is-error"
+              : "is-success"
+          }`}
         >
           {message}
         </div>
       )}
-
-      {/* Rejection Modal */}
-      {rejectModal.show && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: "rgba(0,0,0,0.6)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 9999,
-          }}
-          onClick={() => setRejectModal({ show: false, leaveId: null, reason: "" })}
-        >
-          <div
-            style={{
-              background: "white",
-              padding: 32,
-              borderRadius: 16,
-              maxWidth: 500,
-              width: "90%",
-              boxShadow: "0 25px 50px rgba(0,0,0,0.4)",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 style={{ marginTop: 0, marginBottom: 16, color: "#ef4444", fontSize: 22 }}>
-              Reject Leave Request
-            </h3>
-            <p style={{ marginBottom: 16, fontSize: 14, color: "#6b7280" }}>
-              Please provide a detailed reason for rejecting this leave request:
-            </p>
-            <textarea
-              placeholder="Enter rejection reason..."
-              value={rejectModal.reason}
-              onChange={(e) => setRejectModal({ ...rejectModal, reason: e.target.value })}
-              rows={5}
-              style={{
-                width: "100%",
-                resize: "vertical",
-                fontFamily: "inherit",
-                marginBottom: 20,
-                padding: 12,
-                fontSize: 14,
-                border: "2px solid #e5e7eb",
-                borderRadius: 8,
-                outline: "none",
-              }}
-              autoFocus
-            />
-            <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
-              <button
-                onClick={() => setRejectModal({ show: false, leaveId: null, reason: "" })}
-                style={{
-                  background: "#f3f4f6",
-                  color: "#374151",
-                  border: "none",
-                  padding: "10px 20px",
-                  borderRadius: 8,
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmReject}
-                disabled={!rejectModal.reason.trim()}
-                style={{
-                  background: rejectModal.reason.trim() ? "#ef4444" : "#cbd5e1",
-                  color: "white",
-                  border: "none",
-                  padding: "10px 20px",
-                  borderRadius: 8,
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: rejectModal.reason.trim() ? "pointer" : "not-allowed",
-                }}
-              >
-                Confirm Rejection
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* Approval Modal */}
-      {approveModal.show && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: "rgba(0,0,0,0.6)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 9999,
-          }}
-          onClick={() => setApproveModal({ show: false, leaveId: null, approverName: "" })}
-        >
-          <div
-            style={{
-              background: "white",
-              padding: 32,
-              borderRadius: 16,
-              maxWidth: 500,
-              width: "90%",
-              boxShadow: "0 25px 50px rgba(0, 0, 0, 0.4)",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 style={{ marginTop: 0, marginBottom: 8, color: "#10b981", fontSize: 22 }}>
-              ✓ Approve Leave Request
-            </h3>
-            <p style={{ marginBottom: 24, fontSize: 14, color: "#6b7280" }}>
-              Please enter your name to approve this leave request (mandatory for audit trail)
-            </p>
-
-            <div style={{ marginBottom: 24 }}>
-              <label style={{ 
-                fontSize: 13, 
-                color: "#374151", 
-                display: "block", 
-                marginBottom: 8,
-                fontWeight: 600 
-              }}>
-                Approver Name *
-              </label>
-              <input
-                type="text"
-                placeholder="Enter your full name (e.g., John Doe - CEO)"
-                value={approveModal.approverName}
-                onChange={(e) => setApproveModal({ ...approveModal, approverName: e.target.value })}
-                style={{
-                  width: "100%",
-                  padding: "12px 16px",
-                  fontSize: 14,
-                  border: "2px solid #e5e7eb",
-                  borderRadius: 8,
-                  outline: "none",
-                  fontFamily: "inherit",
-                }}
-                onFocus={(e) => e.target.style.borderColor = "#10b981"}
-                onBlur={(e) => e.target.style.borderColor = "#e5e7eb"}
-                autoFocus
-              />
-              <div style={{ fontSize: 12, color: "#6b7280", marginTop: 6 }}>
-                💡 Tip: Include your designation for better tracking (e.g., "Sarah Johnson - CFO")
-              </div>
-            </div>
-
-            <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
-              <button
-                onClick={() => setApproveModal({ show: false, leaveId: null, approverName: "" })}
-                style={{
-                  background: "#f3f4f6",
-                  color: "#374151",
-                  border: "none",
-                  padding: "10px 20px",
-                  borderRadius: 8,
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  minWidth: 100,
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmApprove}
-                disabled={!approveModal.approverName.trim()}
-                style={{
-                  background: approveModal.approverName.trim() ? "#10b981" : "#cbd5e1",
-                  color: "white",
-                  border: "none",
-                  padding: "10px 20px",
-                  borderRadius: 8,
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: approveModal.approverName.trim() ? "pointer" : "not-allowed",
-                  minWidth: 150,
-                }}
-              >
-                Confirm Approval
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {/* Partial Approval Modal */}
-      {partialApprovalModal.show && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: "rgba(0,0,0,0.6)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 9999,
-          }}
-          onClick={() => setPartialApprovalModal({ 
-            show: false, 
-            leaveId: null, 
-            originalStart: "", 
-            originalEnd: "", 
-            approvedStart: "", 
-            approvedEnd: "",
-            approverName: ""
-          })}
-        >
-          <div
-            style={{
-              background: "white",
-              padding: 32,
-              borderRadius: 16,
-              maxWidth: 600,
-              width: "90%",
-              boxShadow: "0 25px 50px rgba(0, 0, 0, 0.4)",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 style={{ marginTop: 0, marginBottom: 8, color: "#10b981", fontSize: 22 }}>
-              ✓ Approve Leave Request
-            </h3>
-            <p style={{ marginBottom: 24, fontSize: 14, color: "#6b7280" }}>
-              You can approve the entire leave period or select specific dates
-            </p>
-
-            {/* Original Date Range Display */}
-            <div style={{ 
-              background: "#eff6ff", 
-              padding: 16, 
-              borderRadius: 8, 
-              marginBottom: 20,
-              border: "1px solid #bfdbfe"
-            }}>
-              <div style={{ fontSize: 12, color: "#1e40af", marginBottom: 8, fontWeight: 600 }}>
-                📅 Requested Leave Period
-              </div>
-              <div style={{ fontSize: 14, color: "#3b82f6", fontWeight: 500 }}>
-                {formatDate(partialApprovalModal.originalStart)} → {formatDate(partialApprovalModal.originalEnd)}
-              </div>
-              <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
-                ({(() => {
-                  const start = new Date(partialApprovalModal.originalStart);
-                  const end = new Date(partialApprovalModal.originalEnd);
-                  return (Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1);
-                })()} days total)
-              </div>
-            </div>
-
-            {/* Approved Date Range Selection */}
-            <div style={{ marginBottom: 24 }}>
-              <label style={{ 
-                fontSize: 13, 
-                color: "#374151", 
-                display: "block", 
-                marginBottom: 8,
-                fontWeight: 600 
-              }}>
-                Approve Date Range *
-              </label>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <div>
-                  <label style={{ fontSize: 11, color: "#6b7280", display: "block", marginBottom: 4 }}>
-                    Start Date
-                  </label>
-                  <input
-                    type="date"
-                    value={partialApprovalModal.approvedStart}
-                    min={partialApprovalModal.originalStart}
-                    max={partialApprovalModal.originalEnd}
-                    onChange={(e) => setPartialApprovalModal({ 
-                      ...partialApprovalModal, 
-                      approvedStart: e.target.value 
-                    })}
-                    style={{
-                      width: "100%",
-                      padding: "12px 16px",
-                      fontSize: 14,
-                      border: "2px solid #e5e7eb",
-                      borderRadius: 8,
-                      outline: "none",
-                      fontFamily: "inherit",
-                    }}
-                    onFocus={(e) => e.target.style.borderColor = "#10b981"}
-                    onBlur={(e) => e.target.style.borderColor = "#e5e7eb"}
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: 11, color: "#6b7280", display: "block", marginBottom: 4 }}>
-                    End Date
-                  </label>
-                  <input
-                    type="date"
-                    value={partialApprovalModal.approvedEnd}
-                    min={partialApprovalModal.approvedStart || partialApprovalModal.originalStart}
-                    max={partialApprovalModal.originalEnd}
-                    onChange={(e) => setPartialApprovalModal({ 
-                      ...partialApprovalModal, 
-                      approvedEnd: e.target.value 
-                    })}
-                    style={{
-                      width: "100%",
-                      padding: "12px 16px",
-                      fontSize: 14,
-                      border: "2px solid #e5e7eb",
-                      borderRadius: 8,
-                      outline: "none",
-                      fontFamily: "inherit",
-                    }}
-                    onFocus={(e) => e.target.style.borderColor = "#10b981"}
-                    onBlur={(e) => e.target.style.borderColor = "#e5e7eb"}
-                  />
-                </div>
-              </div>
-              
-              {/* Show calculated days */}
-              {partialApprovalModal.approvedStart && partialApprovalModal.approvedEnd && (
-                <div style={{ 
-                  marginTop: 8, 
-                  padding: "8px 12px", 
-                  background: "#f0fdf4",
-                  borderRadius: 6,
-                  border: "1px solid #86efac",
-                  fontSize: 12,
-                  color: "#166534"
-                }}>
-                  ✓ Approving {(() => {
-                    const start = new Date(partialApprovalModal.approvedStart);
-                    const end = new Date(partialApprovalModal.approvedEnd);
-                    return (Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1);
-                  })()} day(s)
-                  {partialApprovalModal.approvedStart !== partialApprovalModal.originalStart ||
-                  partialApprovalModal.approvedEnd !== partialApprovalModal.originalEnd ? (
-                    <span style={{ fontWeight: 600 }}> (Partial Approval)</span>
-                  ) : (
-                    <span style={{ fontWeight: 600 }}> (Full Approval)</span>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Approver Name */}
-            <div style={{ marginBottom: 24 }}>
-              <label style={{ 
-                fontSize: 13, 
-                color: "#374151", 
-                display: "block", 
-                marginBottom: 8,
-                fontWeight: 600 
-              }}>
-                Approver Name *
-              </label>
-              <input
-                type="text"
-                placeholder="Enter your full name (e.g., John Doe - CEO)"
-                value={partialApprovalModal.approverName}
-                onChange={(e) => setPartialApprovalModal({ 
-                  ...partialApprovalModal, 
-                  approverName: e.target.value 
-                })}
-                style={{
-                  width: "100%",
-                  padding: "12px 16px",
-                  fontSize: 14,
-                  border: "2px solid #e5e7eb",
-                  borderRadius: 8,
-                  outline: "none",
-                  fontFamily: "inherit",
-                }}
-                onFocus={(e) => e.target.style.borderColor = "#10b981"}
-                onBlur={(e) => e.target.style.borderColor = "#e5e7eb"}
-              />
-            </div>
-
-            {/* Action Buttons */}
-            <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
-              <button
-                onClick={() => setPartialApprovalModal({ 
-                  show: false, 
-                  leaveId: null, 
-                  originalStart: "", 
-                  originalEnd: "", 
-                  approvedStart: "", 
-                  approvedEnd: "",
-                  approverName: ""
-                })}
-                style={{
-                  background: "#f3f4f6",
-                  color: "#374151",
-                  border: "none",
-                  padding: "10px 20px",
-                  borderRadius: 8,
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  minWidth: 100,
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmPartialApproval}
-                disabled={!partialApprovalModal.approverName.trim() || 
-                        !partialApprovalModal.approvedStart || 
-                        !partialApprovalModal.approvedEnd}
-                style={{
-                  background: (partialApprovalModal.approverName.trim() && 
-                              partialApprovalModal.approvedStart && 
-                              partialApprovalModal.approvedEnd) ? "#10b981" : "#cbd5e1",
-                  color: "white",
-                  border: "none",
-                  padding: "10px 20px",
-                  borderRadius: 8,
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: (partialApprovalModal.approverName.trim() && 
-                          partialApprovalModal.approvedStart && 
-                          partialApprovalModal.approvedEnd) ? "pointer" : "not-allowed",
-                  minWidth: 150,
-                }}
-              >
-                Confirm Approval
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+    </section>
   );
 };
 
