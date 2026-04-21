@@ -1,0 +1,403 @@
+// src/App.js
+import React, { useState } from "react";
+import "./App.css";
+import Login from "./components/Login";
+import Sidebar from "./components/Sidebar";
+import Topbar from "./components/Topbar";
+import UserForm from "./components/UserForm";
+import UserList from "./components/UserList";
+import ManagerInfo from "./components/ManagerInfo";
+import Profile from "./components/Profile";
+import Calendar from "./components/Calendar";
+import AdminDashboard from "./components/Dashboard";
+import EmployeeDashboard from "./components/EmployeeDashboard";
+import ManagerDashboard from "./components/ManagerDashboard";
+import EmployeeList from "./components/EmployeeList";
+import EmployeeLeaves from "./components/EmployeeLeaves";
+import ManagerLeaves from "./components/ManagerLeaves";
+import ProgressTracker from "./components/ProgressTracker";
+import AdminLeaves from "./components/AdminLeaves";
+import AdminHolidays from "./components/AdminHolidays";
+import AdminApplyLeave from "./components/AdminApplyLeave";
+import AdminLogs from "./components/AdminLogs";
+import TeaCoffee from "./components/TeaCoffee";
+import Policy from "./components/Policy";
+import Projects from "./components/Projects";
+import Timesheets from "./components/Timesheets";
+
+// Injects critical CSS to fix mobile scrolling
+const MobileScrollFix = () => (
+  <style>{`
+    @media (max-width: 480px) {
+      html, body, #root {
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        height: auto !important;
+        min-height: 100vh;
+      }
+      .app-root {
+        height: auto !important;
+        min-height: 100vh;
+      }
+      .main {
+        height: auto !important;
+        min-height: 100vh;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch;
+      }
+      .content {
+        overflow: visible !important;
+        height: auto !important;
+        padding-bottom: 60px !important;
+      }
+      @supports (-webkit-touch-callout: none) {
+        .content {
+          padding-bottom: 100px !important;
+        }
+      }
+    }
+  `}</style>
+);
+
+// Forces scroll fix on mount for mobile
+const ForceScroll = () => {
+  React.useEffect(() => {
+    if (window.innerWidth <= 480) {
+      console.log('🔧 MOBILE DETECTED - Forcing scroll fix...');
+
+      document.documentElement.style.setProperty('overflow-y', 'scroll', 'important');
+      document.documentElement.style.setProperty('height', 'auto', 'important');
+      document.documentElement.style.setProperty('min-height', '100vh', 'important');
+
+      document.body.style.setProperty('overflow-y', 'scroll', 'important');
+      document.body.style.setProperty('height', 'auto', 'important');
+      document.body.style.setProperty('min-height', '100vh', 'important');
+
+      const root = document.getElementById('root');
+      if (root) {
+        root.style.setProperty('overflow-y', 'visible', 'important');
+        root.style.setProperty('height', 'auto', 'important');
+        root.style.setProperty('min-height', '100vh', 'important');
+      }
+
+      const main = document.querySelector('.main');
+      if (main) {
+        main.style.setProperty('overflow-y', 'scroll', 'important');
+        main.style.setProperty('height', 'auto', 'important');
+        main.style.setProperty('min-height', '100vh', 'important');
+        main.style.setProperty('-webkit-overflow-scrolling', 'touch', 'important');
+      }
+
+      const content = document.querySelector('.content');
+      if (content) {
+        content.style.setProperty('overflow', 'visible', 'important');
+        content.style.setProperty('height', 'auto', 'important');
+        content.style.setProperty('padding-bottom', '100px', 'important');
+      }
+
+      console.log('✅ Scroll fix applied!');
+      console.log('Body scrollHeight:', document.body.scrollHeight);
+      console.log('Window innerHeight:', window.innerHeight);
+      console.log('Can scroll:', document.body.scrollHeight > window.innerHeight);
+    }
+  }, []);
+
+  return null;
+};
+
+function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [section, setSection] = useState("dashboard");
+  const [viewEmployeeId, setViewEmployeeId] = useState(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // Session recovery on app load
+  React.useEffect(() => {
+    const savedUser = localStorage.getItem('user');
+    if (savedUser && !currentUser) {
+      try {
+        const parsedUser = JSON.parse(savedUser);
+        console.log('✅ Session recovered:', parsedUser.name);
+        setCurrentUser(parsedUser);
+        setIsAuthenticated(true);
+      } catch (err) {
+        console.error('❌ Failed to recover session:', err);
+        localStorage.removeItem('user');
+      }
+    }
+  }, []);
+
+  // Save session whenever user changes
+  React.useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem('user', JSON.stringify(currentUser));
+      console.log('💾 Session updated in localStorage');
+    }
+  }, [currentUser]);
+
+  // Debug logger to track user state changes
+  React.useEffect(() => {
+    console.log('🔍 User state changed:', currentUser ? `Logged in as ${currentUser.name}` : 'Logged out');
+  }, [currentUser]);
+
+  const handleLoginSuccess = (user) => {
+    setCurrentUser(user);
+    setIsAuthenticated(true);
+    setSection("dashboard");
+  };
+
+  const handleUserUpdate = (updatedUser) => {
+    setCurrentUser(updatedUser);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('user');
+    console.log('👋 User logged out, session cleared');
+    setCurrentUser(null);
+    setIsAuthenticated(false);
+    setSection("dashboard");
+    setViewEmployeeId(null);
+  };
+
+  const handleNavigateToProfile = (employeeId) => {
+    console.log("🔍 Navigation requested with:", employeeId);
+    console.log("   Type:", typeof employeeId);
+
+    let targetId = employeeId;
+
+    if (!employeeId) {
+      console.error("❌ No employee ID provided");
+      alert("Error: No employee ID provided");
+      return;
+    }
+
+    if (typeof employeeId === "object" && employeeId !== null) {
+      console.warn("⚠️ Object passed to navigation, extracting ID...");
+      console.log("   Object keys:", Object.keys(employeeId));
+      console.log("   Full object:", JSON.stringify(employeeId, null, 2));
+
+      targetId = employeeId._id ||
+                 employeeId.id ||
+                 employeeId.employeeId ||
+                 null;
+
+      if (targetId) {
+        console.log("✅ Extracted ID from object:", targetId);
+      } else {
+        console.error("❌ Could not extract ID from object");
+        alert("Error: Invalid employee ID (object without _id property)");
+        return;
+      }
+    }
+
+    if (typeof targetId !== "string") {
+      console.error("❌ targetId is not a string:", targetId, "Type:", typeof targetId);
+      alert("Error: Invalid employee ID format (not a string)");
+      return;
+    }
+
+    if (targetId === "[object Object]" || targetId.includes("[object")) {
+      console.error("❌ targetId is a stringified object:", targetId);
+      alert("Error: Invalid employee ID (stringified object)");
+      return;
+    }
+
+    if (!/^[a-f0-9]{24}$/i.test(targetId)) {
+      console.error("❌ Invalid MongoDB ObjectId format:", targetId);
+      alert(`Error: Invalid employee ID format. Expected 24 hex characters, got: ${targetId}`);
+      return;
+    }
+
+    console.log("✅ All validations passed, navigating to profile:", targetId);
+    setViewEmployeeId(targetId);
+    setSection("profile");
+  };
+
+  const handleSectionChange = (newSection) => {
+    if (
+      newSection === "profile" ||
+      newSection === "leaves" ||
+      newSection === "employees" ||
+      newSection === "progress"
+    ) {
+      setViewEmployeeId(null);
+    }
+    setSection(newSection);
+  };
+
+  if (!isAuthenticated) {
+    return <Login onLoginSuccess={handleLoginSuccess} />;
+  }
+
+  const role = currentUser?.role || "Employee";
+
+  const getFilteredSidebar = () => {
+    switch (role) {
+      case "Admin":
+        return (
+          <Sidebar
+            section={section}
+            setSection={(s) => {
+              handleSectionChange(s);
+              setIsSidebarOpen(false);
+            }}
+            role="Admin"
+            isOpen={isSidebarOpen}
+          />
+        );
+
+      case "Manager":
+        return (
+          <Sidebar
+            section={section}
+            setSection={(s) => {
+              handleSectionChange(s);
+              setIsSidebarOpen(false);
+            }}
+            role="Manager"
+            restricted={["add", "holidays"]}
+            isOpen={isSidebarOpen}
+          />
+        );
+
+      case "Employee":
+      default:
+        return (
+          <Sidebar
+            section={section}
+            setSection={(s) => {
+              handleSectionChange(s);
+              setIsSidebarOpen(false);
+            }}
+            role="Employee"
+            restricted={["add", "employees", "holidays"]}
+            isOpen={isSidebarOpen}
+          />
+        );
+    }
+  };
+
+  const AccessDenied = () => (
+    <div style={{ padding: 40, color: "#ef4444" }}>
+      <h2>🚫 Access Denied</h2>
+      <p>You do not have permission to access this section.</p>
+    </div>
+  );
+
+  const renderSection = () => {
+    switch (section) {
+      case "dashboard":
+        if (role === "Admin") {
+          return <AdminDashboard user={currentUser} />;
+        } else if (role === "Manager") {
+          return (
+            <ManagerDashboard
+              user={currentUser}
+              onNavigateToProfile={handleNavigateToProfile}
+            />
+          );
+        } else {
+          return <EmployeeDashboard user={currentUser} setSection={handleSectionChange} />;
+        }
+
+      case "progress":
+        return <ProgressTracker user={currentUser} />;
+
+      case "add":
+        return role === "Admin" ? <UserForm /> : <AccessDenied />;
+
+      case "users":
+        return role === "Admin" ? <UserList /> : <AccessDenied />;
+
+      case "manager":
+        return role === "Admin" ? <ManagerInfo /> : <AccessDenied />;
+
+      case "holidays":
+        return role === "Admin" ? <AdminHolidays /> : <AccessDenied />;
+
+      case "apply-behalf":
+        return role === "Admin" ? <AdminApplyLeave user={currentUser} /> : <AccessDenied />;
+
+      case "logs":
+        return role === "Admin" ? <AdminLogs user={currentUser} /> : <AccessDenied />;
+
+      case "employees":
+        if (role === "Admin") {
+          return (
+            <EmployeeList
+              user={currentUser}
+              onNavigateToProfile={handleNavigateToProfile}
+              isAdmin={true}
+            />
+          );
+        } else if (role === "Manager") {
+          return <EmployeeList user={currentUser} onNavigateToProfile={handleNavigateToProfile} />;
+        }
+        return <AccessDenied />;
+
+      case "leaves":
+        if (role === "Admin") {
+          return <AdminLeaves user={currentUser} />;
+        } else if (role === "Manager") {
+          return <ManagerLeaves user={currentUser} />;
+        } else {
+          return <EmployeeLeaves user={currentUser} />;
+        }
+
+      case "profile":
+        return <Profile user={currentUser} role={role} viewEmployeeId={viewEmployeeId} />;
+
+      case "calendar":
+        return <Calendar user={currentUser} />;
+
+      case "tea-coffee":
+        return <TeaCoffee user={currentUser} />;
+
+      case "policy":
+        return <Policy user={currentUser} />;
+
+      case "projects":
+        return role === "Admin" ? <Projects user={currentUser} /> : <AccessDenied />;
+
+      // ✅ Timesheets - available to all roles
+      case "timesheets":
+        return <Timesheets user={currentUser} />;
+
+      default:
+        if (role === "Admin") {
+          return <AdminDashboard user={currentUser} />;
+        } else if (role === "Manager") {
+          return <ManagerDashboard user={currentUser} onNavigateToProfile={handleNavigateToProfile} />;
+        } else {
+          return <EmployeeDashboard user={currentUser} />;
+        }
+    }
+  };
+
+  return (
+    <>
+      <MobileScrollFix />
+      <ForceScroll />
+      <div className="app-root">
+        <div
+          className="sidebar-backdrop"
+          style={{ display: isSidebarOpen ? 'block' : 'none' }}
+          onClick={() => setIsSidebarOpen(false)}
+        />
+        {getFilteredSidebar()}
+        <div className="main">
+          <Topbar
+            user={currentUser}
+            onLogout={handleLogout}
+            onNavigateToProfile={handleNavigateToProfile}
+            onToggleSidebar={() => setIsSidebarOpen(prev => !prev)}
+          />
+          <div className="content">{renderSection()}</div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+export default App;

@@ -1,0 +1,1300 @@
+/* ========================================
+   CRITICAL: MOBILE SCROLL & OVERFLOW FIX
+   These rules MUST come first and override everything
+======================================== */
+
+/* Force proper layout on mobile - CRITICAL */
+@media (max-width: 480px) {
+  html, body, #root {
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    height: auto !important;
+    min-height: 100vh !important;
+    width: 100vw !important;
+    max-width: 100% !important;
+    position: relative !important;
+  }
+  
+  * {
+    /* Prevent any element from exceeding viewport width */
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  
+  .app-root {
+    height: auto !important;
+    min-height: 100dvh !important;
+    width: 100% !important;
+    overflow-x: hidden !important;
+  }
+  
+  .main {
+    height: auto !important;
+    min-height: 100dvh !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    flex: 1 !important;
+    margin-left: 0 !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+  }
+  
+  .content {
+    overflow-x: hidden !important;
+    overflow-y: visible !important;
+    height: auto !important;
+    min-height: calc(100vh - 72px) !important;
+    padding: 12px !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+  }
+}
+
+/* ========================================
+   CSS VARIABLES
+======================================== */
+:root{
+  --bg: #f3f6f8;
+  --card: #ffffff;
+  --muted: #9ca3af;
+  --accent: #ffffff;
+  --nav-bg: #000000;
+  --nav-border: #1f2937;
+  --shadow: 0 6px 18px rgba(20,30,50,0.06);
+  --glass: rgba(255,255,255,0.7);
+  --text: #0f1724;
+  --success: #10b981;
+  --danger: #ef4444;
+}
+
+/* ========================================
+   RESET & BASE STYLES
+======================================== */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  height: 100%;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+body {
+  margin: 0;
+  height: 100%;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-size: 14px;
+  overflow-x: hidden;
+}
+
+#root {
+  height: 100%;
+}
+
+/* ========================================
+   LAYOUT - DESKTOP
+======================================== */
+.app-root {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 260px;
+  background: var(--nav-bg);
+  border-right: 1px solid var(--nav-border);
+  display: flex;
+  flex-direction: column;
+  padding: 10px 16px;
+  color: #ffffff;
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.brand {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 8px 0;
+  gap: 4px;
+  background: #000000;
+  border-bottom: 1px solid #1f2937;
+}
+
+.brand h1 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--accent);
+}
+
+.sidebar .nav {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nav button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: #cbd5e1;
+  font-weight: 500;
+}
+
+.nav button:hover {
+  background: #111827;
+  color: #ffffff;
+}
+
+.nav button.active {
+  background: #1f2937;
+  color: #ffffff;
+  box-shadow: none;
+  border-left: 3px solid #ffffff;
+}
+
+.footer {
+  margin-top: auto;
+  padding-top: 12px;
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  margin-left: 260px;
+  /* FIX: must have min-width:0 to shrink properly as a flex child */
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.topbar {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  border-bottom: 1px solid rgba(15,23,36,0.04);
+  background: linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0.3));
+}
+
+.topbar .left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.topbar h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.topbar .actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* =====================================================
+   THE FIX: .content needs proper flex-child constraints
+   Without box-sizing + min-width, padding adds to width
+   causing overflow beyond the sidebar boundary.
+   Without min-width:0, flex won't shrink it correctly.
+   overflow-x:hidden clips anything that still bleeds.
+   padding:0 removes the double-padding (Timesheets
+   components all have their own internal padding).
+===================================================== */
+.content {
+  padding: 24px;
+}
+
+/* ========================================
+   PANELS & CARDS
+======================================== */
+.panel {
+  background: var(--card);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: var(--shadow);
+  margin-bottom: 18px;
+}
+
+.welcome {
+  padding: 28px;
+}
+
+.grid {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+}
+
+.quick-cards {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  margin-top: 12px;
+}
+
+.card {
+  padding: 18px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #fff, #fcfdff);
+  border: 1px solid #f0f6ff;
+  width: 100%;
+}
+
+.card.small {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.card-title {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.card-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* ========================================
+   FORMS
+======================================== */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #e6eef9;
+  background: #fff;
+}
+
+.btn {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent);
+  color: white;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.btn.ghost {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid #dbeafe;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+/* ========================================
+   TABLES
+======================================== */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th {
+  text-align: left;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 10px 8px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.table td {
+  padding: 12px 8px;
+  border-bottom: 1px solid #fbfdff;
+}
+
+.actions button {
+  margin-right: 8px;
+}
+
+/* ========================================
+   HELPERS
+======================================== */
+.kv {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px dashed #f3f6f9;
+  color: var(--muted);
+}
+
+.badge {
+  padding: 6px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: #f1f5f9;
+  color: var(--muted);
+}
+
+.status-approved {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.status-pending {
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+.status-rejected {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* ========================================
+   MOBILE HAMBURGER & BACKDROP
+======================================== */
+.mobile-menu-btn {
+  display: none;
+  font-size: 22px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 1500;
+  display: none;
+}
+
+/* ========================================
+   UTILITY CLASSES
+======================================== */
+.desktop-only {
+  display: block;
+}
+
+.mobile-only {
+  display: none;
+}
+
+/* ========================================
+   TABLET RESPONSIVE (≤900px)
+======================================== */
+@media (max-width: 900px) {
+  .sidebar {
+    width: 72px;
+    padding: 12px;
+  }
+  
+  .nav button span {
+    display: none;
+  }
+  
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ========================================
+   MOBILE RESPONSIVE (≤480px)
+   CRITICAL: All mobile overrides
+======================================== */
+@media (max-width: 480px) {
+  /* ===== CRITICAL CONTAINMENT RULES ===== */
+  
+  /* Ensure no element can overflow horizontally */
+  body, #root, .app-root, .main, .content, .panel, .card, 
+  div, section, article, header, footer {
+    max-width: 100vw !important;
+    overflow-x: hidden !important;
+  }
+  
+  /* Force proper box sizing on all inline styles */
+  [style*="width"] {
+    max-width: 100% !important;
+  }
+  
+  /* Prevent any absolute/fixed positioning from causing overflow */
+  [style*="position: absolute"],
+  [style*="position: fixed"] {
+    max-width: calc(100vw - 24px) !important;
+  }
+  
+  /* ===== LAYOUT FIXES ===== */
+  
+  .mobile-menu-btn {
+    display: block;
+  }
+  
+  .desktop-only {
+    display: none !important;
+  }
+  
+  .mobile-only {
+    display: block;
+  }
+  
+  /* Sidebar mobile behavior - HIDE BY DEFAULT */
+  .sidebar {
+    position: fixed;
+    left: -100%;
+    transform: translateX(-100%);
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+    top: 0;
+    height: 100vh;
+    width: 75vw;
+    max-width: 260px;
+    z-index: 2000;
+    transition: all 0.3s ease;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 60px;
+    margin: 0;
+  }
+
+  .sidebar.open {
+    left: 0;
+    transform: translateX(0);
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+  }
+  
+  .sidebar .nav {
+    padding-bottom: 20px;
+  }
+  
+  .sidebar .nav button span {
+    display: inline;
+  }
+  
+  .sidebar .footer {
+    position: relative;
+    margin-top: 20px;
+  }
+  
+  /* Backdrop hidden by default, only shows when sidebar is open */
+  .sidebar-backdrop {
+    display: none;
+  }
+
+  .sidebar-backdrop.show {
+    display: block;
+  }
+  
+  .brand img {
+    max-width: 70px;
+    height: auto;
+  }
+  
+  .brand {
+    padding: 6px 0;
+  }
+  
+  /* Main layout */
+  .app-root {
+    flex-direction: column;
+    width: 100vw;
+    overflow-x: hidden;
+  }
+  
+  .main {
+    margin-left: 0 !important;
+    width: 100%;
+    max-width: 100vw;
+  }
+  
+  /* Topbar */
+  .topbar {
+    height: 64px;
+    padding: 8px 12px;
+    gap: 8px;
+    margin-top: 0px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    flex-shrink: 0;
+    width: 100%;
+    max-width: 100vw;
+  }
+  
+  .topbar .left {
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+  }
+  
+  .topbar h2 {
+    display: none;
+  }
+  
+  .topbar .actions {
+    gap: 8px;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 101;
+  }
+  
+  /* Dropdown containers need proper z-index */
+  .notifications-dropdown-container,
+  .profile-dropdown-container {
+    position: relative !important;
+    z-index: 102 !important;
+  }
+  
+  .topbar .actions button {
+    padding: 6px 10px;
+    font-size: 13px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: rgba(0,0,0,0.05);
+    touch-action: manipulation;
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  .topbar .actions img,
+  .topbar .actions > div > button > div {
+    width: 32px !important;
+    height: 32px !important;
+  }
+  
+  /* Content */
+  .content {
+    padding: 16px !important;
+    overflow-x: hidden !important;
+    width: 100%;
+    max-width: 100vw;
+  }
+  
+  .content > * {
+    margin-bottom: 20px;
+    max-width: 100%;
+    width: 100%;
+  }
+  
+  .content > *:last-child {
+    margin-bottom: 40px;
+  }
+  
+  /* ===== EMPLOYEE DASHBOARD SPECIFIC FIXES ===== */
+  
+  /* Fix Welcome Banner - MORE BREATHING SPACE */
+  [style*="background: linear-gradient"][style*="borderRadius: 24"] {
+    padding: 24px 18px !important;
+    margin-bottom: 20px !important;
+  }
+  
+  /* Fix greeting and balance layout - BETTER SPACING */
+  [style*="display: flex"][style*="justifyContent: space-between"][style*="alignItems: flex-start"] {
+    flex-direction: column !important;
+    gap: 20px !important;
+    width: 100% !important;
+  }
+  
+  /* Fix "Good Afternoon" text */
+  [style*="fontSize: 32px"][style*="fontWeight: 700"] {
+    font-size: 26px !important;
+    line-height: 1.3 !important;
+  }
+  
+  /* Fix date text */
+  [style*="fontSize: 14px"][style*="marginTop: 4px"] {
+    font-size: 13px !important;
+    margin-top: 6px !important;
+  }
+  
+  /* Fix Total Leave Balance box - MORE BREATHING ROOM */
+  [style*="background: rgba(255, 255, 255, 0.2)"][style*="backdropFilter"] {
+    padding: 16px 20px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    border-radius: 16px !important;
+  }
+  
+  [style*="fontSize: 36px"][style*="color: white"] {
+    font-size: 32px !important;
+  }
+  
+  /* Fix WELCOME Card - MORE BREATHING SPACE */
+  [style*="background: white"][style*="position: relative"][style*="overflow: hidden"] {
+    min-height: 160px !important;
+    padding: 20px !important;
+    margin-bottom: 20px !important;
+  }
+  
+  /* Fix WELCOME text size */
+  [style*="fontSize: 64px"][style*="fontWeight: 900"] {
+    font-size: 48px !important;
+    line-height: 1.1 !important;
+  }
+  
+  /* Fix Festival Announcement badge - POSITIONED AT BOTTOM */
+  [style*="position: absolute"][style*="top: 16px"][style*="right: 16px"] {
+    position: absolute !important;
+    top: auto !important;
+    bottom: 16px !important;
+    right: 16px !important;
+    margin-top: 0 !important;
+    font-size: 11px !important;
+    padding: 8px 14px !important;
+  }
+  
+  /* Fix Leave Balance Cards (Sick, Planned, LOP) - MORE BREATHING ROOM */
+  [style*="border: 2px solid"][style*="borderRadius: 20px"] {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 24px 18px !important;
+    margin-bottom: 18px !important;
+  }
+  
+  /* Fix emoji icon size */
+  [style*="fontSize: 48px"] {
+    font-size: 44px !important;
+  }
+  
+  /* Fix leave type title */
+  [style*="fontSize: 18px"][style*="fontWeight: 600"][style*="marginTop: 12px"] {
+    font-size: 17px !important;
+    margin-top: 12px !important;
+  }
+  
+  /* Fix "1 Left" or "0" numbers */
+  [style*="fontSize: 40px"][style*="fontWeight: 900"] {
+    font-size: 34px !important;
+  }
+  
+  [style*="fontSize: 48px"][style*="fontWeight: 900"] {
+    font-size: 38px !important;
+  }
+  
+  /* Fix "Left" text */
+  [style*="fontSize: 20px"][style*="fontWeight: 600"] {
+    font-size: 18px !important;
+  }
+  
+  /* Fix allocation details box */
+  [style*="background: rgba"][style*="padding: 12px 16px"][style*="borderRadius: 12px"] {
+    padding: 12px 16px !important;
+    font-size: 13px !important;
+  }
+  
+  /* Fix "Unlimited availability" text in LOP card */
+  [style*="fontSize: 14px"][style*="color: #64748b"] {
+    font-size: 13px !important;
+  }
+  
+  /* Fix Recent Applications Section - MORE BREATHING SPACE */
+  [style*="display: flex"][style*="justifyContent: space-between"][style*="marginBottom: 16px"] {
+    flex-wrap: wrap !important;
+    gap: 10px !important;
+    margin-bottom: 18px !important;
+  }
+  
+  /* Fix "Recent Applications" title */
+  [style*="fontSize: 20px"][style*="fontWeight: 700"] {
+    font-size: 18px !important;
+  }
+  
+  /* Fix "Last 3 requests" text */
+  [style*="fontSize: 13px"][style*="color: #64748b"] {
+    font-size: 12px !important;
+  }
+
+  /* Fix individual application cards - BETTER SPACING & TEXT ALIGNMENT */
+  [style*="background: #dcfce7"][style*="borderRadius: 16px"],
+  [style*="background: #fef3c7"][style*="borderRadius: 16px"],
+  [style*="background: #fee2e2"][style*="borderRadius: 16px"] {
+    padding: 20px 16px !important;
+    margin-bottom: 18px !important;
+  }
+  
+  /* Fix leave card header (icon + title + status) - PROPER ALIGNMENT */
+  [style*="display: flex"][style*="justifyContent: space-between"][style*="alignItems: flex-start"][style*="marginBottom: 12px"] {
+    align-items: center !important;
+    gap: 12px !important;
+    margin-bottom: 14px !important;
+  }
+  
+  /* Fix calendar icon in cards */
+  [style*="fontSize: 32px"][style*="marginRight"] {
+    font-size: 30px !important;
+    margin-right: 0 !important;
+    flex-shrink: 0 !important;
+  }
+  
+  /* Fix leave type in application cards */
+  [style*="fontSize: 18px"][style*="fontWeight: 700"][style*="color: #1e293b"] {
+    font-size: 16px !important;
+    line-height: 1.3 !important;
+  }
+  
+  /* Fix date range text - BETTER SPACING */
+  [style*="fontSize: 13px"][style*="color: #475569"] {
+    font-size: 12px !important;
+    line-height: 1.4 !important;
+    margin-top: 2px !important;
+  }
+  
+  /* Fix status badge (Approved/Pending/Rejected) */
+  [style*="padding: 6px 16px"][style*="borderRadius: 8px"][style*="fontWeight: 600"] {
+    padding: 6px 14px !important;
+    font-size: 12px !important;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+  }
+  
+  /* Fix duration and applied date row - BETTER ALIGNMENT */
+  [style*="display: flex"][style*="gap: 20px"][style*="marginBottom: 12px"] {
+    gap: 16px !important;
+    flex-wrap: wrap !important;
+    margin-bottom: 12px !important;
+  }
+  
+  /* Fix the icons and text in duration/applied date - PROPER ALIGNMENT */
+  [style*="display: flex"][style*="alignItems: center"][style*="gap: 8px"] {
+    align-items: center !important;
+    gap: 6px !important;
+    font-size: 13px !important;
+    line-height: 1.4 !important;
+  }
+  
+  /* Fix clock and calendar icons in application cards */
+  [style*="display: flex"][style*="alignItems: center"][style*="gap: 8px"] > span:first-child {
+    font-size: 16px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+  }
+  
+  /* Fix "1 day" and "Applied 22 Jan 2026" text alignment */
+  [style*="display: flex"][style*="alignItems: center"][style*="gap: 8px"] > span:last-child,
+  [style*="display: flex"][style*="alignItems: center"][style*="gap: 8px"] > div {
+    display: inline-flex !important;
+    align-items: center !important;
+    line-height: 1 !important;
+  }
+  
+  /* Fix reason box */
+  [style*="background: white"][style*="padding: 12px"][style*="borderRadius: 8px"] {
+    padding: 12px !important;
+    font-size: 13px !important;
+    margin-top: 12px !important;
+  }
+  
+  /* Fix "Reason:" label */
+  [style*="fontStyle: italic"][style*="fontWeight: 600"] {
+    font-size: 13px !important;
+  }
+  
+  /* Fix Leave Statistics Section */
+  [style*="fontSize: 20px"][style*="fontWeight: 700"][style*="marginBottom: 16px"] {
+    font-size: 18px !important;
+    margin-bottom: 16px !important;
+  }
+  
+  /* Fix stats cards (Pending/Approved/Rejected) */
+  [style*="display: flex"][style*="alignItems: center"][style*="gap: 16px"] {
+    gap: 14px !important;
+  }
+  
+  /* Fix stat icon circles */
+  [style*="width: 48px"][style*="height: 48px"][style*="borderRadius: 12px"] {
+    width: 44px !important;
+    height: 44px !important;
+    font-size: 22px !important;
+  }
+  
+  /* Fix stat numbers */
+  [style*="fontSize: 24px"][style*="fontWeight: 700"] {
+    font-size: 22px !important;
+  }
+  
+  /* Fix stat labels */
+  [style*="fontSize: 13px"][style*="color: #64748b"] {
+    font-size: 12px !important;
+  }
+  
+  /* Fix Quick Actions buttons */
+  [style*="display: flex"][style*="flexDirection: column"][style*="gap: 12px"] button {
+    padding: 14px 16px !important;
+    font-size: 14px !important;
+  }
+  
+  /* Fix Manager Info Section */
+  [style*="width: 80px"][style*="height: 80px"][style*="borderRadius: 50%"] {
+    width: 70px !important;
+    height: 70px !important;
+    font-size: 32px !important;
+  }
+  
+  /* Fix manager name */
+  [style*="fontSize: 18px"][style*="fontWeight: 700"][style*="marginTop: 12px"] {
+    font-size: 17px !important;
+  }
+  
+  /* Fix manager title */
+  [style*="fontSize: 13px"][style*="color: #64748b"][style*="marginTop: 4px"] {
+    font-size: 12px !important;
+  }
+  
+  /* Fix Upcoming Holidays */
+  [style*="padding: 14px"][style*="background: #f9fafb"][style*="borderRadius: 8px"] {
+    padding: 14px !important;
+    margin-bottom: 12px !important;
+  }
+  
+  [style*="fontSize: 15px"][style*="fontWeight: 600"] {
+    font-size: 14px !important;
+  }
+  
+  /* ===== GENERAL DASHBOARD FIXES ===== */
+  
+  /* Force single column layout for all grids */
+  [style*="display: grid"],
+  [style*="gridTemplateColumns"] {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 18px !important;
+  }
+  
+  /* Banner/Image containers */
+  [style*="height: 280"] {
+    height: 220px !important;
+  }
+  
+  img {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+  
+  /* Leave balance cards */
+  [style*="borderRadius: 16"][style*="padding: 24px"] {
+    padding: 18px !important;
+    margin-bottom: 14px;
+  }
+  
+  /* Stats cards with icons */
+  [style*="fontSize: 40"] {
+    font-size: 34px !important;
+  }
+  
+  [style*="fontSize: 32"] {
+    font-size: 28px !important;
+  }
+  
+  [style*="fontSize: 36"] {
+    font-size: 32px !important;
+  }
+  
+  /* Panels & Cards */
+  .panel {
+    padding: 16px !important;
+    margin-bottom: 16px;
+    max-width: 100%;
+    width: calc(100vw - 32px);
+    height: auto !important;
+  }
+  
+  .card {
+    padding: 16px !important;
+    height: auto !important;
+    max-width: 100%;
+  }
+  
+  .card-value {
+    font-size: 18px !important;
+  }
+  
+  .card-title {
+    font-size: 11px !important;
+  }
+  
+  /* Grids */
+  .grid {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .quick-cards {
+    grid-template-columns: 1fr !important;
+  }
+  
+  /* Dashboard layout */
+  .dashboard-layout,
+  .dashboard-grid,
+  .dashboard-right {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100%;
+  }
+  
+  /* Forms */
+  .form-grid {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .btn,
+  .input {
+    width: 100%;
+    max-width: 100%;
+  }
+  
+  .row {
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: 8px;
+  }
+  
+  /* Tables */
+  .table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: calc(100vw - 32px);
+  }
+  
+  .table {
+    min-width: 500px;
+  }
+  
+  /* Typography */
+  h1 { font-size: 20px !important; }
+  h2 { font-size: 18px !important; }
+  h3 { font-size: 16px !important; }
+  h4 { font-size: 15px !important; }
+  
+  /* Badge */
+  .badge {
+    font-size: 10px !important;
+    padding: 4px 6px !important;
+  }
+  
+  /* Dropdowns */
+  .dropdown-menu,
+  [role="menu"] {
+    max-width: calc(100vw - 32px);
+    right: 16px !important;
+  }
+  
+  /* Modals */
+  .modal,
+  .dialog,
+  [style*="position: fixed"][style*="background"] > div {
+    width: calc(100vw - 32px) !important;
+    max-width: calc(100vw - 32px) !important;
+    margin: 16px !important;
+  }
+  
+  /* Tea/Coffee Modal - Employee Orders Table Fix - COMPLETE REWRITE */
+  
+  /* Modal container sizing */
+  [style*="position: fixed"][style*="background: rgba(0,0,0,0.5)"] > div {
+    max-width: calc(100vw - 32px) !important;
+    width: calc(100vw - 32px) !important;
+    margin: 16px !important;
+  }
+  
+  /* Modal content area */
+  [style*="position: fixed"] [style*="maxHeight"],
+  [style*="position: fixed"] div[style*="maxHeight"] {
+    max-height: 75vh !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+  
+  /* Table container - ENABLE HORIZONTAL SCROLL */
+  [style*="position: fixed"] table {
+    display: block !important;
+    width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    -webkit-overflow-scrolling: touch !important;
+    border-collapse: collapse !important;
+  }
+  
+  /* Table structure */
+  [style*="position: fixed"] thead,
+  [style*="position: fixed"] tbody {
+    display: table !important;
+    width: 100% !important;
+    table-layout: fixed !important;
+    min-width: 600px !important;
+  }
+  
+  [style*="position: fixed"] tr {
+    display: table-row !important;
+    width: 100% !important;
+  }
+  
+  /* Table cells with proper widths */
+  [style*="position: fixed"] th,
+  [style*="position: fixed"] td {
+    display: table-cell !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+  
+  /* First column (Name) - wider */
+  [style*="position: fixed"] th:first-child,
+  [style*="position: fixed"] td:first-child {
+    min-width: 250px !important;
+    max-width: 250px !important;
+    width: 250px !important;
+  }
+  
+  /* Other columns (Morning, Evening, etc) */
+  [style*="position: fixed"] th:not(:first-child),
+  [style*="position: fixed"] td:not(:first-child) {
+    min-width: 150px !important;
+    max-width: 150px !important;
+    width: 150px !important;
+    text-align: center !important;
+  }
+  
+  /* Add visible scrollbar */
+  [style*="position: fixed"] table::-webkit-scrollbar {
+    height: 10px !important;
+    display: block !important;
+  }
+  
+  [style*="position: fixed"] table::-webkit-scrollbar-track {
+    background: #f1f5f9 !important;
+    border-radius: 5px !important;
+  }
+  
+  [style*="position: fixed"] table::-webkit-scrollbar-thumb {
+    background: #94a3b8 !important;
+    border-radius: 5px !important;
+  }
+  
+  [style*="position: fixed"] table::-webkit-scrollbar-thumb:hover {
+    background: #64748b !important;
+  }
+  
+  /* Summary stats at top - make them stack on mobile */
+  [style*="position: fixed"] [style*="gridTemplateColumns: repeat(4"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px !important;
+  }
+  
+  /* Search */
+  .universal-search,
+  .search-container {
+    width: 100%;
+    max-width: 200px;
+  }
+  
+  .search-container input {
+    font-size: 13px;
+    padding: 6px 10px;
+  }
+  
+  /* Notifications */
+  .toast,
+  .notification {
+    left: 16px !important;
+    right: 16px !important;
+    width: auto !important;
+    max-width: none !important;
+  }
+  
+  /* Charts */
+  .chart-container,
+  .graph-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: calc(100vw - 32px);
+  }
+  
+  canvas {
+    max-width: 100%;
+  }
+  
+  /* Loading */
+  .loading-spinner {
+    width: 32px !important;
+    height: 32px !important;
+  }
+  
+  /* Alerts */
+  .error-message,
+  .alert {
+    padding: 12px !important;
+    font-size: 13px !important;
+  }
+  
+  /* ===== LEAVE CARDS SPECIFIC ===== */
+  
+  [style*="border: 2px solid"],
+  [style*="border: 1px solid"][style*="borderRadius"] {
+    max-width: calc(100vw - 32px) !important;
+    width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+  
+  [style*="display: flex"][style*="justifyContent"] {
+    flex-wrap: wrap !important;
+    gap: 10px !important;
+  }
+  
+  [style*="fontSize"][style*="fontWeight"] {
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+  }
+  
+  .tea-coffee-grid,
+  .attendance-grid,
+  .leaves-grid,
+  .leave-balance-grid {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .tea-coffee-card button {
+    width: 100%;
+    margin: 4px 0;
+  }
+  
+  .leave-form {
+    padding: 16px;
+  }
+  
+  .leave-form .row {
+    flex-direction: column;
+  }
+  
+  .policy-content,
+  .policy-card {
+    padding: 16px;
+    margin-bottom: 14px;
+  }
+  
+  [style*="background: white"][style*="padding: 24px"] {
+    padding: 18px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  
+  [style*="display: grid"][style*="gap: 16px"] {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 16px !important;
+  }
+  
+  [style*="fontWeight"] {
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+    hyphens: auto !important;
+  }
+  
+  .content > div {
+    margin-bottom: 20px !important;
+  }
+  
+  .content > div:last-child {
+    margin-bottom: 60px !important;
+    padding-bottom: 20px !important;
+  }
+  
+  /* iOS Safari specific fixes */
+  @supports (-webkit-touch-callout: none) {
+    .content {
+      padding-bottom: 120px !important;
+    }
+    
+    .main {
+      min-height: -webkit-fill-available !important;
+    }
+  }
+  
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  a, button {
+    touch-action: manipulation;
+  }
+  
+  .mt-mobile-small { margin-top: 10px !important; }
+  .mb-mobile-small { margin-bottom: 10px !important; }
+  .p-mobile-small { padding: 10px !important; }
+  
+  .text-center-mobile {
+    text-align: center !important;
+  }
+  
+  .text-left-mobile {
+    text-align: left !important;
+  }
+}
+
+/* ========================================
+   EXTRA SMALL MOBILE (≤380px)
+======================================== */
+@media (max-width: 380px) {
+  [style*="fontSize: 24px"] {
+    font-size: 20px !important;
+  }
+  
+  [style*="fontSize: 32px"] {
+    font-size: 26px !important;
+  }
+  
+  [style*="fontSize: 40px"] {
+    font-size: 30px !important;
+  }
+  
+  [style*="padding: 20px"] {
+    padding: 14px !important;
+  }
+  
+  [style*="padding: 16px"] {
+    padding: 12px !important;
+  }
+  
+  [style*="fontSize: 64px"] {
+    font-size: 40px !important;
+  }
+  
+  [style*="fontSize: 48px"] {
+    font-size: 36px !important;
+  }
+}

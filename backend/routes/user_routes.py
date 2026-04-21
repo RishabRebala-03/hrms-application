@@ -1,0 +1,914 @@
+#user_routes.py
+from flask import Blueprint, request, jsonify
+from bson import ObjectId
+from datetime import datetime
+from config.db import mongo
+import os
+
+def serialize_all(obj):
+    if isinstance(obj, list):
+        return [serialize_all(item) for item in obj]
+
+    if isinstance(obj, dict):
+        new_obj = {}
+        for k, v in obj.items():
+            new_obj[k] = serialize_all(v)
+        return new_obj
+
+    # Convert ObjectId → string
+    if isinstance(obj, ObjectId):
+        return str(obj)
+
+    # Convert datetime → ISO format
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+
+    return obj
+
+user_bp = Blueprint("user_bp", __name__)
+
+@user_bp.route("/add_user", methods=["POST"])
+def add_user():
+    try:
+        data = request.get_json()
+        print("\n📩 Received data:", data)
+
+        # ✅ Ensure employeeId is provided
+        if not data.get("employeeId"):
+            return jsonify({"error": "employeeId is required"}), 400
+
+        # ✅ Check if employeeId already exists
+        existing = mongo.db.users.find_one({"employeeId": data["employeeId"]})
+        if existing:
+            return jsonify({"error": "Employee ID already exists"}), 400
+
+        reports_to_email = data.get("reportsToEmail")
+
+        # Manager linkage logic
+        if reports_to_email:
+            manager = mongo.db.users.find_one({"email": reports_to_email})
+            if manager:
+                data["reportsTo"] = manager["_id"]
+            else:
+                print(f"⚠️ Manager {reports_to_email} not found, auto-creating...")
+                manager_id = mongo.db.users.insert_one({
+                    "employeeId": f"AUTO-MGR-{int(datetime.utcnow().timestamp())}",
+                    "name": reports_to_email.split("@")[0].capitalize(),
+                    "email": reports_to_email,
+                    "password": "autocreated",
+                    "role": "Manager",
+                    "designation": "Auto-created Manager",
+                    "department": "General",
+                    "shiftTimings": "09:00 - 18:00",
+                    "projects": [],
+                    "leaveBalance": {
+                        "sick": 6,
+                        "sickTotal": 6,
+                        "planned": 12,
+                        "plannedTotal": 12,
+                        "optional": 2,
+                        "optionalTotal": 2,
+                        "lwp": 0
+                    },
+                    "dateOfJoining": datetime.utcnow(),
+                    "dateOfBirth": None,
+                    "createdAt": datetime.utcnow()
+                }).inserted_id
+                data["reportsTo"] = manager_id
+
+        data.pop("reportsToEmail", None)
+        data["is_active"] = bool(data.get("is_active", True))
+        data["createdAt"] = datetime.utcnow()
+
+        # Handle joining date safely - STORE IT FIRST
+        joining_date_for_accrual = None
+        try:
+            if "dateOfJoining" in data and data["dateOfJoining"]:
+                parsed_doj = datetime.fromisoformat(data["dateOfJoining"].replace('Z', '+00:00'))
+                data["dateOfJoining"] = parsed_doj
+                joining_date_for_accrual = parsed_doj
+            else:
+                data["dateOfJoining"] = datetime.utcnow()
+                joining_date_for_accrual = datetime.utcnow()
+        except Exception:
+            data["dateOfJoining"] = datetime.utcnow()
+            joining_date_for_accrual = datetime.utcnow()
+
+        # Handle date of birth safely
+        try:
+            if "dateOfBirth" in data and data["dateOfBirth"]:
+                data["dateOfBirth"] = datetime.fromisoformat(data["dateOfBirth"].replace('Z', '+00:00'))
+            else:
+                data["dateOfBirth"] = None
+        except Exception:
+            data["dateOfBirth"] = None
+
+        # Calculate leave balance based on joining date - USE THE STORED VALUE
+        join_dt = joining_date_for_accrual if joining_date_for_accrual else datetime.utcnow()
+
+        # Calculate months since joining (including current month)
+        today = datetime.utcnow()
+        months_employed = (today.year - join_dt.year) * 12 + (today.month - join_dt.month) + 1
+
+        # 🔹 NEW: Fortnight rule – if joined after 15th, don't count joining month
+        if join_dt.day > 15:
+            months_employed -= 1
+            if months_employed < 0:
+                months_employed = 0
+
+        # Accrual rates: 1 planned per month, 0.5 sick per month
+        planned_balance = months_employed * 1.0
+        sick_balance = months_employed * 0.5
+
+        #data on this indent
+        # 🔹 NEW: Check employment type for intern-specific leave allocation
+        employment_type = data.get("employment_type", "Employee")
+
+        if employment_type == "Intern":
+            # Interns get ONLY sick leave (no planned/optional)
+            data["leaveBalance"] = {
+                "sick": sick_balance,
+                "sickTotal": sick_balance,
+                "planned": 0,
+                "plannedTotal": 0,
+                "optional": 0,
+                "optionalTotal": 0,
+                "lwp": 0,
+                "lastAccrualDate": today.replace(day=1)
+            }
+            print(f"✅ INTERN leave balance: Sick={sick_balance} only (Months employed: {months_employed})")
+        else:
+            # Regular employees get full leave allocation
+            data["leaveBalance"] = {
+                "sick": sick_balance,
+                "sickTotal": sick_balance,
+                "planned": planned_balance,
+                "plannedTotal": planned_balance,
+                "optional": 2,
+                "optionalTotal": 2,
+                "lwp": 0,
+                "lastAccrualDate": today.replace(day=1)
+            }
+            print(f"✅ EMPLOYEE leave balance: Sick={sick_balance}, Planned={planned_balance} (Months employed: {months_employed})")
+        # 👆👆👆 LEAVE BALANCE CALCULATION ENDS HERE 👆👆👆
+
+        # ✅ Insert user (employeeId is now required in data)
+        mongo.db.users.insert_one(data)
+        return jsonify({"message": "User added successfully!", "employeeId": data["employeeId"]}), 201
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+# -------------------------------
+# Get All Users (Read)
+# -------------------------------
+@user_bp.route("/", methods=["GET"])
+def get_users():
+    try:
+        users = list(mongo.db.users.find())
+        for user in users:
+            user["_id"] = str(user["_id"])
+            user["is_active"] = user.get("is_active", True)
+
+            # ✅ BUILD PHOTO URL
+            base = request.host_url.rstrip("/")
+            user_id_str = str(user["_id"])
+            photo_url = None
+
+            photo_extensions = ['.png', '.jpg', '.jpeg', '.webp']
+            for ext in photo_extensions:
+                photo_filename = f"{user_id_str}{ext}"
+                photo_path = os.path.join("static", "profile_photos", photo_filename)
+                if os.path.exists(photo_path):
+                    photo_url = f"{base}/static/profile_photos/{photo_filename}"
+                    break
+
+            user["photoUrl"] = photo_url
+            
+            # Convert reportsTo ObjectId to reportsToEmail string
+            if "reportsTo" in user and user["reportsTo"]:
+                if isinstance(user["reportsTo"], ObjectId):
+                    # Find the manager and get their email
+                    manager = mongo.db.users.find_one({"_id": user["reportsTo"]})
+                    if manager:
+                        user["reportsToEmail"] = manager["email"]
+                    user["reportsTo"] = str(user["reportsTo"])
+                elif isinstance(user["reportsTo"], str):
+                    # Already converted, find manager by string ID
+                    try:
+                        manager = mongo.db.users.find_one({"_id": ObjectId(user["reportsTo"])})
+                        if manager:
+                            user["reportsToEmail"] = manager["email"]
+                    except:
+                        pass
+
+            # Convert peopleLead ObjectId to peopleLeadEmail string
+            if "peopleLead" in user and user["peopleLead"]:
+                if isinstance(user["peopleLead"], ObjectId):
+                    people_lead = mongo.db.users.find_one({"_id": user["peopleLead"]})
+                    if people_lead:
+                        user["peopleLeadEmail"] = people_lead["email"]
+                    user["peopleLead"] = str(user["peopleLead"])
+                elif isinstance(user["peopleLead"], str):
+                    try:
+                        people_lead = mongo.db.users.find_one({"_id": ObjectId(user["peopleLead"])})
+                        if people_lead:
+                            user["peopleLeadEmail"] = people_lead["email"]
+                    except:
+                        pass
+            
+        return jsonify(serialize_all(users)), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# -------------------------------
+# Admin: Get All Employees (exclude Admins)
+# -------------------------------
+@user_bp.route("/get_all_employees", methods=["GET"])
+def get_all_employees():
+    try:
+        employees = list(mongo.db.users.find({"role": {"$ne": "Admin"}}))  # Exclude Admins
+
+        for emp in employees:
+            emp["is_active"] = emp.get("is_active", True)
+            # ✅ BUILD PHOTO URL
+            base = request.host_url.rstrip("/")
+            emp_id_str = str(emp["_id"])
+            photo_url = None
+
+            photo_extensions = ['.png', '.jpg', '.jpeg', '.webp']
+            for ext in photo_extensions:
+                photo_filename = f"{emp_id_str}{ext}"
+                photo_path = os.path.join("static", "profile_photos", photo_filename)
+                if os.path.exists(photo_path):
+                    photo_url = f"{base}/static/profile_photos/{photo_filename}"
+                    break
+
+            emp["photoUrl"] = photo_url
+                
+            if "reportsTo" in emp and isinstance(emp["reportsTo"], ObjectId):
+                emp["reportsTo"] = str(emp["reportsTo"])
+
+        return jsonify(serialize_all(employees)), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+
+# -------------------------------
+# Get Single User by ID
+# -------------------------------
+@user_bp.route("/<user_id>", methods=["GET"])
+def get_user(user_id):
+    try:
+        user = mongo.db.users.find_one({"_id": ObjectId(user_id)})
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        
+        # BUILD PHOTO URL
+        base = request.host_url.rstrip("/")
+        user_id_str = str(user["_id"])
+        photo_url = None
+
+        photo_extensions = ['.png', '.jpg', '.jpeg', '.webp']
+        for ext in photo_extensions:
+            photo_filename = f"{user_id_str}{ext}"
+            photo_path = os.path.join("static", "profile_photos", photo_filename)
+            if os.path.exists(photo_path):
+                photo_url = f"{base}/static/profile_photos/{photo_filename}"
+                break
+
+        user["photoUrl"] = photo_url
+        user["is_active"] = user.get("is_active", True)
+
+        # Convert reportsTo ObjectId to reportsToEmail string
+        if "reportsTo" in user and user["reportsTo"]:
+            if isinstance(user["reportsTo"], ObjectId):
+                manager = mongo.db.users.find_one({"_id": user["reportsTo"]})
+                if manager:
+                    user["reportsToEmail"] = manager["email"]
+                user["reportsTo"] = str(user["reportsTo"])
+            elif isinstance(user["reportsTo"], str):
+                try:
+                    manager = mongo.db.users.find_one({"_id": ObjectId(user["reportsTo"])})
+                    if manager:
+                        user["reportsToEmail"] = manager["email"]
+                except:
+                    pass
+
+        # ✅ NEW: Convert peopleLead ObjectId to peopleLeadEmail string
+        if "peopleLead" in user and user["peopleLead"]:
+            if isinstance(user["peopleLead"], ObjectId):
+                people_lead = mongo.db.users.find_one({"_id": user["peopleLead"]})
+                if people_lead:
+                    user["peopleLeadEmail"] = people_lead["email"]
+                user["peopleLead"] = str(user["peopleLead"])
+            elif isinstance(user["peopleLead"], str):
+                try:
+                    people_lead = mongo.db.users.find_one({"_id": ObjectId(user["peopleLead"])})
+                    if people_lead:
+                        user["peopleLeadEmail"] = people_lead["email"]
+                except:
+                    pass
+
+        # --- FIX: Convert project ObjectIds to strings ---
+        if "projects" in user and isinstance(user["projects"], list):
+            for proj in user["projects"]:
+                if "_id" in proj and isinstance(proj["_id"], ObjectId):
+                    proj["_id"] = str(proj["_id"])
+        
+        return jsonify(serialize_all(user)), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# -------------------------------
+# Get Manager by Employee ID
+# -------------------------------
+@user_bp.route("/get_manager/<employee_id>", methods=["GET"])
+def get_manager(employee_id):
+    try:
+        employee = mongo.db.users.find_one({"_id": ObjectId(employee_id)})
+        if not employee or "reportsTo" not in employee:
+            return jsonify({"error": "Employee or manager not found"}), 404
+
+        manager = mongo.db.users.find_one({"_id": employee["reportsTo"]})
+        if not manager:
+            return jsonify([]), 200  # Return empty array instead of error
+
+        manager["_id"] = str(manager["_id"])
+        return jsonify(manager), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ------------------------------------------
+# PROJECT MANAGEMENT ROUTES (CLEAN + FIXED)
+# ------------------------------------------
+@user_bp.route("/assign_project/<user_id>", methods=["POST"])
+def assign_project(user_id):
+    try:
+        data = request.get_json()
+        project_id = data.get("projectId")
+        start_raw = data.get("startDate")
+        end_raw = data.get("endDate")
+        
+        if not project_id or not start_raw:
+            return jsonify({"error": "Project ID and start date required"}), 400
+        
+        # Verify project exists
+        project = mongo.db.projects.find_one({"_id": ObjectId(project_id)})
+        if not project:
+            return jsonify({"error": "Project not found"}), 404
+        
+        # Parse dates
+        # Parse dates - handle both YYYY-MM-DD and ISO formats
+        try:
+            # Try YYYY-MM-DD format first (from date input)
+            if len(start_raw) == 10 and start_raw.count('-') == 2:
+                start = datetime.strptime(start_raw, "%Y-%m-%d")
+            else:
+                # Fallback to ISO format
+                start = datetime.fromisoformat(start_raw.replace('Z', '+00:00'))
+        except Exception as e:
+            print(f"❌ Error parsing start date '{start_raw}': {e}")
+            return jsonify({"error": f"Invalid start date format: {start_raw}"}), 400
+
+        end = None
+        if end_raw:
+            try:
+                # Try YYYY-MM-DD format first (from date input)
+                if len(end_raw) == 10 and end_raw.count('-') == 2:
+                    end = datetime.strptime(end_raw, "%Y-%m-%d")
+                else:
+                    # Fallback to ISO format
+                    end = datetime.fromisoformat(end_raw.replace('Z', '+00:00'))
+            except Exception as e:
+                print(f"⚠️ Could not parse end date '{end_raw}': {e}")
+                end = None
+        
+        # Check if already assigned
+        user = mongo.db.users.find_one({"_id": ObjectId(user_id)})
+        if user and "projects" in user:
+            for proj in user["projects"]:
+                if str(proj.get("projectId")) == project_id:
+                    return jsonify({"error": "Project already assigned to this user"}), 400
+        
+        assignment = {
+            "_id": ObjectId(),
+            "projectId": ObjectId(project_id),
+            "projectName": project["title"],
+            "startDate": start,
+            "endDate": end,
+            "assignedAt": datetime.utcnow()
+        }
+        
+        mongo.db.users.update_one(
+            {"_id": ObjectId(user_id)},
+            {"$push": {"projects": assignment}}
+        )
+        
+        return jsonify({
+            "message": "Project assigned successfully",
+            "assignment": serialize_all(assignment)
+        }), 200
+        
+    except Exception as e:
+        print(f"❌ Error assigning project: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@user_bp.route("/update_project/<user_id>/<assignment_id>", methods=["PUT"])
+def update_project_assignment(user_id, assignment_id):
+    try:
+        data = request.get_json()
+        
+        update_fields = {}
+        if "startDate" in data:
+            start_raw = data["startDate"]
+            try:
+                if len(start_raw) == 10 and start_raw.count('-') == 2:
+                    update_fields["projects.$.startDate"] = datetime.strptime(start_raw, "%Y-%m-%d")
+                else:
+                    update_fields["projects.$.startDate"] = datetime.fromisoformat(
+                        start_raw.replace('Z', '+00:00')
+                    )
+            except Exception as e:
+                print(f"❌ Error parsing start date: {e}")
+                return jsonify({"error": "Invalid start date format"}), 400
+
+        if "endDate" in data:
+            if data["endDate"]:
+                end_raw = data["endDate"]
+                try:
+                    if len(end_raw) == 10 and end_raw.count('-') == 2:
+                        update_fields["projects.$.endDate"] = datetime.strptime(end_raw, "%Y-%m-%d")
+                    else:
+                        update_fields["projects.$.endDate"] = datetime.fromisoformat(
+                            end_raw.replace('Z', '+00:00')
+                        )
+                except Exception as e:
+                    print(f"❌ Error parsing end date: {e}")
+                    return jsonify({"error": "Invalid end date format"}), 400
+            else:
+                update_fields["projects.$.endDate"] = None
+        
+        result = mongo.db.users.update_one(
+            {"_id": ObjectId(user_id), "projects._id": ObjectId(assignment_id)},
+            {"$set": update_fields}
+        )
+        
+        if result.modified_count == 0:
+            return jsonify({"error": "Assignment not found or no changes"}), 404
+        
+        return jsonify({"message": "Project assignment updated"}), 200
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@user_bp.route("/delete_project/<user_id>/<assignment_id>", methods=["DELETE"])
+def delete_project_assignment(user_id, assignment_id):
+    try:
+        result = mongo.db.users.update_one(
+            {"_id": ObjectId(user_id)},
+            {"$pull": {"projects": {"_id": ObjectId(assignment_id)}}}
+        )
+        
+        if result.modified_count == 0:
+            return jsonify({"error": "Assignment not found"}), 404
+        
+        return jsonify({"message": "Project assignment removed"}), 200
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# -------------------------------
+# Update User (PUT) - MERGED FUNCTION with DOB support
+# -------------------------------
+# Replace the ENTIRE update_user function in user_routes.py with this:
+
+@user_bp.route("/update_user/<user_id>", methods=["PUT"])
+def update_user(user_id):
+    try:
+        data = request.get_json()
+        print(f"🛠 Updating user {user_id} with RAW data:", data)
+
+        # Check if user exists
+        user = mongo.db.users.find_one({"_id": ObjectId(user_id)})
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        update_data = {}
+
+        # Handle password change separately with verification
+        if "password" in data:
+            current_password = data.get("currentPassword")
+            
+            if current_password:
+                if user.get("password") != current_password:
+                    return jsonify({"error": "Current password is incorrect"}), 400
+            
+            update_data["password"] = data["password"]
+            data.pop("currentPassword", None)
+            data.pop("password", None)
+
+        # Handle reportsToEmail linkage update
+        if "reportsToEmail" in data:
+            if data["reportsToEmail"]:
+                manager = mongo.db.users.find_one({"email": data["reportsToEmail"]})
+                if manager:
+                    update_data["reportsTo"] = manager["_id"]
+                else:
+                    return jsonify({"error": "Manager not found with provided email"}), 404
+            else:
+                update_data["reportsTo"] = None
+            data.pop("reportsToEmail", None)
+
+        # Handle peopleLeadEmail linkage update
+        if "peopleLeadEmail" in data:
+            ple = data["peopleLeadEmail"]
+
+            if ple:
+                people_lead = mongo.db.users.find_one({"email": ple})
+                if people_lead:
+                    update_data["peopleLead"] = people_lead["_id"]
+                    update_data["peopleLeadEmail"] = ple
+                else:
+                    update_data["peopleLeadEmail"] = ple
+            else:
+                update_data["peopleLead"] = None
+                update_data["peopleLeadEmail"] = ""
+            
+            data.pop("peopleLeadEmail", None)
+
+        # ✅ CRITICAL FIX: Parse dates with proper validation
+        if "dateOfJoining" in data:
+            doj = data["dateOfJoining"]
+            print(f"📅 Processing dateOfJoining: '{doj}' (type: {type(doj)})")
+            
+            if doj is None or doj == "" or doj == "null":
+                print("⚠️ dateOfJoining is empty, setting to None")
+                update_data["dateOfJoining"] = None
+            elif isinstance(doj, str) and doj.strip():
+                try:
+                    # Try YYYY-MM-DD format first
+                    parsed_date = datetime.strptime(doj.strip(), "%Y-%m-%d")
+                    update_data["dateOfJoining"] = parsed_date
+                    print(f"✅ Parsed dateOfJoining (YYYY-MM-DD): {update_data['dateOfJoining']}")
+                except ValueError:
+                    try:
+                        # Fallback to ISO format
+                        parsed_date = datetime.fromisoformat(doj.replace('Z', '+00:00'))
+                        update_data["dateOfJoining"] = parsed_date
+                        print(f"✅ Parsed dateOfJoining (ISO): {update_data['dateOfJoining']}")
+                    except Exception as e:
+                        print(f"❌ Failed to parse dateOfJoining: {doj}, Error: {e}")
+                        # Don't update this field if parsing fails
+            data.pop("dateOfJoining", None)
+
+        if "dateOfBirth" in data:
+            dob = data["dateOfBirth"]
+            print(f"📅 Processing dateOfBirth: '{dob}' (type: {type(dob)})")
+            
+            if dob is None or dob == "" or dob == "null":
+                print("⚠️ dateOfBirth is empty, setting to None")
+                update_data["dateOfBirth"] = None
+            elif isinstance(dob, str) and dob.strip():
+                try:
+                    # Try YYYY-MM-DD format first
+                    parsed_date = datetime.strptime(dob.strip(), "%Y-%m-%d")
+                    update_data["dateOfBirth"] = parsed_date
+                    print(f"✅ Parsed dateOfBirth (YYYY-MM-DD): {update_data['dateOfBirth']}")
+                except ValueError:
+                    try:
+                        # Fallback to ISO format
+                        parsed_date = datetime.fromisoformat(dob.replace('Z', '+00:00'))
+                        update_data["dateOfBirth"] = parsed_date
+                        print(f"✅ Parsed dateOfBirth (ISO): {update_data['dateOfBirth']}")
+                    except Exception as e:
+                        print(f"❌ Failed to parse dateOfBirth: {dob}, Error: {e}")
+                        # Don't update this field if parsing fails
+            data.pop("dateOfBirth", None)
+
+        # Fields that can be updated (REMOVED dateOfJoining and dateOfBirth from here)
+        allowed_fields = [
+            "name", "email", "designation", "department", "shiftTimings",
+            "projects", "role", "leaveBalance", "workLocation", "employment_type"
+        ]
+
+        for field in allowed_fields:
+            if field in data:
+                update_data[field] = data[field]
+
+        if not update_data:
+            return jsonify({"error": "No valid fields to update"}), 400
+
+        # If email is being updated, check it's not already taken
+        if "email" in update_data and update_data["email"] != user.get("email"):
+            existing = mongo.db.users.find_one({
+                "email": update_data["email"],
+                "_id": {"$ne": ObjectId(user_id)}
+            })
+            if existing:
+                return jsonify({"error": "Email already in use"}), 400
+
+        # ✅ DEBUG: Print what's being saved
+        print(f"\n📝 Final update_data being saved to MongoDB:")
+        for key, value in update_data.items():
+            print(f"   {key}: {value} (type: {type(value)})")
+
+        # Update the user
+        result = mongo.db.users.update_one(
+            {"_id": ObjectId(user_id)},
+            {"$set": update_data}
+        )
+
+        if result.modified_count > 0:
+            print(f"✅ User {user_id} updated successfully - {result.modified_count} field(s) modified")
+            
+            # Verify the update
+            updated_user = mongo.db.users.find_one({"_id": ObjectId(user_id)})
+            print(f"🔍 Verification - dateOfBirth in DB: {updated_user.get('dateOfBirth')}")
+            print(f"🔍 Verification - dateOfJoining in DB: {updated_user.get('dateOfJoining')}")
+            
+            return jsonify({"message": "User updated successfully"}), 200
+        else:
+            print(f"⚠️ No changes made to user {user_id} - check if data is identical to existing")
+            return jsonify({"message": "No changes made"}), 200
+
+    except Exception as e:
+        import traceback
+        print(f"❌ Error updating user: {str(e)}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+# -------------------------------
+# Delete User (DELETE)
+# -------------------------------
+@user_bp.route("/delete_user/<user_id>", methods=["DELETE"])
+def delete_user(user_id):
+    try:
+        result = mongo.db.users.delete_one({"_id": ObjectId(user_id)})
+        if result.deleted_count == 0:
+            return jsonify({"error": "User not found"}), 404
+        return jsonify({"message": "User deleted successfully"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# -------------------------------
+# Admin: Activate / Deactivate User
+# -------------------------------
+@user_bp.route("/set_active/<user_id>", methods=["PUT"])
+def set_user_active_status(user_id):
+    try:
+        data = request.get_json() or {}
+        is_active = data.get("is_active")
+
+        if not isinstance(is_active, bool):
+            return jsonify({"error": "is_active must be true or false"}), 400
+
+        user = mongo.db.users.find_one({"_id": ObjectId(user_id)})
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        mongo.db.users.update_one(
+            {"_id": ObjectId(user_id)},
+            {"$set": {"is_active": is_active}}
+        )
+
+        return jsonify({
+            "message": f"User marked as {'active' if is_active else 'inactive'} successfully",
+            "user_id": user_id,
+            "is_active": is_active
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# -------------------------------
+# Get Employees under a Manager (by Manager Email)
+# -------------------------------
+# Replace the get_employees_by_manager function in user_routes.py (around line 257)
+
+# Replace ONLY the get_employees_by_manager function in user_routes.py
+
+@user_bp.route("/get_employees_by_manager/<manager_email>", methods=["GET"])
+def get_employees_by_manager(manager_email):
+    try:
+        print(f"\n{'='*60}")
+        print(f"🔍 GET EMPLOYEES BY MANAGER REQUEST")
+        print(f"{'='*60}")
+        print(f"Manager email: {manager_email}")
+        
+        # Step 1: Find the manager by email
+        manager = mongo.db.users.find_one({"email": manager_email})
+        if not manager:
+            print(f"❌ Manager not found: {manager_email}")
+            return jsonify([]), 200
+        
+        manager_id = manager["_id"]
+        print(f"✅ Found manager: {manager.get('name')} (ID: {manager_id})")
+        
+        # Step 2: Find all employees reporting to this manager
+        # FIXED: Use only ObjectId comparison, not email
+        employees = list(mongo.db.users.find({
+            "reportsTo": manager_id,
+            "role": {"$ne": "Admin"}  # Exclude admins from employee list
+        }))
+        
+        print(f"📊 Found {len(employees)} employees")
+        
+        # Step 3: Serialize FIRST
+        serialized_employees = serialize_all(employees)
+        print(f"✅ Serialization complete")
+        
+        # Step 4: Add photo URLs to the ALREADY SERIALIZED data
+        base = request.host_url.rstrip("/")
+        for emp in serialized_employees:
+            emp_id_str = emp["_id"]  # Now it's a string
+            photo_url = None
+            
+            photo_extensions = ['.png', '.jpg', '.jpeg', '.webp']
+            for ext in photo_extensions:
+                photo_filename = f"{emp_id_str}{ext}"
+                photo_path = os.path.join("static", "profile_photos", photo_filename)
+                if os.path.exists(photo_path):
+                    photo_url = f"{base}/static/profile_photos/{photo_filename}"
+                    break
+            
+            emp["photoUrl"] = photo_url
+            
+            # Ensure reportsToEmail is set
+            if not emp.get("reportsToEmail"):
+                emp["reportsToEmail"] = manager_email
+            
+            print(f"   👤 {emp.get('name')} - ID: {emp_id_str} - Photo: {'✓' if photo_url else '✗'}")
+        
+        print(f"✅ Returning {len(serialized_employees)} serialized employees")
+        print(f"{'='*60}\n")
+        
+        return jsonify(serialized_employees), 200
+        
+    except Exception as e:
+        print(f"\n{'='*60}")
+        print(f"❌ ERROR in get_employees_by_manager")
+        print(f"{'='*60}")
+        print(f"Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        print(f"{'='*60}\n")
+        return jsonify([]), 200
+
+
+# -------------------------------
+# Upload Profile Photo
+# -------------------------------
+@user_bp.route("/upload_photo/<user_id>", methods=["POST"])
+def upload_photo(user_id):
+    try:
+        print("📸 Upload request received for", user_id)
+
+        if "photo" not in request.files:
+            return jsonify({"error": "No file provided"}), 400
+
+        file = request.files["photo"]
+
+        # Validate extension
+        allowed_ext = {"png", "jpg", "jpeg", "webp"}
+        ext = file.filename.rsplit(".", 1)[-1].lower()
+
+        if ext not in allowed_ext:
+            return jsonify({"error": "Invalid file type. Only PNG/JPG/WEBP allowed"}), 400
+
+        # Generate filename
+        filename = f"{user_id}.{ext}"
+
+        # Create uploads folder if missing
+        import os
+        upload_folder = os.path.join("static", "profile_photos")
+        os.makedirs(upload_folder, exist_ok=True)
+
+        # Save file
+        file_path = os.path.join(upload_folder, filename)
+        file.save(file_path)
+
+        # Save path in DB
+        # Save filename in DB (not the full path)
+        # Save filename in DB
+        mongo.db.users.update_one(
+            {"_id": ObjectId(user_id)}, {"$set": {"photoFilename": filename}}
+        )
+
+        # Build the photo URL
+        base = request.host_url.rstrip("/")
+        photo_url = f"{base}/static/profile_photos/{filename}"
+
+        print("✅ Photo uploaded:", photo_url)
+        return jsonify({"message": "Photo uploaded successfully", "url": photo_url})
+
+    except Exception as e:
+        print("❌ Upload error:", str(e))
+        return jsonify({"error": str(e)}), 500
+
+# Add this route temporarily at the bottom of user_routes.py
+@user_bp.route("/admin/fix_reportees", methods=["POST"])
+def admin_fix_reportees():
+    """
+    Admin route to fix all employees missing reportsToEmail
+    """
+    try:
+        employees_to_fix = list(mongo.db.users.find({
+            "reportsTo": {"$exists": True, "$ne": None},
+            "$or": [
+                {"reportsToEmail": {"$exists": False}},
+                {"reportsToEmail": None},
+                {"reportsToEmail": ""}
+            ]
+        }))
+        
+        print(f"🔍 Found {len(employees_to_fix)} employees to fix")
+        
+        fixed_count = 0
+        for emp in employees_to_fix:
+            manager = mongo.db.users.find_one({"_id": emp["reportsTo"]})
+            if manager and manager.get("email"):
+                result = mongo.db.users.update_one(
+                    {"_id": emp["_id"]},
+                    {"$set": {"reportsToEmail": manager["email"]}}
+                )
+                if result.modified_count > 0:
+                    fixed_count += 1
+                    print(f"✅ Fixed: {emp.get('name')} → {manager['email']}")
+        
+        return jsonify({
+            "message": f"Fixed {fixed_count} employees",
+            "fixed": fixed_count,
+            "total": len(employees_to_fix)
+        }), 200
+        
+    except Exception as e:
+        print(f"❌ Error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+@user_bp.route("/admin/migrate_employment_type", methods=["POST"])
+def migrate_employment_type():
+    """
+    ONE-TIME migration to add employment_type field to all users
+    Call this endpoint once: POST http://your-server/api/users/admin/migrate_employment_type
+    """
+    try:
+        print("\n" + "="*60)
+        print("🔄 MIGRATION: Adding employment_type field")
+        print("="*60)
+        
+        # Count total users
+        total_users = mongo.db.users.count_documents({})
+        print(f"📊 Total users in database: {total_users}")
+        
+        # Update users WITHOUT employment_type field
+        # Set to "Employee" by default (you can manually change interns later)
+        result = mongo.db.users.update_many(
+            {
+                "$or": [
+                    {"employment_type": {"$exists": False}},
+                    {"employment_type": None},
+                    {"employment_type": ""}
+                ]
+            },
+            {
+                "$set": {
+                    "employment_type": "Employee"
+                }
+            }
+        )
+        
+        print(f"✅ Updated {result.modified_count} users → Employee")
+        
+        # Verify results
+        employee_count = mongo.db.users.count_documents({"employment_type": "Employee"})
+        intern_count = mongo.db.users.count_documents({"employment_type": "Intern"})
+        
+        print(f"\n📋 Final counts:")
+        print(f"   Employees: {employee_count}")
+        print(f"   Interns: {intern_count}")
+        print(f"   Total: {employee_count + intern_count}")
+        print("="*60 + "\n")
+        
+        return jsonify({
+            "success": True,
+            "message": f"Updated {result.modified_count} users with employment_type=Employee",
+            "modified": result.modified_count,
+            "employees": employee_count,
+            "interns": intern_count
+        }), 200
+        
+    except Exception as e:
+        print(f"❌ Migration error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500

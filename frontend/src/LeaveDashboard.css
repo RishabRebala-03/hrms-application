@@ -1,0 +1,112 @@
+.leave-dashboard {
+  font-family: 'Inter', system-ui, sans-serif;
+  color: #1A1A1A;
+  background-color: #f8f9fb;
+  padding: 30px;
+  max-width: 950px;
+  margin: auto;
+}
+
+.dashboard-title {
+  text-align: center;
+  font-size: 26px;
+  font-weight: 600;
+  color: #003366;
+  margin-bottom: 30px;
+}
+
+.card {
+  background: #ffffff;
+  padding: 20px 25px;
+  border-radius: 12px;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.08);
+  margin-bottom: 25px;
+  transition: 0.3s;
+}
+
+.card:hover {
+  box-shadow: 0 6px 14px rgba(0,0,0,0.1);
+}
+
+.input {
+  width: 100%;
+  padding: 10px;
+  margin: 8px 0;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 15px;
+}
+
+.btn-primary {
+  background-color: #004578;
+  color: #fff;
+  padding: 10px 18px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  margin-top: 10px;
+}
+
+.btn-primary:hover {
+  background-color: #005a9e;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+}
+
+.info-block {
+  margin-top: 10px;
+  background: #f1f5f9;
+  padding: 10px 15px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.request-card {
+  background: #f9f9f9;
+  border: 1px solid #ddd;
+  padding: 12px;
+  border-radius: 8px;
+  margin-top: 10px;
+}
+
+.btn-group {
+  margin-top: 8px;
+}
+
+.btn-approve, .btn-reject {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 5px;
+  color: white;
+  font-weight: 500;
+  cursor: pointer;
+  margin-right: 6px;
+}
+
+.btn-approve {
+  background-color: #2e8b57;
+}
+
+.btn-approve:hover {
+  background-color: #3fa76a;
+}
+
+.btn-reject {
+  background-color: #c62828;
+}
+
+.btn-reject:hover {
+  background-color: #e53935;
+}
+
+.message {
+  text-align: center;
+  font-weight: 500;
+  color: #004578;
+  margin-top: 15px;
+}

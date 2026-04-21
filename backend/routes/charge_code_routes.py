@@ -1,0 +1,474 @@
+# routes/charge_code_routes.py
+from flask import Blueprint, request, jsonify
+from bson import ObjectId
+from datetime import datetime
+from config.db import mongo
+
+charge_code_bp = Blueprint("charge_code_bp", __name__)
+
+
+# ========================================
+# SERIALIZATION HELPERS
+# ========================================
+
+def serialize_all(obj):
+    """Fully recursive serializer - converts ALL ObjectIds and datetimes."""
+    if isinstance(obj, list):
+        return [serialize_all(item) for item in obj]
+    if isinstance(obj, dict):
+        return {k: serialize_all(v) for k, v in obj.items()}
+    if isinstance(obj, ObjectId):
+        return str(obj)
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    return obj
+
+
+# ========================================
+# CREATE CHARGE CODE (ADMIN)
+# ========================================
+
+@charge_code_bp.route("/create", methods=["POST"])
+def create_charge_code():
+    """
+    Create a new charge code (admin only).
+    Body: {
+        code:        str  (e.g. "PROJ-001"),
+        name:        str,
+        description: str,
+        project_name:str,
+        is_active:   bool,
+        created_by:  str  (user_id)
+    }
+    """
+    try:
+        data         = request.get_json() or {}
+        code         = data.get("code", "").strip().upper()
+        name         = data.get("name", "").strip()
+        description  = data.get("description", "")
+        project_name = data.get("project_name", "")
+        is_active    = bool(data.get("is_active", True))
+        created_by   = data.get("created_by")
+
+        if not all([code, name, created_by]):
+            return jsonify({"error": "code, name, and created_by are required"}), 400
+
+        try:
+            creator_id = ObjectId(created_by)
+        except Exception:
+            return jsonify({"error": "Invalid created_by format"}), 400
+
+        # Verify creator exists and is Admin
+        creator = mongo.db.users.find_one({"_id": creator_id})
+        if not creator:
+            return jsonify({"error": "Creator user not found"}), 404
+        if creator.get("role") != "Admin":
+            return jsonify({"error": "Only admins can create charge codes"}), 403
+
+        # Duplicate code check
+        existing = mongo.db.charge_codes.find_one({"code": code})
+        if existing:
+            return jsonify({"error": f"Charge code '{code}' already exists"}), 400
+
+        charge_code = {
+            "code":         code,
+            "name":         name,
+            "description":  description,
+            "project_name": project_name,
+            "is_active":    is_active,
+            "created_by":   creator_id,
+            "created_at":   datetime.utcnow(),
+            "updated_at":   datetime.utcnow(),
+        }
+
+        result = mongo.db.charge_codes.insert_one(charge_code)
+        print(f"✅ Charge code created: {code} by {creator.get('name')}")
+
+        return jsonify({
+            "message":        "Charge code created successfully",
+            "charge_code_id": str(result.inserted_id),
+            "code":           code,
+        }), 201
+
+    except Exception as e:
+        print(f"❌ Error creating charge code: {str(e)}")
+        import traceback; traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+# ========================================
+# GET ALL CHARGE CODES
+# ========================================
+
+@charge_code_bp.route("/all", methods=["GET"])
+def get_all_charge_codes():
+    """Get all charge codes. Optional: ?active_only=true"""
+    try:
+        active_only = request.args.get("active_only", "false").lower() == "true"
+        query = {"is_active": True} if active_only else {}
+        codes = list(mongo.db.charge_codes.find(query).sort("code", 1))
+        return jsonify(serialize_all(codes)), 200
+
+    except Exception as e:
+        print(f"❌ Error fetching charge codes: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ========================================
+# UPDATE CHARGE CODE
+# ========================================
+
+@charge_code_bp.route("/update/<charge_code_id>", methods=["PUT"])
+def update_charge_code(charge_code_id):
+    """
+    Update a charge code.
+    Body: { name, description, project_name, is_active }
+    """
+    try:
+        data = request.get_json() or {}
+
+        try:
+            cc_obj_id = ObjectId(charge_code_id)
+        except Exception:
+            return jsonify({"error": "Invalid charge_code_id format"}), 400
+
+        charge_code = mongo.db.charge_codes.find_one({"_id": cc_obj_id})
+        if not charge_code:
+            return jsonify({"error": "Charge code not found"}), 404
+
+        update_data = {"updated_at": datetime.utcnow()}
+
+        if "name" in data:
+            update_data["name"] = data["name"].strip()
+        if "description" in data:
+            update_data["description"] = data["description"]
+        if "project_name" in data:
+            update_data["project_name"] = data["project_name"]
+        if "is_active" in data:
+            update_data["is_active"] = bool(data["is_active"])
+
+        mongo.db.charge_codes.update_one({"_id": cc_obj_id}, {"$set": update_data})
+        print(f"✅ Charge code {charge_code_id} updated")
+
+        return jsonify({"message": "Charge code updated successfully"}), 200
+
+    except Exception as e:
+        print(f"❌ Error updating charge code: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ========================================
+# DELETE CHARGE CODE
+# ========================================
+
+@charge_code_bp.route("/delete/<charge_code_id>", methods=["DELETE"])
+def delete_charge_code(charge_code_id):
+    """Delete a charge code (only if not currently assigned)."""
+    try:
+        try:
+            cc_obj_id = ObjectId(charge_code_id)
+        except Exception:
+            return jsonify({"error": "Invalid charge_code_id format"}), 400
+
+        in_use = mongo.db.charge_code_assignments.find_one({
+            "charge_code_id": cc_obj_id,
+            "is_active":      True,
+        })
+        if in_use:
+            return jsonify({
+                "error": "Cannot delete a charge code that is currently assigned to employees"
+            }), 400
+
+        result = mongo.db.charge_codes.delete_one({"_id": cc_obj_id})
+        if result.deleted_count == 0:
+            return jsonify({"error": "Charge code not found"}), 404
+
+        print(f"✅ Charge code {charge_code_id} deleted")
+        return jsonify({"message": "Charge code deleted successfully"}), 200
+
+    except Exception as e:
+        print(f"❌ Error deleting charge code: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ========================================
+# ASSIGN CHARGE CODE(S) TO EMPLOYEE
+# ========================================
+
+@charge_code_bp.route("/assign", methods=["POST"])
+def assign_charge_code():
+    """
+    Assign one or more charge codes to an employee.
+    Body: {
+        employee_id:     str,
+        charge_code_ids: [str],
+        assigned_by:     str  (user_id),
+        start_date:      "YYYY-MM-DD"  (optional),
+        end_date:        "YYYY-MM-DD"  (optional)
+    }
+    """
+    try:
+        data            = request.get_json() or {}
+        employee_id     = data.get("employee_id")
+        charge_code_ids = data.get("charge_code_ids", [])
+        assigned_by     = data.get("assigned_by")
+        start_date      = data.get("start_date")
+        end_date        = data.get("end_date")
+
+        if not employee_id:
+            return jsonify({"error": "employee_id is required"}), 400
+        if not charge_code_ids or not isinstance(charge_code_ids, list):
+            return jsonify({"error": "charge_code_ids must be a non-empty list"}), 400
+        if not assigned_by:
+            return jsonify({"error": "assigned_by is required"}), 400
+
+        # Validate employee
+        try:
+            emp_obj_id = ObjectId(employee_id)
+        except Exception:
+            return jsonify({"error": "Invalid employee_id format"}), 400
+
+        employee = mongo.db.users.find_one({"_id": emp_obj_id})
+        if not employee:
+            return jsonify({"error": "Employee not found"}), 404
+
+        # Validate assigner role
+        try:
+            assigner_obj_id = ObjectId(assigned_by)
+        except Exception:
+            return jsonify({"error": "Invalid assigned_by format"}), 400
+
+        admin = mongo.db.users.find_one({"_id": assigner_obj_id})
+        if not admin or admin.get("role") not in ["Admin", "Manager"]:
+            return jsonify({"error": "Only admins or managers can assign charge codes"}), 403
+
+        assigned_codes = []
+
+        for cc_id in charge_code_ids:
+            try:
+                cc_obj_id = ObjectId(cc_id)
+            except Exception:
+                print(f"⚠️ Skipping invalid charge_code_id: {cc_id}")
+                continue
+
+            charge_code = mongo.db.charge_codes.find_one({"_id": cc_obj_id})
+            if not charge_code:
+                print(f"⚠️ Charge code not found: {cc_id}")
+                continue
+
+            # Skip if already assigned
+            existing = mongo.db.charge_code_assignments.find_one({
+                "employee_id":    emp_obj_id,
+                "charge_code_id": cc_obj_id,
+                "is_active":      True,
+            })
+            if existing:
+                print(f"ℹ️ Already assigned: {charge_code.get('code')} → {employee.get('name')}")
+                continue
+
+            assignment = {
+                "employee_id":      emp_obj_id,
+                "employee_name":    employee.get("name"),
+                "charge_code_id":   cc_obj_id,
+                "charge_code":      charge_code.get("code"),
+                "charge_code_name": charge_code.get("name"),
+                "assigned_by":      assigner_obj_id,
+                "assigned_at":      datetime.utcnow(),
+                "is_active":        True,
+            }
+
+            if start_date:
+                assignment["start_date"] = start_date
+            if end_date:
+                assignment["end_date"] = end_date
+
+            result = mongo.db.charge_code_assignments.insert_one(assignment)
+            assigned_codes.append({
+                "assignment_id": str(result.inserted_id),
+                "code":          charge_code.get("code"),
+            })
+            print(f"✅ Assigned {charge_code.get('code')} → {employee.get('name')}")
+
+        return jsonify({
+            "message":     f"Assigned {len(assigned_codes)} charge code(s) successfully",
+            "assignments": assigned_codes,
+        }), 201
+
+    except Exception as e:
+        print(f"❌ Error assigning charge code: {str(e)}")
+        import traceback; traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+# ========================================
+# GET EMPLOYEE'S ASSIGNED CHARGE CODES
+# ========================================
+
+@charge_code_bp.route("/employee/<employee_id>", methods=["GET"])
+def get_employee_charge_codes(employee_id):
+    """
+    Get all charge codes assigned to an employee.
+    Returns the dropdown-friendly format used by the timesheet grid.
+    Optional: ?active_only=true (default true)
+    """
+    try:
+        if not employee_id or len(employee_id) != 24:
+            return jsonify({"error": "Invalid employee_id format"}), 400
+
+        active_only = request.args.get("active_only", "true").lower() == "true"
+
+        query = {"employee_id": ObjectId(employee_id)}
+        if active_only:
+            query["is_active"] = True
+
+        assignments = list(mongo.db.charge_code_assignments.find(query))
+
+        result = []
+        for assignment in assignments:
+            charge_code = mongo.db.charge_codes.find_one({
+                "_id":       assignment["charge_code_id"],
+                "is_active": True,
+            })
+            if charge_code:
+                result.append({
+                    "_id":              str(assignment["_id"]),
+                    "charge_code_id":   str(charge_code["_id"]),
+                    "charge_code":      charge_code.get("code"),
+                    "charge_code_name": charge_code.get("name"),
+                })
+
+        print(f"✅ Found {len(result)} assigned charge codes for employee {employee_id}")
+        return jsonify(result), 200
+
+    except Exception as e:
+        print(f"❌ Error fetching employee charge codes: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ========================================
+# GET ALL ASSIGNMENTS (ADMIN)
+# ========================================
+
+@charge_code_bp.route("/assignments/all", methods=["GET"])
+def get_all_assignments():
+    """Get all charge code assignments (admin view)."""
+    try:
+        assignments = list(
+            mongo.db.charge_code_assignments.find().sort("assigned_at", -1)
+        )
+        return jsonify(serialize_all(assignments)), 200
+
+    except Exception as e:
+        print(f"❌ Error fetching all assignments: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ========================================
+# REMOVE CHARGE CODE FROM EMPLOYEE (SOFT DELETE)
+# ========================================
+
+@charge_code_bp.route("/remove/<assignment_id>", methods=["DELETE"])
+def remove_charge_code_assignment(assignment_id):
+    """Soft-delete a charge code assignment (marks is_active = False)."""
+    try:
+        try:
+            assign_obj_id = ObjectId(assignment_id)
+        except Exception:
+            return jsonify({"error": "Invalid assignment_id format"}), 400
+
+        assignment = mongo.db.charge_code_assignments.find_one({"_id": assign_obj_id})
+        if not assignment:
+            return jsonify({"error": "Assignment not found"}), 404
+
+        mongo.db.charge_code_assignments.update_one(
+            {"_id": assign_obj_id},
+            {"$set": {"is_active": False, "removed_at": datetime.utcnow()}},
+        )
+
+        print(f"✅ Assignment {assignment_id} removed (soft delete)")
+        return jsonify({"message": "Charge code assignment removed successfully"}), 200
+
+    except Exception as e:
+        print(f"❌ Error removing assignment: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ========================================
+# BULK ASSIGN CHARGE CODES
+# ========================================
+
+@charge_code_bp.route("/bulk_assign", methods=["POST"])
+def bulk_assign_charge_codes():
+    """
+    Bulk-assign the same charge code(s) to multiple employees.
+    Body: {
+        employee_ids:    [str],
+        charge_code_ids: [str],
+        assigned_by:     str  (user_id)
+    }
+    """
+    try:
+        data            = request.get_json() or {}
+        employee_ids    = data.get("employee_ids", [])
+        charge_code_ids = data.get("charge_code_ids", [])
+        assigned_by     = data.get("assigned_by")
+
+        if not all([employee_ids, charge_code_ids, assigned_by]):
+            return jsonify({"error": "employee_ids, charge_code_ids, and assigned_by are required"}), 400
+
+        admin = mongo.db.users.find_one({"_id": ObjectId(assigned_by)})
+        if not admin or admin.get("role") not in ["Admin", "Manager"]:
+            return jsonify({"error": "Only admins or managers can bulk-assign charge codes"}), 403
+
+        total_assigned = 0
+
+        for emp_id in employee_ids:
+            try:
+                emp_obj_id = ObjectId(emp_id)
+            except Exception:
+                continue
+
+            employee = mongo.db.users.find_one({"_id": emp_obj_id})
+            if not employee:
+                continue
+
+            for cc_id in charge_code_ids:
+                try:
+                    cc_obj_id = ObjectId(cc_id)
+                except Exception:
+                    continue
+
+                charge_code = mongo.db.charge_codes.find_one({"_id": cc_obj_id})
+                if not charge_code:
+                    continue
+
+                existing = mongo.db.charge_code_assignments.find_one({
+                    "employee_id":    emp_obj_id,
+                    "charge_code_id": cc_obj_id,
+                    "is_active":      True,
+                })
+                if existing:
+                    continue
+
+                mongo.db.charge_code_assignments.insert_one({
+                    "employee_id":      emp_obj_id,
+                    "employee_name":    employee.get("name"),
+                    "charge_code_id":   cc_obj_id,
+                    "charge_code":      charge_code.get("code"),
+                    "charge_code_name": charge_code.get("name"),
+                    "assigned_by":      ObjectId(assigned_by),
+                    "assigned_at":      datetime.utcnow(),
+                    "is_active":        True,
+                })
+                total_assigned += 1
+
+        print(f"✅ Bulk assignment complete: {total_assigned} new assignments")
+        return jsonify({
+            "message":        "Bulk assignment completed",
+            "total_assigned": total_assigned,
+        }), 201
+
+    except Exception as e:
+        print(f"❌ Error in bulk assignment: {str(e)}")
+        import traceback; traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
