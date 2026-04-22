@@ -1,300 +1,277 @@
-// src/components/AdminLogs.js
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
+import { ChevronDown, ChevronUp, ClipboardList, History, ShieldCheck, UserRound } from "lucide-react";
 
 export default function AdminLogs() {
   const [logs, setLogs] = useState([]);
-  const [expanded, setExpanded] = useState({}); // track which leave is expanded
+  const [expanded, setExpanded] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    axios
-      .get(`${process.env.REACT_APP_BACKEND_URL}/api/logs/all`)
-      .then((res) => setLogs(res.data))
-      .catch((err) => console.error(err));
+    const fetchLogs = async () => {
+      try {
+        setLoading(true);
+        const response = await axios.get(`${process.env.REACT_APP_BACKEND_URL}/api/logs/all`);
+        setLogs(Array.isArray(response.data) ? response.data : []);
+      } catch (fetchError) {
+        console.error(fetchError);
+        setError("Failed to load audit logs");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchLogs();
   }, []);
 
-  // Group logs by leave_id
-  const grouped = logs.reduce((acc, log) => {
-    const id = log.leave_id;
-    if (!acc[id]) acc[id] = [];
-    acc[id].push(log);
-    return acc;
-  }, {});
+  const grouped = useMemo(() => {
+    return logs.reduce((accumulator, log) => {
+      const leaveId = log.leave_id || "unknown";
+      if (!accumulator[leaveId]) {
+        accumulator[leaveId] = [];
+      }
+      accumulator[leaveId].push(log);
+      return accumulator;
+    }, {});
+  }, [logs]);
+
+  const groupedEntries = Object.entries(grouped);
 
   const toggleExpand = (leaveId) => {
-    setExpanded((prev) => ({ ...prev, [leaveId]: !prev[leaveId] }));
+    setExpanded((previous) => ({ ...previous, [leaveId]: !previous[leaveId] }));
   };
 
-  const formatDateTime = (ts) => {
-    if (!ts) return "N/A";
-    try {
-      return new Date(ts).toLocaleString("en-IN", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    } catch {
-      return "N/A";
-    }
+  const formatDateTime = (value) => {
+    if (!value) return "N/A";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "N/A";
+
+    return date.toLocaleString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   };
 
-  // 👇 UPDATED: Format values properly
   const formatValue = (key, value) => {
-    // Skip null/undefined values
     if (value === null || value === undefined || value === "") {
-      return null; // Will be filtered out
+      return null;
     }
 
-    // Handle date fields - UPDATED to handle string dates too
-    if (key.includes('date') || key.includes('_on')) {
-      // If it's already a formatted date object
-      if (typeof value === 'object' && value.$date) {
+    if (key.includes("date") || key.includes("_on")) {
+      if (typeof value === "object" && value.$date) {
         return formatDateTime(value.$date);
       }
-      
-      // If it's a string date (like "2025-11-14T12:42:49.624000")
-      if (typeof value === 'string' && (value.includes('T') || value.includes('-'))) {
-        try {
-          const date = new Date(value);
-          if (!isNaN(date.getTime())) {
-            return formatDateTime(date);
-          }
-        } catch (e) {
-          console.error('Date parse error:', e);
+
+      if (typeof value === "string" || value instanceof Date) {
+        const candidate = new Date(value);
+        if (!Number.isNaN(candidate.getTime())) {
+          return formatDateTime(candidate);
         }
-      }
-      
-      // If it's already a Date object
-      if (value instanceof Date) {
-        return formatDateTime(value);
       }
     }
 
-    // Handle arrays
     if (Array.isArray(value)) {
       return value.join(", ");
     }
 
-    // Handle objects (but not dates we already processed)
-    if (typeof value === 'object') {
+    if (typeof value === "object") {
       return JSON.stringify(value);
     }
 
-    // Return as string
     return String(value);
   };
 
-  const formatKey = (key) => {
-    return key
-      .replace(/_/g, ' ')
-      .replace(/\b\w/g, (c) => c.toUpperCase());
-  };
+  const formatKey = (key) =>
+    key
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (match) => match.toUpperCase());
 
   return (
-    <div className="panel">
-      <h2>📜 Change Logs</h2>
-      <p className="muted">All activity on employees' leave requests</p>
+    <section className="audit-workspace">
+      <header className="admin-hero">
+        <div>
+          <div className="admin-section-overline">Audit Trail</div>
+          <h1>Audit Logs</h1>
+          <p>
+            Review every leave workflow change, see who performed it, and inspect before-and-after
+            state without leaving the admin workspace.
+          </p>
+        </div>
 
-      {Object.keys(grouped).length === 0 && (
-        <div style={{ marginTop: 40, textAlign: "center", color: "#9ca3af" }}>
-          <div style={{ fontSize: 48 }}>📘</div>
-          <div>No logs yet</div>
+        <div className="admin-hero-meta">
+          <div className="admin-hero-meta-item">
+            <span>Total events</span>
+            <strong>{logs.length}</strong>
+          </div>
+          <div className="admin-hero-meta-item">
+            <span>Tracked requests</span>
+            <strong>{groupedEntries.length}</strong>
+          </div>
+          <div className="admin-hero-meta-item">
+            <span>Coverage</span>
+            <strong>Leave actions</strong>
+          </div>
+        </div>
+      </header>
+
+      <section className="audit-summary-grid">
+        <article className="fiori-stat-card">
+          <div className="fiori-stat-topline">
+            <span className="fiori-stat-label">Log Events</span>
+            <History size={18} />
+          </div>
+          <div className="fiori-stat-value">{logs.length}</div>
+          <div className="fiori-stat-note">Detailed change events recorded in the log stream</div>
+        </article>
+
+        <article className="fiori-stat-card">
+          <div className="fiori-stat-topline">
+            <span className="fiori-stat-label">Requests Covered</span>
+            <ClipboardList size={18} />
+          </div>
+          <div className="fiori-stat-value">{groupedEntries.length}</div>
+          <div className="fiori-stat-note">Unique leave requests with recorded audit activity</div>
+        </article>
+
+        <article className="fiori-stat-card">
+          <div className="fiori-stat-topline">
+            <span className="fiori-stat-label">Traceability</span>
+            <ShieldCheck size={18} />
+          </div>
+          <div className="fiori-stat-value audit-stat-text">End-to-end</div>
+          <div className="fiori-stat-note">Each entry includes actor, timestamp, and data deltas</div>
+        </article>
+      </section>
+
+      {loading ? (
+        <div className="fiori-loading-card">
+          <History size={28} />
+          <div>
+            <strong>Loading audit logs</strong>
+            <p>Collecting recorded leave events and change history.</p>
+          </div>
+        </div>
+      ) : error ? (
+        <div className="admin-empty-state">
+          <ClipboardList size={28} />
+          <div>
+            <strong>{error}</strong>
+            <p>Try refreshing the page after the audit service is available again.</p>
+          </div>
+        </div>
+      ) : groupedEntries.length === 0 ? (
+        <div className="admin-empty-state">
+          <ClipboardList size={28} />
+          <div>
+            <strong>No audit logs yet</strong>
+            <p>Leave workflow changes will appear here once activity is recorded.</p>
+          </div>
+        </div>
+      ) : (
+        <div className="audit-log-list">
+          {groupedEntries.map(([leaveId, items]) => {
+            const first = items[0];
+
+            return (
+              <section key={leaveId} className="fiori-panel">
+                <div className="audit-log-header">
+                  <div className="audit-log-identity">
+                    <div className="audit-log-avatar">
+                      <UserRound size={16} />
+                    </div>
+                    <div>
+                      <h3>{first.employee_name || "Unknown employee"}</h3>
+                      <p>
+                        {first.employeeId || "No ID"} • {first.employee_designation || "No designation"} •{" "}
+                        {first.employee_department || "No department"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <button className="fiori-button secondary" onClick={() => toggleExpand(leaveId)}>
+                    {expanded[leaveId] ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    <span>{expanded[leaveId] ? "Hide logs" : "View logs"}</span>
+                  </button>
+                </div>
+
+                <div className="audit-log-meta">
+                  <span>Leave Request: {leaveId}</span>
+                  <span>{items.length} event{items.length !== 1 ? "s" : ""}</span>
+                  <span>Latest: {formatDateTime(first.timestamp)}</span>
+                </div>
+
+                {expanded[leaveId] && (
+                  <div className="audit-log-events">
+                    {items.map((log) => (
+                      <article key={log._id} className="audit-log-event">
+                        <div className="audit-log-event-top">
+                          <div>
+                            <strong>{log.action}</strong>
+                            <p>Performed by {log.performed_by || "Unknown actor"}</p>
+                          </div>
+                          <span>{formatDateTime(log.timestamp)}</span>
+                        </div>
+
+                        {log.remarks && <div className="audit-log-remarks">{log.remarks}</div>}
+
+                        {(log.old_data || log.new_data) && (
+                          <div
+                            className={`audit-log-diff-grid ${
+                              log.old_data && log.new_data ? "" : "is-single"
+                            }`}
+                          >
+                            {log.old_data && (
+                              <div className="audit-log-diff-card is-before">
+                                <strong>Before</strong>
+                                {Object.entries(log.old_data)
+                                  .map(([key, value]) => {
+                                    const formatted = formatValue(key, value);
+                                    if (formatted === null) return null;
+
+                                    return (
+                                      <div key={key} className="audit-log-diff-row">
+                                        <span>{formatKey(key)}</span>
+                                        <b>{formatted}</b>
+                                      </div>
+                                    );
+                                  })
+                                  .filter(Boolean)}
+                              </div>
+                            )}
+
+                            {log.new_data && (
+                              <div className="audit-log-diff-card is-after">
+                                <strong>After</strong>
+                                {Object.entries(log.new_data)
+                                  .map(([key, value]) => {
+                                    const formatted = formatValue(key, value);
+                                    if (formatted === null) return null;
+
+                                    return (
+                                      <div key={key} className="audit-log-diff-row">
+                                        <span>{formatKey(key)}</span>
+                                        <b>{formatted}</b>
+                                      </div>
+                                    );
+                                  })
+                                  .filter(Boolean)}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+            );
+          })}
         </div>
       )}
-
-      <div style={{ marginTop: 24, display: "flex", flexDirection: "column", gap: 18 }}>
-        {Object.entries(grouped).map(([leaveId, items]) => {
-          const first = items[0]; // newest log
-  
-          return (
-            <div
-              key={leaveId}
-              className="card"
-              style={{
-                padding: 20,
-                borderLeft: "6px solid #3b82f6",
-                background: "#f9fafb",
-              }}
-            >
-              {/* Summary row */}
-              <div
-                onClick={() => toggleExpand(leaveId)}
-                style={{
-                  cursor: "pointer",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <div>
-                  <strong style={{ fontSize: 16 }}>
-                    {first.employee_name} ({first.employeeId})
-                  </strong>
-                  <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-                    {first.employee_designation} • {first.employee_department}
-                  </div>
-                </div>
-
-                <button
-                  style={{
-                    border: "1px solid #d1d5db",
-                    borderRadius: 6,
-                    padding: "6px 12px",
-                    background: "white",
-                    cursor: "pointer",
-                  }}
-                >
-                  {expanded[leaveId] ? "Hide" : "View Logs"}
-                </button>
-              </div>
-
-              {/* Expanded logs */}
-              {expanded[leaveId] && (
-                <div style={{ marginTop: 16, paddingLeft: 12 }}>
-                  {items.map((log) => (
-                    <div
-                      key={log._id}
-                      style={{
-                        background: "white",
-                        padding: 16,
-                        borderRadius: 8,
-                        marginBottom: 12,
-                        border: "1px solid #e5e7eb",
-                      }}
-                    >
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <strong style={{ fontSize: 15, color: "#111827" }}>
-                          {log.action}
-                        </strong>
-                        <span style={{ fontSize: 12, color: "#6b7280" }}>
-                          {formatDateTime(log.timestamp)}
-                        </span>
-                      </div>
-
-                      <div className="muted" style={{ marginTop: 6, fontSize: 13 }}>
-                        Performed by: <strong>{log.performed_by}</strong>
-                      </div>
-
-                      {log.remarks && (
-                        <div style={{ 
-                          marginTop: 8, 
-                          fontStyle: "italic",
-                          padding: "8px 12px",
-                          background: "#fffbeb",
-                          borderRadius: 6,
-                          fontSize: 13,
-                          color: "#92400e",
-                          border: "1px solid #fcd34d"
-                        }}>
-                          💬 {log.remarks}
-                        </div>
-                      )}
-
-                      {/* 👇 UPDATED Changes Section */}
-                      {(log.old_data || log.new_data) && (
-                        <div
-                          style={{
-                            marginTop: 12,
-                            display: "grid",
-                            gridTemplateColumns: log.old_data && log.new_data ? "1fr 1fr" : "1fr",
-                            gap: 16,
-                          }}
-                        >
-                          {/* BEFORE section */}
-                          {log.old_data && (
-                            <div style={{
-                              background: "#fef2f2",
-                              padding: 14,
-                              borderRadius: 8,
-                              border: "1px solid #fca5a5"
-                            }}>
-                              <strong style={{ color: "#dc2626", display: "block", marginBottom: 8, fontSize: 13 }}>
-                                ❌ Before:
-                              </strong>
-
-                              {Object.entries(log.old_data)
-                                .map(([key, val]) => {
-                                  const formatted = formatValue(key, val);
-                                  if (formatted === null) return null; // Skip null values
-                                  
-                                  return (
-                                    <div
-                                      key={key}
-                                      style={{
-                                        display: "flex",
-                                        justifyContent: "space-between",
-                                        padding: "6px 8px",
-                                        borderBottom: "1px solid #fecaca",
-                                        fontSize: 12,
-                                      }}
-                                    >
-                                      <span style={{ fontWeight: 500, color: "#991b1b" }}>
-                                        {formatKey(key)}:
-                                      </span>
-                                      <span style={{ fontWeight: 600, color: "#dc2626", wordBreak: "break-word", maxWidth: "60%" }}>
-                                        {formatted}
-                                      </span>
-                                    </div>
-                                  );
-                                })
-                                .filter(Boolean) // Remove null entries
-                              }
-                            </div>
-                          )}
-
-                          {/* AFTER section */}
-                          {log.new_data && (
-                            <div style={{
-                              background: "#f0fdf4",
-                              padding: 14,
-                              borderRadius: 8,
-                              border: "1px solid #86efac"
-                            }}>
-                              <strong style={{ color: "#16a34a", display: "block", marginBottom: 8, fontSize: 13 }}>
-                                ✅ After:
-                              </strong>
-
-                              {Object.entries(log.new_data)
-                                .map(([key, val]) => {
-                                  const formatted = formatValue(key, val);
-                                  if (formatted === null) return null; // Skip null values
-                                  
-                                  return (
-                                    <div
-                                      key={key}
-                                      style={{
-                                        display: "flex",
-                                        justifyContent: "space-between",
-                                        padding: "6px 8px",
-                                        borderBottom: "1px solid #bbf7d0",
-                                        fontSize: 12,
-                                      }}
-                                    >
-                                      <span style={{ fontWeight: 500, color: "#166534" }}>
-                                        {formatKey(key)}:
-                                      </span>
-                                      <span style={{ fontWeight: 600, color: "#16a34a", wordBreak: "break-word", maxWidth: "60%" }}>
-                                        {formatted}
-                                      </span>
-                                    </div>
-                                  );
-                                })
-                                .filter(Boolean) // Remove null entries
-                              }
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
+    </section>
   );
 }

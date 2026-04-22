@@ -1,20 +1,38 @@
 import React, { useState } from "react";
+import { Briefcase, Building2, ShieldCheck, UserPlus } from "lucide-react";
+
+const emptyForm = {
+  employeeId: "",
+  name: "",
+  email: "",
+  password: "",
+  designation: "",
+  role: "Employee",
+  department: "",
+  shiftTimings: "",
+  projects: "",
+  reportsToEmail: "",
+  dateOfJoining: "",
+  dateOfBirth: "",
+  workLocation: "",
+  peopleLeadEmail: "",
+};
 
 const UserForm = ({ onSaved }) => {
-  const [form, setForm] = useState({
-    employeeId: "",
-    name:"", email:"", password:"", designation:"", role:"Employee",
-    department:"", shiftTimings:"", projects:"", reportsToEmail:"", 
-    dateOfJoining:"", dateOfBirth:"", workLocation:"", peopleLeadEmail:"" // NEW FIELD
-  });
+  const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
 
-  const change = (e) => setForm({...form, [e.target.name]: e.target.value });
+  const change = (event) =>
+    setForm({ ...form, [event.target.name]: event.target.value });
 
-  const submit = async (e) => {
-    e.preventDefault();
+  const resetForm = () => setForm(emptyForm);
+
+  const submit = async (event) => {
+    event.preventDefault();
     setLoading(true);
-    
+    setMessage("");
+
     const payload = {
       employeeId: form.employeeId,
       name: form.name,
@@ -24,263 +42,296 @@ const UserForm = ({ onSaved }) => {
       role: form.role,
       department: form.department,
       shiftTimings: form.shiftTimings,
-      projects: form.projects ? form.projects.split(",").map(s => s.trim()) : [],
+      projects: form.projects ? form.projects.split(",").map((item) => item.trim()) : [],
       reportsToEmail: form.reportsToEmail || null,
-      dateOfJoining: form.dateOfJoining ? new Date(form.dateOfJoining).toISOString() : new Date().toISOString(),
-      dateOfBirth: form.dateOfBirth ? new Date(form.dateOfBirth).toISOString() : null, // NEW FIELD
-      workLocation: form.workLocation || "",  // ← ADD THIS
-      peopleLeadEmail: form.peopleLeadEmail || null  // ← ADD THIS
+      dateOfJoining: form.dateOfJoining
+        ? new Date(form.dateOfJoining).toISOString()
+        : new Date().toISOString(),
+      dateOfBirth: form.dateOfBirth ? new Date(form.dateOfBirth).toISOString() : null,
+      workLocation: form.workLocation || "",
+      peopleLeadEmail: form.peopleLeadEmail || null,
     };
-    
+
     try {
-      const res = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/users/add_user`, {
-        method:"POST", 
-        headers:{"Content-Type":"application/json"}, 
-        body: JSON.stringify(payload)
+      const response = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/users/add_user`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (res.ok) {
-        alert("User added ✓");
-        setForm({
-          employeeId: "",
-          name:"", email:"", password:"", designation:"", role:"Employee", 
-          department:"", shiftTimings:"", projects:"", reportsToEmail:"", 
-          dateOfJoining:"", dateOfBirth:"" // RESET THIS TOO
-        });
-        if (onSaved) onSaved();
-      } else {
-        alert("Error: " + (data.error || "Failed to add"));
+      const data = await response.json();
+
+      if (!response.ok) {
+        setMessage(data.error || "Failed to add employee");
+        return;
       }
-    } catch(err){
-      console.error(err);
-      alert("Network error");
-    } finally { 
-      setLoading(false); 
+
+      setMessage("Employee added successfully");
+      resetForm();
+      if (onSaved) onSaved();
+    } catch (error) {
+      console.error(error);
+      setMessage("Network error");
+    } finally {
+      setLoading(false);
+      window.setTimeout(() => setMessage(""), 3000);
     }
   };
 
   return (
-    <div className="panel">
-      <h3>Add / Create Employee</h3>
-      <p className="muted">Fill the details to add an employee. Reports-to accepts manager email.</p>
-
-      <form onSubmit={submit} style={{marginTop:12}}>
-        <div className="form-grid">
-          {/* Employee ID */}
-          <div>
-            <label style={{ fontSize: 12, color: "#6b7280", display: "block", marginBottom: 4 }}>
-              Employee ID *
-            </label>
-            <input 
-              className="input" 
-              name="employeeId" 
-              placeholder="e.g., EMP001, TCS12345" 
-              value={form.employeeId} 
-              onChange={change} 
-              required 
-            />
-          </div>
-
-          <div>
-            <label style={{ fontSize: 12, color: "#6b7280", display: "block", marginBottom: 4 }}>
-              Full Name *
-            </label>
-            <input 
-              className="input" 
-              name="name" 
-              placeholder="Full name" 
-              value={form.name} 
-              onChange={change} 
-              required 
-            />
-          </div>
-
-          <div>
-            <label style={{ fontSize: 12, color: "#6b7280", display: "block", marginBottom: 4 }}>
-              Email *
-            </label>
-            <input 
-              className="input" 
-              name="email" 
-              type="email"
-              placeholder="Email" 
-              value={form.email} 
-              onChange={change} 
-              required 
-            />
-          </div>
-
-          <div>
-            <label style={{ fontSize: 12, color: "#6b7280", display: "block", marginBottom: 4 }}>
-              Password *
-            </label>
-            <input 
-              className="input" 
-              name="password" 
-              type="password"
-              placeholder="Password" 
-              value={form.password} 
-              onChange={change} 
-              required 
-            />
-          </div>
-
-          <div>
-            <label style={{ fontSize: 12, color: "#6b7280", display: "block", marginBottom: 4 }}>
-              Designation *
-            </label>
-            <input 
-              className="input" 
-              name="designation" 
-              placeholder="Designation" 
-              value={form.designation} 
-              onChange={change} 
-              required 
-            />
-          </div>
-
-          <div>
-            <label style={{ fontSize: 12, color: "#6b7280", display: "block", marginBottom: 4 }}>
-              Role *
-            </label>
-            <select 
-              className="input" 
-              name="role" 
-              value={form.role} 
-              onChange={change}
-            >
-              <option>Employee</option>
-              <option>Manager</option>
-              <option>Admin</option>
-            </select>
-          </div>
-
-          <div>
-            <label style={{ fontSize: 12, color: "#6b7280", display: "block", marginBottom: 4 }}>
-              Department
-            </label>
-            <input 
-              className="input" 
-              name="department" 
-              placeholder="Department" 
-              value={form.department} 
-              onChange={change} 
-            />
-          </div>
-
-          <div>
-            <label style={{ fontSize: 12, color: "#6b7280", display: "block", marginBottom: 4 }}>
-              Shift Timings
-            </label>
-            <input 
-              className="input" 
-              name="shiftTimings" 
-              placeholder="e.g., 9:00 AM - 6:00 PM" 
-              value={form.shiftTimings} 
-              onChange={change} 
-            />
-          </div>
-
-          <div>
-            <label style={{ fontSize: 12, color: "#6b7280", display: "block", marginBottom: 4 }}>
-              Date of Joining
-            </label>
-            <input 
-              className="input" 
-              name="dateOfJoining" 
-              type="date"
-              value={form.dateOfJoining} 
-              onChange={change} 
-            />
-          </div>
-
-          {/* NEW FIELD - Date of Birth */}
-          <div>
-            <label style={{ fontSize: 12, color: "#6b7280", display: "block", marginBottom: 4 }}>
-              Date of Birth
-            </label>
-            <input 
-              className="input" 
-              name="dateOfBirth" 
-              type="date"
-              value={form.dateOfBirth} 
-              onChange={change}
-              max={new Date().toISOString().split('T')[0]} // Can't be in future
-            />
-          </div>
-
-          <div style={{ gridColumn: "1 / -1" }}>
-            <label style={{ fontSize: 12, color: "#6b7280", display: "block", marginBottom: 4 }}>
-              Projects (comma-separated)
-            </label>
-            <input 
-              className="input" 
-              name="projects" 
-              placeholder="Project A, Project B" 
-              value={form.projects} 
-              onChange={change} 
-            />
-          </div>
-
-          <div>
-            <label style={{ fontSize: 12, color: "#6b7280", display: "block", marginBottom: 4 }}>
-              Tech Lead (Manager Email)
-            </label>
-            <input 
-              className="input" 
-              name="reportsToEmail" 
-              placeholder="manager@company.com" 
-              value={form.reportsToEmail} 
-              onChange={change} 
-            />
-          </div>
-
-          <div>
-            <label style={{ fontSize: 12, color: "#6b7280", display: "block", marginBottom: 4 }}>
-              People Lead / HR Manager Email
-            </label>
-            <input 
-              className="input" 
-              name="peopleLeadEmail" 
-              placeholder="hr@company.com" 
-              value={form.peopleLeadEmail} 
-              onChange={change} 
-            />
-          </div>
-
-          <div>
-            <label style={{ fontSize: 12, color: "#6b7280", display: "block", marginBottom: 4 }}>
-              Work Location
-            </label>
-            <input 
-              className="input" 
-              name="workLocation" 
-              placeholder="e.g., Hyderabad Office, Remote, Mumbai HQ" 
-              value={form.workLocation} 
-              onChange={change} 
-            />
-          </div>
+    <section className="setup-workspace">
+      <header className="admin-hero">
+        <div>
+          <div className="admin-section-overline">Workforce Setup</div>
+          <h1>Employee Setup</h1>
+          <p>
+            Create employee records with reporting lines, work details, projects, and leadership
+            metadata in a single onboarding form.
+          </p>
         </div>
 
-        <div style={{marginTop:14, display:"flex", gap:10}}>
-          <button className="btn" type="submit" disabled={loading}>
-            {loading ? "Adding..." : "Add Employee"}
-          </button>
-          <button 
-            type="button" 
-            className="btn ghost" 
-            onClick={()=>setForm({
-              employeeId: "",
-              name:"", email:"", password:"", designation:"", role:"Employee", 
-              department:"", shiftTimings:"", projects:"", reportsToEmail:"", 
-              dateOfJoining:"", dateOfBirth:"", workLocation:"", peopleLeadEmail:""  // ← ADDED
-            })}
-          >
-            Reset
-          </button>
+        <div className="admin-hero-meta">
+          <div className="admin-hero-meta-item">
+            <span>Form Scope</span>
+            <strong>Employee onboarding</strong>
+          </div>
+          <div className="admin-hero-meta-item">
+            <span>Includes</span>
+            <strong>Profile and reporting data</strong>
+          </div>
+          <div className="admin-hero-meta-item">
+            <span>Action</span>
+            <strong>Create workforce record</strong>
+          </div>
         </div>
-      </form>
-    </div>
+      </header>
+
+      <section className="setup-summary-grid">
+        <article className="fiori-stat-card">
+          <div className="fiori-stat-topline">
+            <span className="fiori-stat-label">Identity</span>
+            <UserPlus size={18} />
+          </div>
+          <div className="fiori-stat-value setup-stat-text">Profile</div>
+          <div className="fiori-stat-note">Employee ID, contact information, password, and role</div>
+        </article>
+
+        <article className="fiori-stat-card">
+          <div className="fiori-stat-topline">
+            <span className="fiori-stat-label">Organization</span>
+            <Building2 size={18} />
+          </div>
+          <div className="fiori-stat-value setup-stat-text">Reporting</div>
+          <div className="fiori-stat-note">Department, managers, people lead, and work location</div>
+        </article>
+
+        <article className="fiori-stat-card">
+          <div className="fiori-stat-topline">
+            <span className="fiori-stat-label">Assignments</span>
+            <Briefcase size={18} />
+          </div>
+          <div className="fiori-stat-value setup-stat-text">Projects</div>
+          <div className="fiori-stat-note">Project list, shift timing, and joining timeline</div>
+        </article>
+      </section>
+
+      <section className="fiori-panel">
+        <div className="fiori-panel-header">
+          <div>
+            <h3>Create Employee Record</h3>
+            <p>Fill the required fields first, then add optional org and profile information</p>
+          </div>
+          <span className="fiori-status-pill is-neutral">
+            <ShieldCheck size={14} />
+            Standard onboarding
+          </span>
+        </div>
+
+        <form onSubmit={submit}>
+          <div className="setup-form-grid">
+            <label className="fiori-form-field">
+              <label>Employee ID</label>
+              <input
+                className="input"
+                name="employeeId"
+                placeholder="EMP001"
+                value={form.employeeId}
+                onChange={change}
+                required
+              />
+            </label>
+
+            <label className="fiori-form-field">
+              <label>Full Name</label>
+              <input
+                className="input"
+                name="name"
+                placeholder="Employee full name"
+                value={form.name}
+                onChange={change}
+                required
+              />
+            </label>
+
+            <label className="fiori-form-field">
+              <label>Email</label>
+              <input
+                className="input"
+                name="email"
+                type="email"
+                placeholder="employee@company.com"
+                value={form.email}
+                onChange={change}
+                required
+              />
+            </label>
+
+            <label className="fiori-form-field">
+              <label>Password</label>
+              <input
+                className="input"
+                name="password"
+                type="password"
+                placeholder="Temporary password"
+                value={form.password}
+                onChange={change}
+                required
+              />
+            </label>
+
+            <label className="fiori-form-field">
+              <label>Designation</label>
+              <input
+                className="input"
+                name="designation"
+                placeholder="Software Engineer"
+                value={form.designation}
+                onChange={change}
+                required
+              />
+            </label>
+
+            <label className="fiori-form-field">
+              <label>Role</label>
+              <select className="input" name="role" value={form.role} onChange={change}>
+                <option>Employee</option>
+                <option>Manager</option>
+                <option>Admin</option>
+              </select>
+            </label>
+
+            <label className="fiori-form-field">
+              <label>Department</label>
+              <input
+                className="input"
+                name="department"
+                placeholder="People Operations"
+                value={form.department}
+                onChange={change}
+              />
+            </label>
+
+            <label className="fiori-form-field">
+              <label>Shift Timings</label>
+              <input
+                className="input"
+                name="shiftTimings"
+                placeholder="9:00 AM - 6:00 PM"
+                value={form.shiftTimings}
+                onChange={change}
+              />
+            </label>
+
+            <label className="fiori-form-field">
+              <label>Date of Joining</label>
+              <input
+                className="input"
+                name="dateOfJoining"
+                type="date"
+                value={form.dateOfJoining}
+                onChange={change}
+              />
+            </label>
+
+            <label className="fiori-form-field">
+              <label>Date of Birth</label>
+              <input
+                className="input"
+                name="dateOfBirth"
+                type="date"
+                value={form.dateOfBirth}
+                onChange={change}
+                max={new Date().toISOString().split("T")[0]}
+              />
+            </label>
+
+            <label className="fiori-form-field setup-wide-field">
+              <label>Projects</label>
+              <input
+                className="input"
+                name="projects"
+                placeholder="Project Alpha, Project Beta"
+                value={form.projects}
+                onChange={change}
+              />
+            </label>
+
+            <label className="fiori-form-field">
+              <label>Tech Lead Email</label>
+              <input
+                className="input"
+                name="reportsToEmail"
+                placeholder="manager@company.com"
+                value={form.reportsToEmail}
+                onChange={change}
+              />
+            </label>
+
+            <label className="fiori-form-field">
+              <label>People Lead Email</label>
+              <input
+                className="input"
+                name="peopleLeadEmail"
+                placeholder="hr@company.com"
+                value={form.peopleLeadEmail}
+                onChange={change}
+              />
+            </label>
+
+            <label className="fiori-form-field">
+              <label>Work Location</label>
+              <input
+                className="input"
+                name="workLocation"
+                placeholder="Hyderabad office or remote"
+                value={form.workLocation}
+                onChange={change}
+              />
+            </label>
+          </div>
+
+          <div className="admin-modal-actions">
+            <button type="button" className="fiori-button secondary" onClick={resetForm}>
+              Reset
+            </button>
+            <button type="submit" className="fiori-button primary" disabled={loading}>
+              {loading ? "Creating..." : "Add employee"}
+            </button>
+          </div>
+        </form>
+      </section>
+
+      {message && (
+        <div
+          className={`admin-toast ${
+            message.toLowerCase().includes("failed") || message.toLowerCase().includes("error")
+              ? "is-error"
+              : "is-success"
+          }`}
+        >
+          {message}
+        </div>
+      )}
+    </section>
   );
 };
 

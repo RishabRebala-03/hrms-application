@@ -1,53 +1,122 @@
-// src/components/TeaCoffee.js
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
+import {
+  CalendarDays,
+  Coffee,
+  CupSoda,
+  ListChecks,
+  Milk,
+  RefreshCw,
+  ShieldBan,
+  ShoppingBag,
+  Users,
+  X,
+} from "lucide-react";
 import "../App.css";
 
 const API_BASE = `${process.env.REACT_APP_BACKEND_URL}/api/tea_coffee`;
-
 const MORNING_CUTOFF = "10:30";
 const EVENING_CUTOFF = "14:30";
+const BEVERAGE_OPTIONS = ["tea", "coffee", "milk"];
 
-// ===========================================
-// YEARLY CALENDAR FOR BLOCKING DATES
-// ===========================================
+const getBeverageIcon = (beverage) => {
+  switch (beverage) {
+    case "tea":
+      return "Tea";
+    case "coffee":
+      return "Coffee";
+    case "milk":
+      return "Milk";
+    default:
+      return "";
+  }
+};
+
+const getBeverageGlyph = (beverage) => {
+  switch (beverage) {
+    case "tea":
+      return <CupSoda size={16} />;
+    case "coffee":
+      return <Coffee size={16} />;
+    case "milk":
+      return <Milk size={16} />;
+    default:
+      return null;
+  }
+};
+
+const formatDateLabel = (dateStr) => {
+  const date = new Date(dateStr);
+  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+  return {
+    day: days[date.getDay()],
+    date: date.getDate(),
+    month: months[date.getMonth()],
+    full: `${days[date.getDay()]}, ${date.getDate()} ${months[date.getMonth()]}`,
+  };
+};
+
+const BeveragePill = ({ beverage, locked = false }) => {
+  if (!beverage) return null;
+
+  return (
+    <span className={`tea-beverage-pill ${locked ? "is-locked" : ""}`}>
+      {getBeverageGlyph(beverage)}
+      <span>{getBeverageIcon(beverage)}</span>
+      {locked ? <span className="tea-beverage-lock">Locked</span> : null}
+    </span>
+  );
+};
+
+const SlotSelector = ({ label, cutoff, value, locked, onToggle }) => (
+  <div className="tea-slot-section">
+    <div className="tea-slot-header">
+      <strong>{label}</strong>
+      <span>{cutoff}</span>
+      {locked ? <em>Cutoff passed</em> : null}
+    </div>
+    <div className="tea-option-row">
+      {BEVERAGE_OPTIONS.map((option) => (
+        <button
+          key={option}
+          type="button"
+          className={`tea-option-chip ${value === option ? "is-selected" : ""}`}
+          onClick={() => onToggle(option)}
+          disabled={locked}
+        >
+          {getBeverageGlyph(option)}
+          <span>{getBeverageIcon(option)}</span>
+        </button>
+      ))}
+    </div>
+  </div>
+);
+
 const YearlyCalendarModal = ({ onClose, blockedDates, onBlockDate, onUnblockDate }) => {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedDateToBlock, setSelectedDateToBlock] = useState(null);
   const [blockReason, setBlockReason] = useState("");
-  const [showBlockDialog, setShowBlockDialog] = useState(false);
 
   const months = [
     "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"
+    "July", "August", "September", "October", "November", "December",
   ];
 
-  const isDateBlocked = (date) => {
-    return blockedDates.some(bd => bd.date === date);
-  };
+  const isDateBlocked = (date) => blockedDates.some((item) => item.date === date);
 
-  const getBlockReason = (date) => {
-    const blocked = blockedDates.find(bd => bd.date === date);
-    return blocked ? blocked.reason : "";
-  };
+  const getBlockReason = (date) => blockedDates.find((item) => item.date === date)?.reason || "";
 
   const handleDateClick = (dateStr) => {
     if (isDateBlocked(dateStr)) {
       if (window.confirm(`Unblock ${dateStr}?\nReason: ${getBlockReason(dateStr)}`)) {
         onUnblockDate(dateStr);
       }
-    } else {
-      setSelectedDateToBlock(dateStr);
-      setShowBlockDialog(true);
+      return;
     }
-  };
 
-  const handleBlockSubmit = () => {
-    if (!selectedDateToBlock) return;
-    onBlockDate(selectedDateToBlock, blockReason || "Unavailable");
-    setShowBlockDialog(false);
-    setSelectedDateToBlock(null);
-    setBlockReason("");
+    setSelectedDateToBlock(dateStr);
   };
 
   const renderMonth = (monthIndex) => {
@@ -55,683 +124,423 @@ const YearlyCalendarModal = ({ onClose, blockedDates, onBlockDate, onUnblockDate
     const lastDay = new Date(selectedYear, monthIndex + 1, 0);
     const daysInMonth = lastDay.getDate();
     const startingDayOfWeek = firstDay.getDay();
+    const cells = [];
 
-    const days = [];
-    
-    for (let i = 0; i < startingDayOfWeek; i++) {
-      days.push(<div key={`empty-${i}`} style={{ padding: 8 }} />);
+    for (let index = 0; index < startingDayOfWeek; index += 1) {
+      cells.push(<div key={`empty-${monthIndex}-${index}`} className="tea-block-cell empty" />);
     }
 
-    for (let day = 1; day <= daysInMonth; day++) {
-      const dateStr = `${selectedYear}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const dateStr = `${selectedYear}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
       const blocked = isDateBlocked(dateStr);
-      const dayOfWeek = new Date(selectedYear, monthIndex, day).getDay();
-      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+      const weekday = new Date(selectedYear, monthIndex, day).getDay();
+      const isWeekend = weekday === 0 || weekday === 6;
 
-      days.push(
-        <div
-          key={day}
+      cells.push(
+        <button
+          key={dateStr}
+          type="button"
+          className={`tea-block-cell ${blocked ? "is-blocked" : ""} ${isWeekend ? "is-weekend" : ""}`}
           onClick={() => !isWeekend && handleDateClick(dateStr)}
-          style={{
-            padding: 8,
-            textAlign: "center",
-            cursor: isWeekend ? "not-allowed" : "pointer",
-            background: blocked ? "#fee2e2" : isWeekend ? "#f3f4f6" : "white",
-            border: blocked ? "2px solid #ef4444" : "1px solid #e5e7eb",
-            borderRadius: 4,
-            fontSize: 13,
-            fontWeight: blocked ? 600 : 400,
-            color: isWeekend ? "#9ca3af" : blocked ? "#dc2626" : "#374151",
-            opacity: isWeekend ? 0.5 : 1,
-            transition: "all 0.2s",
-          }}
           title={blocked ? `Blocked: ${getBlockReason(dateStr)}` : isWeekend ? "Weekend" : "Click to block"}
+          disabled={isWeekend}
         >
           {day}
-        </div>
+        </button>
       );
     }
 
     return (
-      <div style={{ marginBottom: 20 }}>
-        <h4 style={{ marginBottom: 10, fontSize: 14, fontWeight: 600, color: "#374151" }}>
-          {months[monthIndex]}
-        </h4>
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(7, 1fr)",
-          gap: 4,
-          fontSize: 12
-        }}>
-          {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
-            <div key={i} style={{ padding: 4, textAlign: "center", fontWeight: 600, color: "#6b7280" }}>
-              {d}
-            </div>
+      <article key={months[monthIndex]} className="tea-block-month">
+        <h4>{months[monthIndex]}</h4>
+        <div className="tea-block-weekdays">
+          {["S", "M", "T", "W", "T", "F", "S"].map((day) => (
+            <span key={`${months[monthIndex]}-${day}`}>{day}</span>
           ))}
-          {days}
         </div>
-      </div>
+        <div className="tea-block-grid">{cells}</div>
+      </article>
     );
   };
 
   return (
-    <div style={{
-      position: "fixed",
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      background: "rgba(0,0,0,0.5)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      zIndex: 1000,
-      padding: 20
-    }}>
-      <div style={{
-        background: "white",
-        borderRadius: 12,
-        maxWidth: 1200,
-        width: "100%",
-        maxHeight: "90vh",
-        overflow: "auto",
-        boxShadow: "0 20px 60px rgba(0,0,0,0.3)"
-      }}>
-        <div style={{
-          padding: 24,
-          borderBottom: "2px solid #e5e7eb",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          position: "sticky",
-          top: 0,
-          background: "white",
-          zIndex: 10
-        }}>
+    <div className="admin-modal-overlay">
+      <div className="admin-modal admin-modal-wide">
+        <div className="admin-modal-header">
           <div>
-            <h2 style={{ margin: 0, fontSize: 24 }}>🗓️ Block Tea/Coffee Dates</h2>
-            <p style={{ margin: "8px 0 0 0", color: "#6b7280", fontSize: 14 }}>
-              Click on any date to block/unblock. Weekends are automatically disabled.
-            </p>
+            <h2>Manage Blocked Dates</h2>
+            <p>Block or unblock tea and coffee service dates. Weekends stay unavailable automatically.</p>
           </div>
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <button
-              onClick={() => setSelectedYear(selectedYear - 1)}
-              style={{
-                padding: "8px 16px",
-                background: "#f3f4f6",
-                border: "none",
-                borderRadius: 6,
-                cursor: "pointer",
-                fontWeight: 600
-              }}
-            >
-              ← {selectedYear - 1}
+          <div className="tea-modal-topbar">
+            <button className="fiori-button secondary" onClick={() => setSelectedYear(selectedYear - 1)}>
+              {selectedYear - 1}
             </button>
-            <span style={{ fontSize: 20, fontWeight: 700, minWidth: 80, textAlign: "center" }}>
-              {selectedYear}
-            </span>
-            <button
-              onClick={() => setSelectedYear(selectedYear + 1)}
-              style={{
-                padding: "8px 16px",
-                background: "#f3f4f6",
-                border: "none",
-                borderRadius: 6,
-                cursor: "pointer",
-                fontWeight: 600
-              }}
-            >
-              {selectedYear + 1} →
+            <span className="tea-year-label">{selectedYear}</span>
+            <button className="fiori-button secondary" onClick={() => setSelectedYear(selectedYear + 1)}>
+              {selectedYear + 1}
             </button>
-            <button
-              onClick={onClose}
-              style={{
-                padding: "8px 16px",
-                background: "#ef4444",
-                color: "white",
-                border: "none",
-                borderRadius: 6,
-                cursor: "pointer",
-                fontWeight: 600,
-                marginLeft: 20
-              }}
-            >
-              ✕ Close
+            <button className="fiori-button secondary danger" onClick={onClose}>
+              Close
             </button>
           </div>
         </div>
 
-        <div style={{
-          padding: 24,
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
-          gap: 24
-        }}>
-          {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(monthIndex => renderMonth(monthIndex))}
+        <div className="tea-block-month-grid">
+          {months.map((_, monthIndex) => renderMonth(monthIndex))}
         </div>
 
-        <div style={{
-          padding: 24,
-          borderTop: "2px solid #e5e7eb",
-          display: "flex",
-          gap: 20,
-          justifyContent: "center",
-          background: "#f9fafb"
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ width: 20, height: 20, background: "white", border: "1px solid #e5e7eb", borderRadius: 4 }} />
-            <span style={{ fontSize: 13 }}>Available</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ width: 20, height: 20, background: "#fee2e2", border: "2px solid #ef4444", borderRadius: 4 }} />
-            <span style={{ fontSize: 13 }}>Blocked</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ width: 20, height: 20, background: "#f3f4f6", border: "1px solid #e5e7eb", borderRadius: 4 }} />
-            <span style={{ fontSize: 13 }}>Weekend</span>
-          </div>
+        <div className="tea-block-legend">
+          <span><i /> Available</span>
+          <span><i className="is-blocked" /> Blocked</span>
+          <span><i className="is-weekend" /> Weekend</span>
         </div>
       </div>
 
-      {showBlockDialog && (
-        <div style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: "rgba(0,0,0,0.7)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 1001
-        }}>
-          <div style={{
-            background: "white",
-            padding: 30,
-            borderRadius: 12,
-            maxWidth: 400,
-            width: "90%",
-            boxShadow: "0 20px 60px rgba(0,0,0,0.3)"
-          }}>
-            <h3 style={{ marginBottom: 16 }}>🚫 Block Date</h3>
-            <p style={{ marginBottom: 16, color: "#6b7280" }}>
-              <strong>{selectedDateToBlock}</strong>
-            </p>
-            
-            <label style={{ display: "block", marginBottom: 8, fontWeight: 600 }}>
-              Reason (optional):
-            </label>
-            <input
-              type="text"
-              value={blockReason}
-              onChange={(e) => setBlockReason(e.target.value)}
-              placeholder="e.g., Holiday, Maintenance"
-              style={{
-                width: "100%",
-                padding: 10,
-                border: "2px solid #e5e7eb",
-                borderRadius: 6,
-                marginBottom: 20,
-                fontSize: 14
-              }}
-              autoFocus
-            />
+      {selectedDateToBlock ? (
+        <div className="admin-modal-overlay">
+          <div className="admin-modal">
+            <div className="admin-modal-header">
+              <div>
+                <h2>Block Date</h2>
+                <p>{selectedDateToBlock}</p>
+              </div>
+            </div>
 
-            <div style={{ display: "flex", gap: 10 }}>
+            <label className="fiori-form-field">
+              <label>Reason</label>
+              <input
+                className="input"
+                value={blockReason}
+                onChange={(event) => setBlockReason(event.target.value)}
+                placeholder="Holiday, maintenance, office closure"
+                autoFocus
+              />
+            </label>
+
+            <div className="admin-modal-actions">
               <button
-                onClick={handleBlockSubmit}
-                style={{
-                  flex: 1,
-                  padding: 12,
-                  background: "#ef4444",
-                  color: "white",
-                  border: "none",
-                  borderRadius: 6,
-                  cursor: "pointer",
-                  fontWeight: 600
-                }}
-              >
-                Block Date
-              </button>
-              <button
+                className="fiori-button secondary"
                 onClick={() => {
-                  setShowBlockDialog(false);
                   setSelectedDateToBlock(null);
                   setBlockReason("");
-                }}
-                style={{
-                  flex: 1,
-                  padding: 12,
-                  background: "#6b7280",
-                  color: "white",
-                  border: "none",
-                  borderRadius: 6,
-                  cursor: "pointer"
                 }}
               >
                 Cancel
               </button>
+              <button
+                className="fiori-button danger"
+                onClick={() => {
+                  onBlockDate(selectedDateToBlock, blockReason || "Unavailable");
+                  setSelectedDateToBlock(null);
+                  setBlockReason("");
+                }}
+              >
+                Block date
+              </button>
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 };
 
-// ===========================================
-// EMPLOYEE LIST MODAL FOR ADMIN
-// ===========================================
 const EmployeeListModal = ({ date, orders, onClose }) => {
-  const formatDate = (dateStr) => {
-    const d = new Date(dateStr);
-    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    return `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
-  };
-
-  const getBeverageIcon = (beverage) => {
-    switch(beverage) {
-      case "tea": return "🍵";
-      case "coffee": return "☕";
-      case "milk": return "🥛";
-      default: return "❌";
-    }
-  };
-
-  const getBeverageColor = (beverage) => {
-    switch(beverage) {
-      case "tea": return "#10b981";
-      case "coffee": return "#f59e0b";
-      case "milk": return "#3b82f6";
-      default: return "#9ca3af";
-    }
-  };
+  const teaCount = orders.filter((item) => item.morning === "tea" || item.evening === "tea").length;
+  const coffeeCount = orders.filter((item) => item.morning === "coffee" || item.evening === "coffee").length;
+  const milkCount = orders.filter((item) => item.morning === "milk" || item.evening === "milk").length;
 
   return (
-    <div style={{
-      position: "fixed",
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      background: "rgba(0,0,0,0.5)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      zIndex: 1000,
-      padding: 20
-    }}>
-      <div style={{
-        background: "white",
-        borderRadius: 12,
-        maxWidth: 800,
-        width: "100%",
-        maxHeight: "90vh",
-        overflow: "auto",
-        boxShadow: "0 20px 60px rgba(0,0,0,0.3)"
-      }}>
-        <div style={{
-          padding: 24,
-          borderBottom: "2px solid #e5e7eb",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          position: "sticky",
-          top: 0,
-          background: "white",
-          zIndex: 10
-        }}>
+    <div className="admin-modal-overlay">
+      <div className="admin-modal admin-modal-wide">
+        <div className="admin-modal-header">
           <div>
-            <h2 style={{ margin: 0, fontSize: 24 }}>👥 Employee Orders</h2>
-            <p style={{ margin: "8px 0 0 0", color: "#6b7280", fontSize: 14 }}>
-              {formatDate(date)} • {orders.length} orders
-            </p>
+            <h2>Employee Orders</h2>
+            <p>{formatDateLabel(date).full} • {orders.length} orders</p>
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              padding: "8px 16px",
-              background: "#ef4444",
-              color: "white",
-              border: "none",
-              borderRadius: 6,
-              cursor: "pointer",
-              fontWeight: 600
-            }}
-          >
-            ✕ Close
+          <button className="fiori-button secondary danger" onClick={onClose}>
+            Close
           </button>
         </div>
 
-        <div style={{ padding: 24 }}>
-          {orders.length === 0 ? (
-            <p style={{ textAlign: "center", color: "#6b7280", padding: 40 }}>
-              No orders for this date
-            </p>
-          ) : (
-            <>
-              {/* Summary Statistics */}
-              <div style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(3, 1fr)",
-                gap: 16,
-                marginBottom: 24,
-                padding: 20,
-                background: "#f9fafb",
-                borderRadius: 12,
-                border: "1px solid #e5e7eb"
-              }}>
-                {[
-                  { label: "🍵 Tea", count: orders.filter(o => o.morning === "tea" || o.evening === "tea").length, color: "#10b981" },
-                  { label: "☕ Coffee", count: orders.filter(o => o.morning === "coffee" || o.evening === "coffee").length, color: "#f59e0b" },
-                  { label: "🥛 Milk", count: orders.filter(o => o.morning === "milk" || o.evening === "milk").length, color: "#3b82f6" }
-                ].map(stat => (
-                  <div key={stat.label} style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: 24, fontWeight: 700, color: stat.color }}>{stat.count}</div>
-                    <div style={{ fontSize: 13, color: "#6b7280", marginTop: 4 }}>{stat.label}</div>
-                  </div>
-                ))}
-              </div>
+        <div className="tea-employee-summary">
+          <article className="fiori-stat-card">
+            <div className="fiori-stat-label">Tea</div>
+            <div className="fiori-stat-value">{teaCount}</div>
+          </article>
+          <article className="fiori-stat-card">
+            <div className="fiori-stat-label">Coffee</div>
+            <div className="fiori-stat-value">{coffeeCount}</div>
+          </article>
+          <article className="fiori-stat-card">
+            <div className="fiori-stat-label">Milk</div>
+            <div className="fiori-stat-value">{milkCount}</div>
+          </article>
+        </div>
 
-              {/* Employee List Table */}
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        {orders.length === 0 ? (
+          <div className="admin-empty-state">
+            <Users size={24} />
+            <div>
+              <strong>No employee orders for this date</strong>
+              <p>Orders will appear here once the team places them.</p>
+            </div>
+          </div>
+        ) : (
+          <div className="fiori-table-shell">
+            <table className="fiori-table">
               <thead>
-                <tr style={{ borderBottom: "2px solid #e5e7eb" }}>
-                  <th style={{ padding: 12, textAlign: "left", fontWeight: 600 }}>Name</th>
-                  <th style={{ padding: 12, textAlign: "center", fontWeight: 600 }}>☀️ Morning</th>
-                  <th style={{ padding: 12, textAlign: "center", fontWeight: 600 }}>🌙 Evening</th>
+                <tr>
+                  <th>Employee</th>
+                  <th>Morning</th>
+                  <th>Evening</th>
                 </tr>
               </thead>
               <tbody>
-                {orders.map((order, idx) => (
-                  <tr key={idx} style={{ borderBottom: "1px solid #e5e7eb" }}>
-                    <td style={{ padding: 12 }}>
-                      <div style={{ fontWeight: 600 }}>{order.employee_name}</div>
-                      <div style={{ fontSize: 13, color: "#6b7280" }}>{order.employee_email}</div>
+                {orders.map((order, index) => (
+                  <tr key={`${order.employee_email}-${index}`}>
+                    <td>
+                      <div className="fiori-primary-cell">
+                        <strong>{order.employee_name}</strong>
+                        <span>{order.employee_email}</span>
+                      </div>
                     </td>
-                    <td style={{ padding: 12, textAlign: "center" }}>
-                      {order.morning ? (
-                        <div style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 6,
-                          padding: "6px 12px",
-                          background: `${getBeverageColor(order.morning)}20`,
-                          color: getBeverageColor(order.morning),
-                          borderRadius: 6,
-                          fontWeight: 600,
-                          fontSize: 13
-                        }}>
-                          {getBeverageIcon(order.morning)} {order.morning}
-                        </div>
-                      ) : (
-                        <span style={{ color: "#9ca3af" }}>—</span>
-                      )}
-                    </td>
-                    <td style={{ padding: 12, textAlign: "center" }}>
-                      {order.evening ? (
-                        <div style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 6,
-                          padding: "6px 12px",
-                          background: `${getBeverageColor(order.evening)}20`,
-                          color: getBeverageColor(order.evening),
-                          borderRadius: 6,
-                          fontWeight: 600,
-                          fontSize: 13
-                        }}>
-                          {getBeverageIcon(order.evening)} {order.evening}
-                        </div>
-                      ) : (
-                        <span style={{ color: "#9ca3af" }}>—</span>
-                      )}
-                    </td>
+                    <td>{order.morning ? <BeveragePill beverage={order.morning} /> : "—"}</td>
+                    <td>{order.evening ? <BeveragePill beverage={order.evening} /> : "—"}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            </>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
-// ===========================================
-// ADMIN VIEW WITH EMPLOYEE LIST
-// ===========================================
-const AdminView = ({ dates, orders, formatDate, blockedDates, onBlockDate, onUnblockDate }) => {
+const AdminView = ({ dates, orders, blockedDates, onBlockDate, onUnblockDate, onRefresh }) => {
   const [showYearlyCalendar, setShowYearlyCalendar] = useState(false);
   const [selectedDateForList, setSelectedDateForList] = useState(null);
 
-  const getStats = (date) => {
-    const dayOrders = orders[date] || [];
+  const getStats = useCallback(
+    (date) => {
+      const dayOrders = orders[date] || [];
 
-    let morningTea = 0;
-    let morningCoffee = 0;
-    let morningMilk = 0;
-    let eveningTea = 0;
-    let eveningCoffee = 0;
-    let eveningMilk = 0;
-
-    dayOrders.forEach((o) => {
-      if (o.morning === "tea") morningTea++;
-      if (o.morning === "coffee") morningCoffee++;
-      if (o.morning === "milk") morningMilk++;
-      if (o.evening === "tea") eveningTea++;
-      if (o.evening === "coffee") eveningCoffee++;
-      if (o.evening === "milk") eveningMilk++;
-    });
-
-    return {
-      morningTea,
-      morningCoffee,
-      morningMilk,
-      eveningTea,
-      eveningCoffee,
-      eveningMilk,
-      total: dayOrders.length,
-    };
-  };
-
-  const isBlocked = (date) => {
-    return blockedDates.some(bd => bd.date === date);
-  };
-
-  const getBlockReason = (date) => {
-    const blocked = blockedDates.find(bd => bd.date === date);
-    return blocked ? blocked.reason : "";
-  };
-
-  const Metric = ({ label, value, color }) => (
-    <div style={{ flex: 1, textAlign: "center", minWidth: 80 }}>
-      <div style={{ fontSize: 13, fontWeight: 600, color: "#6b7280" }}>{label}</div>
-      <div style={{ fontSize: 24, fontWeight: 700, color }}>{value}</div>
-    </div>
+      return dayOrders.reduce(
+        (accumulator, order) => {
+          if (order.morning === "tea") accumulator.morningTea += 1;
+          if (order.morning === "coffee") accumulator.morningCoffee += 1;
+          if (order.morning === "milk") accumulator.morningMilk += 1;
+          if (order.evening === "tea") accumulator.eveningTea += 1;
+          if (order.evening === "coffee") accumulator.eveningCoffee += 1;
+          if (order.evening === "milk") accumulator.eveningMilk += 1;
+          accumulator.total += 1;
+          return accumulator;
+        },
+        {
+          morningTea: 0,
+          morningCoffee: 0,
+          morningMilk: 0,
+          eveningTea: 0,
+          eveningCoffee: 0,
+          eveningMilk: 0,
+          total: 0,
+        }
+      );
+    },
+    [orders]
   );
 
-  const DayCard = ({ date, large = false }) => {
-    const stats = getStats(date);
-    const d = formatDate(date);
-    const blocked = isBlocked(date);
-    const reason = getBlockReason(date);
-    const dayOrders = orders[date] || [];
+  const isBlocked = useCallback(
+    (date) => blockedDates.some((item) => item.date === date),
+    [blockedDates]
+  );
 
-    return (
-      <div
-        style={{
-          background: blocked ? "#fee2e2" : "white",
-          padding: large ? 28 : 18,
-          borderRadius: 12,
-          border: blocked ? "2px solid #ef4444" : "1px solid #e5e7eb",
-          boxShadow: "0 4px 10px rgba(0,0,0,0.05)",
-          position: "relative"
-        }}
-      >
-        {blocked && (
-          <div style={{
-            position: "absolute",
-            top: 10,
-            right: 10,
-            background: "#ef4444",
-            color: "white",
-            padding: "4px 12px",
-            borderRadius: 6,
-            fontSize: 12,
-            fontWeight: 600
-          }}>
-            🚫 BLOCKED
-          </div>
-        )}
+  const getBlockReason = useCallback(
+    (date) => blockedDates.find((item) => item.date === date)?.reason || "",
+    [blockedDates]
+  );
 
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: large ? 24 : 18, fontWeight: 700 }}>
-            {d.full}
+  const summaryStats = useMemo(() => {
+    return dates.reduce(
+      (accumulator, order) => {
+        const stats = getStats(order);
+        accumulator.totalOrders += stats.total;
+        if (isBlocked(order)) accumulator.blockedDays += 1;
+        if (stats.total > 0) accumulator.activeDays += 1;
+        return accumulator;
+      },
+      { totalOrders: 0, blockedDays: 0, activeDays: 0 }
+    );
+  }, [dates, getStats, isBlocked]);
+
+    const DayCard = ({ date, large = false }) => {
+      const stats = getStats(date);
+      const label = formatDateLabel(date);
+      const blocked = isBlocked(date);
+
+      return (
+      <article className={`tea-admin-day-card ${large ? "is-large" : ""} ${blocked ? "is-blocked" : ""}`}>
+        <div className="tea-admin-day-top">
+          <div>
+            <h3>{label.full}</h3>
+            <p>{date}</p>
           </div>
-          <div style={{ fontSize: 14, color: "#6b7280" }}>{date}</div>
-          {blocked && (
-            <div style={{ fontSize: 13, color: "#dc2626", marginTop: 4, fontStyle: "italic" }}>
-              Reason: {reason}
-            </div>
-          )}
+          {blocked ? <span className="fiori-status-pill is-rejected">Blocked</span> : null}
         </div>
 
-        {!blocked && (
+        {blocked ? (
+          <div className="tea-admin-block-reason">{getBlockReason(date) || "Unavailable"}</div>
+        ) : (
           <>
-            {/* Total Orders and View List Button */}
-            <div style={{
-              marginBottom: 20,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 12
-            }}>
-              <Metric label="Total Orders" value={stats.total} color="#1f2937" />
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedDateForList(date);
-                }}
-                style={{
-                  padding: "10px 20px",
-                  background: "#3b82f6",
-                  color: "white",
-                  border: "none",
-                  borderRadius: 8,
-                  cursor: "pointer",
-                  fontWeight: 600,
-                  fontSize: 14,
-                  boxShadow: "0 2px 8px rgba(59, 130, 246, 0.3)",
-                  transition: "all 0.2s"
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.background = "#2563eb";
-                  e.target.style.transform = "translateY(-2px)";
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.background = "#3b82f6";
-                  e.target.style.transform = "translateY(0)";
-                }}
-              >
-                👥 View Employee List
+            <div className="tea-admin-total">
+              <div>
+                <span>Total Orders</span>
+                <strong>{stats.total}</strong>
+              </div>
+              <button className="fiori-button secondary" onClick={() => setSelectedDateForList(date)}>
+                View employee list
               </button>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 16 }}>
-              <div style={{ padding: 14, background: "#f9fafb", borderRadius: 10, border: "1px solid #e5e7eb" }}>
-                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>
-                  ☀️ Morning (by {MORNING_CUTOFF})
-                </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  <Metric label="🍵 Tea" value={stats.morningTea} color="#10b981" />
-                  <Metric label="☕ Coffee" value={stats.morningCoffee} color="#f59e0b" />
-                  <Metric label="🥛 Milk" value={stats.morningMilk} color="#3b82f6" />
+            <div className="tea-admin-slot-grid">
+              <div className="tea-admin-slot-card">
+                <strong>Morning</strong>
+                <div className="tea-admin-metric-grid">
+                  <div><span>Tea</span><b>{stats.morningTea}</b></div>
+                  <div><span>Coffee</span><b>{stats.morningCoffee}</b></div>
+                  <div><span>Milk</span><b>{stats.morningMilk}</b></div>
                 </div>
               </div>
 
-              <div style={{ padding: 14, background: "#f9fafb", borderRadius: 10, border: "1px solid #e5e7eb" }}>
-                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>
-                  🌙 Evening (by {EVENING_CUTOFF})
-                </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  <Metric label="🍵 Tea" value={stats.eveningTea} color="#10b981" />
-                  <Metric label="☕ Coffee" value={stats.eveningCoffee} color="#f59e0b" />
-                  <Metric label="🥛 Milk" value={stats.eveningMilk} color="#3b82f6" />
+              <div className="tea-admin-slot-card">
+                <strong>Evening</strong>
+                <div className="tea-admin-metric-grid">
+                  <div><span>Tea</span><b>{stats.eveningTea}</b></div>
+                  <div><span>Coffee</span><b>{stats.eveningCoffee}</b></div>
+                  <div><span>Milk</span><b>{stats.eveningMilk}</b></div>
                 </div>
               </div>
             </div>
           </>
         )}
-      </div>
+      </article>
     );
   };
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <h1 style={{ fontSize: 28, margin: 0 }}>☕ Admin Tea/Coffee Dashboard</h1>
-        <button
-          onClick={() => setShowYearlyCalendar(true)}
-          style={{
-            padding: "12px 24px",
-            background: "#3b82f6",
-            color: "white",
-            border: "none",
-            borderRadius: 8,
-            cursor: "pointer",
-            fontWeight: 600,
-            fontSize: 16,
-            boxShadow: "0 4px 12px rgba(59, 130, 246, 0.3)"
-          }}
-        >
-          🗓️ Manage Blocked Dates
-        </button>
-      </div>
+    <section className="tea-workspace">
+      <header className="admin-hero">
+        <div>
+          <div className="admin-section-overline">Hospitality Operations</div>
+          <h1>Tea and Coffee</h1>
+          <p>
+            Monitor daily beverage demand, review team orders, and manage blocked service dates
+            from a single admin dashboard.
+          </p>
+        </div>
+
+        <div className="admin-hero-meta">
+          <div className="admin-hero-meta-item">
+            <span>Total orders</span>
+            <strong>{summaryStats.totalOrders}</strong>
+          </div>
+          <div className="admin-hero-meta-item">
+            <span>Active days</span>
+            <strong>{summaryStats.activeDays}</strong>
+          </div>
+          <div className="admin-hero-meta-item">
+            <span>Blocked days</span>
+            <strong>{summaryStats.blockedDays}</strong>
+          </div>
+        </div>
+      </header>
+
+      <section className="tea-summary-grid">
+        <article className="fiori-stat-card">
+          <div className="fiori-stat-topline">
+            <span className="fiori-stat-label">Service Window</span>
+            <ShoppingBag size={18} />
+          </div>
+          <div className="fiori-stat-value tea-stat-text">15 Days</div>
+          <div className="fiori-stat-note">Current rolling view for tea and coffee demand</div>
+        </article>
+
+        <article className="fiori-stat-card">
+          <div className="fiori-stat-topline">
+            <span className="fiori-stat-label">Blocked Dates</span>
+            <ShieldBan size={18} />
+          </div>
+          <div className="fiori-stat-value">{summaryStats.blockedDays}</div>
+          <div className="fiori-stat-note">Dates currently unavailable for beverage service</div>
+        </article>
+
+        <article className="fiori-stat-card is-actionable" onClick={() => setShowYearlyCalendar(true)}>
+          <div className="fiori-stat-topline">
+            <span className="fiori-stat-label">Manage Availability</span>
+            <CalendarDays size={18} />
+          </div>
+          <div className="fiori-stat-value tea-stat-text">Open</div>
+          <div className="fiori-inline-link">Block or unblock service dates</div>
+        </article>
+      </section>
+
+      <section className="fiori-panel">
+        <div className="fiori-panel-header">
+          <div>
+            <h3>Controls</h3>
+            <p>Refresh orders or update the yearly service calendar</p>
+          </div>
+          <div className="tea-toolbar">
+            <button className="fiori-button secondary" onClick={onRefresh}>
+              <RefreshCw size={16} />
+              <span>Refresh orders</span>
+            </button>
+            <button className="fiori-button primary" onClick={() => setShowYearlyCalendar(true)}>
+              <CalendarDays size={16} />
+              <span>Manage blocked dates</span>
+            </button>
+          </div>
+        </div>
+      </section>
 
       <DayCard date={dates[0]} large />
 
-      <h2 style={{ marginTop: 32, marginBottom: 16, fontSize: 22 }}>
-        📆 Upcoming Days (Next 14 Days)
-      </h2>
+      <section className="fiori-panel">
+        <div className="fiori-panel-header">
+          <div>
+            <h3>Upcoming Days</h3>
+            <p>Daily demand cards for the next 14 service days</p>
+          </div>
+        </div>
 
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fill, minmax(350px, 1fr))",
-        gap: 20,
-      }}>
-        {dates.slice(1).map((date) => (
-          <DayCard key={date} date={date} />
-        ))}
-      </div>
+        <div className="tea-admin-grid">
+          {dates.slice(1).map((date) => (
+            <DayCard key={date} date={date} />
+          ))}
+        </div>
+      </section>
 
-      {showYearlyCalendar && (
+      {showYearlyCalendar ? (
         <YearlyCalendarModal
           onClose={() => setShowYearlyCalendar(false)}
           blockedDates={blockedDates}
           onBlockDate={onBlockDate}
           onUnblockDate={onUnblockDate}
         />
-      )}
+      ) : null}
 
-      {selectedDateForList && (
+      {selectedDateForList ? (
         <EmployeeListModal
           date={selectedDateForList}
           orders={orders[selectedDateForList] || []}
           onClose={() => setSelectedDateForList(null)}
         />
-      )}
-    </div>
+      ) : null}
+    </section>
   );
 };
 
-// ===========================================
-// MAIN COMPONENT
-// ===========================================
 const TeaCoffee = ({ user }) => {
   const [orders, setOrders] = useState({});
   const [dates, setDates] = useState([]);
@@ -743,19 +552,24 @@ const TeaCoffee = ({ user }) => {
   const [blockedDates, setBlockedDates] = useState([]);
   const [selectedDate, setSelectedDate] = useState(null);
   const [tempSelection, setTempSelection] = useState({ morning: null, evening: null });
-  
+  const [message, setMessage] = useState("");
+
   const isAdmin = ["Admin", "admin", "System Administrator", "Administrator", "system-admin"].includes(
     (user?.role || "").trim()
   );
-
   const userId = user?._id || user?.id;
+
+  const showToast = (nextMessage) => {
+    setMessage(nextMessage);
+    window.setTimeout(() => setMessage(""), 3000);
+  };
 
   const generateDates = useCallback(() => {
     const dateList = [];
     const today = new Date();
-    for (let i = 0; i < 15; i++) {
+    for (let index = 0; index < 15; index += 1) {
       const date = new Date(today);
-      date.setDate(today.getDate() + i);
+      date.setDate(today.getDate() + index);
       dateList.push(date.toISOString().split("T")[0]);
     }
     setDates(dateList);
@@ -763,83 +577,85 @@ const TeaCoffee = ({ user }) => {
 
   const fetchBlockedDates = useCallback(async () => {
     try {
-      const res = await axios.get(`${API_BASE}/blocked_dates`);
-      setBlockedDates(res.data);
-    } catch (err) {
-      console.error("❌ Error fetching blocked dates:", err);
+      const response = await axios.get(`${API_BASE}/blocked_dates`);
+      setBlockedDates(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.error("Error fetching blocked dates:", error);
     }
   }, []);
 
   const fetchMyOrders = useCallback(async () => {
-    if (!userId) {
-      console.error("❌ No user ID available");
-      alert("Error: User ID not found. Please refresh and try again.");
-      return;
-    }
+    if (!userId) return;
 
     setLoading(true);
     try {
-      const res = await axios.get(`${API_BASE}/my_orders/${userId}`);
+      const response = await axios.get(`${API_BASE}/my_orders/${userId}`);
       const orderMap = {};
-      res.data.forEach((order) => {
+      response.data.forEach((order) => {
         orderMap[order.date] = order;
       });
       setOrders(orderMap);
-    } catch (err) {
-      console.error("❌ Error fetching orders:", err);
-      alert(err.response?.data?.error || "Failed to load orders. Please refresh the page.");
+    } catch (error) {
+      console.error("Error fetching orders:", error);
+      showToast(error.response?.data?.error || "Failed to load orders");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [userId]);
 
   const fetchAdminOrders = useCallback(async () => {
     setLoading(true);
     try {
-      const today = new Date().toISOString().split("T")[0];
+      const start = new Date().toISOString().split("T")[0];
       const endDate = new Date();
       endDate.setDate(endDate.getDate() + 14);
       const end = endDate.toISOString().split("T")[0];
+      const response = await axios.get(`${API_BASE}/admin/orders?start_date=${start}&end_date=${end}`);
 
-      const res = await axios.get(`${API_BASE}/admin/orders?start_date=${today}&end_date=${end}`);
-      
       const orderMap = {};
-      res.data.forEach((order) => {
+      response.data.forEach((order) => {
         if (!orderMap[order.date]) {
           orderMap[order.date] = [];
         }
         orderMap[order.date].push(order);
       });
       setOrders(orderMap);
-    } catch (err) {
-      console.error("❌ Error fetching admin orders:", err);
-      alert(err.response?.data?.error || "Failed to load orders. Please refresh the page.");
+    } catch (error) {
+      console.error("Error fetching admin orders:", error);
+      showToast(error.response?.data?.error || "Failed to load orders");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
+
+  const refreshOrders = useCallback(() => {
+    if (isAdmin) {
+      fetchAdminOrders();
+    } else {
+      fetchMyOrders();
+    }
+  }, [isAdmin, fetchAdminOrders, fetchMyOrders]);
 
   const handleBlockDate = async (date, reason) => {
     try {
-      const res = await axios.post(`${API_BASE}/block_date`, { date, reason });
-      alert(res.data.message);
+      const response = await axios.post(`${API_BASE}/block_date`, { date, reason });
+      showToast(response.data.message || "Date blocked successfully");
       fetchBlockedDates();
-      if (isAdmin) {
-        fetchAdminOrders();
-      }
-    } catch (err) {
-      alert(err.response?.data?.error || "Failed to block date");
+      refreshOrders();
+    } catch (error) {
+      showToast(error.response?.data?.error || "Failed to block date");
     }
   };
 
   const handleUnblockDate = async (date) => {
-    if (!window.confirm("Are you sure you want to unblock this date?")) {
-      return;
-    }
+    if (!window.confirm("Are you sure you want to unblock this date?")) return;
+
     try {
-      const res = await axios.delete(`${API_BASE}/unblock_date`, { data: { date } });
-      alert(res.data.message);
+      const response = await axios.delete(`${API_BASE}/unblock_date`, { data: { date } });
+      showToast(response.data.message || "Date unblocked successfully");
       fetchBlockedDates();
-    } catch (err) {
-      alert(err.response?.data?.error || "Failed to unblock date");
+    } catch (error) {
+      showToast(error.response?.data?.error || "Failed to unblock date");
     }
   };
 
@@ -855,39 +671,31 @@ const TeaCoffee = ({ user }) => {
     } else if (userId) {
       fetchMyOrders();
     } else {
-      alert("Error: User information not available. Please log out and log in again.");
+      showToast("User information is not available");
     }
-  }, [isAdmin, userId, generateDates, fetchMyOrders, fetchAdminOrders, fetchBlockedDates]);
+  }, [isAdmin, userId, generateDates, fetchBlockedDates, fetchAdminOrders, fetchMyOrders]);
 
-  const isDateBlocked = (date) => {
-    return blockedDates.some(bd => bd.date === date);
-  };
+  const isDateBlocked = (date) => blockedDates.some((item) => item.date === date);
 
   const isPastCutoff = (date, slot) => {
     const today = new Date().toISOString().split("T")[0];
     if (date !== today) return false;
 
-    const now = new Date();
     const cutoffTime = slot === "morning" ? MORNING_CUTOFF : EVENING_CUTOFF;
     const [hours, minutes] = cutoffTime.split(":").map(Number);
     const cutoff = new Date();
     cutoff.setHours(hours, minutes, 0, 0);
-    
-    return now >= cutoff;
+    return new Date() >= cutoff;
   };
 
   const handleDateClick = (date) => {
     const day = new Date(date).getDay();
     const isWeekend = day === 0 || day === 6;
-
-    if (isWeekend) return;
-    if (isDateBlocked(date)) return;
+    if (isWeekend || isDateBlocked(date)) return;
 
     if (bulkMode) {
-      setBulkSelectedDates(prev =>
-        prev.includes(date)
-          ? prev.filter(d => d !== date)
-          : [...prev, date]
+      setBulkSelectedDates((previous) =>
+        previous.includes(date) ? previous.filter((item) => item !== date) : [...previous, date]
       );
       return;
     }
@@ -901,41 +709,38 @@ const TeaCoffee = ({ user }) => {
   };
 
   const handleSlotToggle = (slot, value) => {
-    // Check if this slot is past cutoff
     if (isPastCutoff(selectedDate, slot)) {
-      alert(`Cannot modify ${slot} order after ${slot === "morning" ? MORNING_CUTOFF : EVENING_CUTOFF}`);
+      showToast(`Cannot modify ${slot} order after ${slot === "morning" ? MORNING_CUTOFF : EVENING_CUTOFF}`);
       return;
     }
 
-    setTempSelection(prev => ({
-      ...prev,
-      [slot]: prev[slot] === value ? null : value
+    setTempSelection((previous) => ({
+      ...previous,
+      [slot]: previous[slot] === value ? null : value,
     }));
   };
 
   const handleSubmit = async () => {
     if (!selectedDate || !userId) {
-      alert("Error: Missing required information");
+      showToast("Missing required information");
       return;
     }
 
     if (!tempSelection.morning && !tempSelection.evening) {
-      alert("Please select at least one item (morning or evening)");
+      showToast("Select at least one item");
       return;
     }
 
     try {
-      const orderPayload = {
+      const response = await axios.post(`${API_BASE}/place_order`, {
         employee_id: userId,
         date: selectedDate,
         morning: tempSelection.morning,
         evening: tempSelection.evening,
-      };
+      });
 
-      const response = await axios.post(`${API_BASE}/place_order`, orderPayload);
-
-      setOrders({
-        ...orders,
+      setOrders((previous) => ({
+        ...previous,
         [selectedDate]: {
           date: selectedDate,
           morning: tempSelection.morning,
@@ -943,32 +748,32 @@ const TeaCoffee = ({ user }) => {
           employee_name: user.name,
           employee_email: user.email,
         },
-      });
-      
-      alert(response.data.message || "Order submitted successfully!");
+      }));
+
+      showToast(response.data.message || "Order submitted successfully");
       setSelectedDate(null);
       setTempSelection({ morning: null, evening: null });
       fetchMyOrders();
-    } catch (err) {
-      console.error("❌ Error submitting order:", err);
-      alert(err.response?.data?.error || "Failed to submit order. Please try again.");
+    } catch (error) {
+      console.error("Error submitting order:", error);
+      showToast(error.response?.data?.error || "Failed to submit order");
     }
   };
 
   const handleBulkSubmit = async () => {
     if (!bulkSelection.morning && !bulkSelection.evening) {
-      alert("Select at least one item for morning/evening");
+      showToast("Select at least one morning or evening item");
       return;
     }
 
-    const validDates = bulkSelectedDates.filter(date => {
+    const validDates = bulkSelectedDates.filter((date) => {
       const day = new Date(date).getDay();
       const isWeekend = day === 0 || day === 6;
       return !isWeekend && !isDateBlocked(date);
     });
 
     if (validDates.length === 0) {
-      alert("No valid dates to submit");
+      showToast("No valid dates selected");
       return;
     }
 
@@ -982,39 +787,38 @@ const TeaCoffee = ({ user }) => {
         });
       }
 
-      alert(`Bulk order placed for ${validDates.length} days!`);
+      showToast(`Bulk order placed for ${validDates.length} days`);
       setBulkMode(false);
       setBulkSelectedDates([]);
       setBulkSelection({ morning: null, evening: null });
       fetchMyOrders();
-    } catch (err) {
-      console.error("❌ Bulk order error:", err);
-      alert(err.response?.data?.error || "Error submitting bulk order");
+    } catch (error) {
+      console.error("Error submitting bulk order:", error);
+      showToast(error.response?.data?.error || "Failed to submit bulk order");
     }
   };
 
   const handleDeleteOrder = async () => {
     if (!selectedDate) return;
-
-    if (!window.confirm("Are you sure you want to cancel the entire order for this day?")) {
-      return;
-    }
+    if (!window.confirm("Cancel the entire order for this day?")) return;
 
     try {
       await axios.delete(`${API_BASE}/cancel_order`, {
-        data: { employee_id: userId, date: selectedDate }
+        data: { employee_id: userId, date: selectedDate },
       });
 
-      const updated = { ...orders };
-      delete updated[selectedDate];
-      setOrders(updated);
+      setOrders((previous) => {
+        const nextOrders = { ...previous };
+        delete nextOrders[selectedDate];
+        return nextOrders;
+      });
 
-      alert("Order cancelled successfully!");
+      showToast("Order cancelled successfully");
       setSelectedDate(null);
       setTempSelection({ morning: null, evening: null });
-    } catch (err) {
-      console.error("❌ Error cancelling order:", err);
-      alert(err.response?.data?.error || "Failed to cancel order!");
+    } catch (error) {
+      console.error("Error cancelling order:", error);
+      showToast(error.response?.data?.error || "Failed to cancel order");
     }
   };
 
@@ -1023,377 +827,289 @@ const TeaCoffee = ({ user }) => {
     setTempSelection({ morning: null, evening: null });
   };
 
-  const formatDate = (dateStr) => {
-    const date = new Date(dateStr);
-    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    return {
-      day: days[date.getDay()],
-      date: date.getDate(),
-      month: months[date.getMonth()],
-      full: `${days[date.getDay()]}, ${date.getDate()} ${months[date.getMonth()]}`,
-    };
-  };
-
-  const getBeverageIcon = (beverage) => {
-    switch(beverage) {
-      case "tea": return "🍵";
-      case "coffee": return "☕";
-      case "milk": return "🥛";
-      default: return "";
-    }
-  };
+  const employeeSummary = useMemo(() => {
+    return dates.reduce(
+      (accumulator, date) => {
+        const order = orders[date];
+        if (!order) return accumulator;
+        accumulator.totalDays += 1;
+        if (order.morning) accumulator.morningSelections += 1;
+        if (order.evening) accumulator.eveningSelections += 1;
+        return accumulator;
+      },
+      { totalDays: 0, morningSelections: 0, eveningSelections: 0 }
+    );
+  }, [dates, orders]);
 
   if (loading) {
-    return <div style={{ padding: 40, textAlign: "center" }}>Loading...</div>;
+    return (
+      <section className="tea-workspace">
+        <div className="fiori-loading-card">
+          <Coffee size={28} />
+          <div>
+            <strong>Loading tea and coffee workspace</strong>
+            <p>Preparing beverage orders and availability windows.</p>
+          </div>
+        </div>
+      </section>
+    );
   }
 
   if (isAdmin) {
     return (
-      <AdminView
-        dates={dates}
-        orders={orders}
-        formatDate={formatDate}
-        blockedDates={blockedDates}
-        onBlockDate={handleBlockDate}
-        onUnblockDate={handleUnblockDate}
-      />
+      <>
+        <AdminView
+          dates={dates}
+          orders={orders}
+          blockedDates={blockedDates}
+          onBlockDate={handleBlockDate}
+          onUnblockDate={handleUnblockDate}
+          onRefresh={refreshOrders}
+        />
+        {message ? (
+          <div className="admin-toast is-success">{message}</div>
+        ) : null}
+      </>
     );
   }
 
-  // EMPLOYEE VIEW
   return (
-    <div style={{ padding: 20, maxWidth: 1400, margin: "0 auto" }}>
-      <h1 style={{ fontSize: 28, marginBottom: 8 }}>☕ Tea/Coffee Ordering</h1>
-      <p style={{ color: "#6b7280", marginBottom: 24, fontSize: 14 }}>
-        Morning orders by {MORNING_CUTOFF} • Evening orders by {EVENING_CUTOFF}
-      </p>
-
-      {/* Bulk Mode Toggle */}
-      <div style={{ marginBottom: 24 }}>
-        <button
-          onClick={() => {
-            setBulkMode(!bulkMode);
-            setBulkSelectedDates([]);
-            setBulkSelection({ morning: null, evening: null });
-          }}
-          style={{
-            padding: "10px 20px",
-            background: bulkMode ? "#ef4444" : "#3b82f6",
-            color: "white",
-            border: "none",
-            borderRadius: 8,
-            cursor: "pointer",
-            fontWeight: 600,
-          }}
-        >
-          {bulkMode ? "✕ Cancel Bulk Mode" : "📅 Bulk Order Mode"}
-        </button>
-      </div>
-
-      {/* Bulk Mode Selection */}
-      {bulkMode && (
-        <div style={{
-          background: "#eff6ff",
-          padding: 20,
-          borderRadius: 12,
-          marginBottom: 24,
-          border: "2px solid #3b82f6"
-        }}>
-          <h3 style={{ marginBottom: 16 }}>🎯 Bulk Order Selection</h3>
-          
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ fontWeight: 600, marginBottom: 8, display: "block" }}>☀️ Morning:</label>
-            <div style={{ display: "flex", gap: 10 }}>
-              {["tea", "coffee", "milk"].map(option => (
-                <button
-                  key={option}
-                  onClick={() => setBulkSelection(prev => ({ ...prev, morning: prev.morning === option ? null : option }))}
-                  style={{
-                    padding: "8px 16px",
-                    background: bulkSelection.morning === option ? "#10b981" : "white",
-                    color: bulkSelection.morning === option ? "white" : "#374151",
-                    border: "2px solid #e5e7eb",
-                    borderRadius: 6,
-                    cursor: "pointer",
-                    fontWeight: 600,
-                  }}
-                >
-                  {getBeverageIcon(option)} {option}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ fontWeight: 600, marginBottom: 8, display: "block" }}>🌙 Evening:</label>
-            <div style={{ display: "flex", gap: 10 }}>
-              {["tea", "coffee", "milk"].map(option => (
-                <button
-                  key={option}
-                  onClick={() => setBulkSelection(prev => ({ ...prev, evening: prev.evening === option ? null : option }))}
-                  style={{
-                    padding: "8px 16px",
-                    background: bulkSelection.evening === option ? "#10b981" : "white",
-                    color: bulkSelection.evening === option ? "white" : "#374151",
-                    border: "2px solid #e5e7eb",
-                    borderRadius: 6,
-                    cursor: "pointer",
-                    fontWeight: 600,
-                  }}
-                >
-                  {getBeverageIcon(option)} {option}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <button
-            onClick={handleBulkSubmit}
-            disabled={bulkSelectedDates.length === 0}
-            style={{
-              padding: "12px 24px",
-              background: bulkSelectedDates.length > 0 ? "#10b981" : "#9ca3af",
-              color: "white",
-              border: "none",
-              borderRadius: 8,
-              cursor: bulkSelectedDates.length > 0 ? "pointer" : "not-allowed",
-              fontWeight: 600,
-            }}
-          >
-            ✓ Submit Bulk Order ({bulkSelectedDates.length} days)
-          </button>
+    <section className="tea-workspace">
+      <header className="admin-hero">
+        <div>
+          <div className="admin-section-overline">Hospitality Requests</div>
+          <h1>Tea and Coffee</h1>
+          <p>
+            Place beverage requests for the next 15 days, use bulk mode for repeated choices, and
+            track cutoff windows for each slot.
+          </p>
         </div>
-      )}
 
-      {/* Calendar Grid */}
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
-        gap: 12,
-      }}>
-        {dates.map((date) => {
-          const d = formatDate(date);
-          const order = orders[date];
-          const day = new Date(date).getDay();
-          const isWeekend = day === 0 || day === 6;
-          const blocked = isDateBlocked(date);
-          const isSelected = selectedDate === date;
-          const isBulkSelected = bulkSelectedDates.includes(date);
-          const morningPastCutoff = isPastCutoff(date, "morning");
-          const eveningPastCutoff = isPastCutoff(date, "evening");
+        <div className="admin-hero-meta">
+          <div className="admin-hero-meta-item">
+            <span>Morning cutoff</span>
+            <strong>{MORNING_CUTOFF}</strong>
+          </div>
+          <div className="admin-hero-meta-item">
+            <span>Evening cutoff</span>
+            <strong>{EVENING_CUTOFF}</strong>
+          </div>
+          <div className="admin-hero-meta-item">
+            <span>Blocked dates</span>
+            <strong>{blockedDates.length}</strong>
+          </div>
+        </div>
+      </header>
 
-          return (
-            <div
-              key={date}
-              onClick={() => !isWeekend && !blocked && handleDateClick(date)}
-              style={{
-                padding: 16,
-                background: blocked ? "#fee2e2" : isSelected ? "#dbeafe" : isBulkSelected ? "#fef3c7" : isWeekend ? "#f3f4f6" : "white",
-                border: isSelected ? "3px solid #3b82f6" : isBulkSelected ? "3px solid #f59e0b" : "1px solid #e5e7eb",
-                borderRadius: 12,
-                cursor: isWeekend || blocked ? "not-allowed" : "pointer",
-                opacity: isWeekend || blocked ? 0.6 : 1,
-                transition: "all 0.2s",
+      <section className="tea-summary-grid">
+        <article className="fiori-stat-card">
+          <div className="fiori-stat-topline">
+            <span className="fiori-stat-label">Ordered Days</span>
+            <ListChecks size={18} />
+          </div>
+          <div className="fiori-stat-value">{employeeSummary.totalDays}</div>
+          <div className="fiori-stat-note">Days where you have at least one active beverage order</div>
+        </article>
+
+        <article className="fiori-stat-card">
+          <div className="fiori-stat-topline">
+            <span className="fiori-stat-label">Morning Selections</span>
+            <CupSoda size={18} />
+          </div>
+          <div className="fiori-stat-value">{employeeSummary.morningSelections}</div>
+          <div className="fiori-stat-note">Morning beverage selections currently recorded</div>
+        </article>
+
+        <article className="fiori-stat-card">
+          <div className="fiori-stat-topline">
+            <span className="fiori-stat-label">Evening Selections</span>
+            <Coffee size={18} />
+          </div>
+          <div className="fiori-stat-value">{employeeSummary.eveningSelections}</div>
+          <div className="fiori-stat-note">Evening beverage selections currently recorded</div>
+        </article>
+      </section>
+
+      <section className="fiori-panel">
+        <div className="fiori-panel-header">
+          <div>
+            <h3>Ordering Controls</h3>
+            <p>Switch bulk mode on or off, then select dates from the calendar below</p>
+          </div>
+          <div className="tea-toolbar">
+            <button className="fiori-button secondary" onClick={refreshOrders}>
+              <RefreshCw size={16} />
+              <span>Refresh orders</span>
+            </button>
+            <button
+              className={`fiori-button ${bulkMode ? "danger" : "primary"}`}
+              onClick={() => {
+                setBulkMode(!bulkMode);
+                setBulkSelectedDates([]);
+                setBulkSelection({ morning: null, evening: null });
               }}
             >
-              <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>
-                {d.day}, {d.date}
-              </div>
-              <div style={{ fontSize: 13, color: "#6b7280", marginBottom: 12 }}>
-                {d.month}
-              </div>
-
-              {blocked ? (
-                <div style={{ fontSize: 12, color: "#dc2626", fontWeight: 600 }}>
-                  🚫 Unavailable
-                </div>
-              ) : isWeekend ? (
-                <div style={{ fontSize: 12, color: "#6b7280" }}>
-                  Weekend
-                </div>
-              ) : order ? (
+              {bulkMode ? (
                 <>
-                  {order.morning && (
-                    <div style={{
-                      fontSize: 12,
-                      marginBottom: 4,
-                      padding: "4px 8px",
-                      background: morningPastCutoff ? "#fef2f2" : "#f0fdf4",
-                      color: morningPastCutoff ? "#991b1b" : "#166534",
-                      borderRadius: 4,
-                      fontWeight: 600
-                    }}>
-                      {getBeverageIcon(order.morning)} {order.morning}
-                      {morningPastCutoff && " 🔒"}
-                    </div>
-                  )}
-                  {order.evening && (
-                    <div style={{
-                      fontSize: 12,
-                      padding: "4px 8px",
-                      background: eveningPastCutoff ? "#fef2f2" : "#f0fdf4",
-                      color: eveningPastCutoff ? "#991b1b" : "#166534",
-                      borderRadius: 4,
-                      fontWeight: 600
-                    }}>
-                      {getBeverageIcon(order.evening)} {order.evening}
-                      {eveningPastCutoff && " 🔒"}
-                    </div>
-                  )}
+                  <X size={16} />
+                  <span>Cancel bulk mode</span>
                 </>
               ) : (
-                <div style={{ fontSize: 12, color: "#9ca3af" }}>
-                  {isBulkSelected ? "✓ Selected" : "No order"}
-                </div>
+                <>
+                  <CalendarDays size={16} />
+                  <span>Bulk order mode</span>
+                </>
               )}
-            </div>
-          );
-        })}
-      </div>
+            </button>
+          </div>
+        </div>
 
-      {/* Order Modal */}
-      {selectedDate && (
-        <div style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: "rgba(0,0,0,0.5)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 1000,
-        }}>
-          <div style={{
-            background: "white",
-            padding: 30,
-            borderRadius: 12,
-            maxWidth: 500,
-            width: "90%",
-            boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
-          }}>
-            <h3 style={{ marginBottom: 16 }}>☕ Order for {formatDate(selectedDate).full}</h3>
+        {bulkMode ? (
+          <div className="tea-bulk-panel">
+            <div className="tea-bulk-grid">
+              <SlotSelector
+                label="Morning"
+                cutoff={`By ${MORNING_CUTOFF}`}
+                value={bulkSelection.morning}
+                locked={false}
+                onToggle={(option) =>
+                  setBulkSelection((previous) => ({
+                    ...previous,
+                    morning: previous.morning === option ? null : option,
+                  }))
+                }
+              />
 
-            {/* Morning Slot */}
-            <div style={{ marginBottom: 20 }}>
-              <label style={{ fontWeight: 600, marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }}>
-                ☀️ Morning (by {MORNING_CUTOFF})
-                {isPastCutoff(selectedDate, "morning") && (
-                  <span style={{ fontSize: 12, color: "#dc2626", fontWeight: 400 }}>
-                    🔒 Cutoff passed
-                  </span>
-                )}
-              </label>
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                {["tea", "coffee", "milk"].map(option => (
-                  <button
-                    key={option}
-                    onClick={() => handleSlotToggle("morning", option)}
-                    disabled={isPastCutoff(selectedDate, "morning")}
-                    style={{
-                      padding: "10px 16px",
-                      background: tempSelection.morning === option ? "#10b981" : "white",
-                      color: tempSelection.morning === option ? "white" : "#374151",
-                      border: "2px solid #e5e7eb",
-                      borderRadius: 6,
-                      cursor: isPastCutoff(selectedDate, "morning") ? "not-allowed" : "pointer",
-                      fontWeight: 600,
-                      opacity: isPastCutoff(selectedDate, "morning") ? 0.5 : 1,
-                    }}
-                  >
-                    {getBeverageIcon(option)} {option}
-                  </button>
-                ))}
-              </div>
+              <SlotSelector
+                label="Evening"
+                cutoff={`By ${EVENING_CUTOFF}`}
+                value={bulkSelection.evening}
+                locked={false}
+                onToggle={(option) =>
+                  setBulkSelection((previous) => ({
+                    ...previous,
+                    evening: previous.evening === option ? null : option,
+                  }))
+                }
+              />
             </div>
 
-            {/* Evening Slot */}
-            <div style={{ marginBottom: 24 }}>
-              <label style={{ fontWeight: 600, marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }}>
-                🌙 Evening (by {EVENING_CUTOFF})
-                {isPastCutoff(selectedDate, "evening") && (
-                  <span style={{ fontSize: 12, color: "#dc2626", fontWeight: 400 }}>
-                    🔒 Cutoff passed
-                  </span>
-                )}
-              </label>
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                {["tea", "coffee", "milk"].map(option => (
-                  <button
-                    key={option}
-                    onClick={() => handleSlotToggle("evening", option)}
-                    disabled={isPastCutoff(selectedDate, "evening")}
-                    style={{
-                      padding: "10px 16px",
-                      background: tempSelection.evening === option ? "#10b981" : "white",
-                      color: tempSelection.evening === option ? "white" : "#374151",
-                      border: "2px solid #e5e7eb",
-                      borderRadius: 6,
-                      cursor: isPastCutoff(selectedDate, "evening") ? "not-allowed" : "pointer",
-                      fontWeight: 600,
-                      opacity: isPastCutoff(selectedDate, "evening") ? 0.5 : 1,
-                    }}
-                  >
-                    {getBeverageIcon(option)} {option}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div style={{ display: "flex", gap: 10 }}>
+            <div className="tea-bulk-footer">
+              <span>{bulkSelectedDates.length} dates selected</span>
               <button
-                onClick={handleSubmit}
-                style={{
-                  flex: 1,
-                  padding: 12,
-                  background: "#10b981",
-                  color: "white",
-                  border: "none",
-                  borderRadius: 6,
-                  cursor: "pointer",
-                  fontWeight: 600,
-                }}
+                className="fiori-button primary"
+                onClick={handleBulkSubmit}
+                disabled={bulkSelectedDates.length === 0}
               >
-                ✓ Submit Order
+                Submit bulk order
               </button>
-              {orders[selectedDate] && (
-                <button
-                  onClick={handleDeleteOrder}
-                  style={{
-                    padding: 12,
-                    background: "#ef4444",
-                    color: "white",
-                    border: "none",
-                    borderRadius: 6,
-                    cursor: "pointer",
-                    fontWeight: 600,
-                  }}
-                >
-                  🗑️
-                </button>
-              )}
+            </div>
+          </div>
+        ) : null}
+      </section>
+
+      <section className="fiori-panel">
+        <div className="fiori-panel-header">
+          <div>
+            <h3>Ordering Calendar</h3>
+            <p>Select a service date to add, update, or cancel your beverage order</p>
+          </div>
+        </div>
+
+        <div className="tea-employee-grid">
+          {dates.map((date) => {
+            const label = formatDateLabel(date);
+            const order = orders[date];
+            const day = new Date(date).getDay();
+            const isWeekend = day === 0 || day === 6;
+            const blocked = isDateBlocked(date);
+            const isSelected = selectedDate === date;
+            const isBulkSelected = bulkSelectedDates.includes(date);
+            const morningPastCutoff = isPastCutoff(date, "morning");
+            const eveningPastCutoff = isPastCutoff(date, "evening");
+
+            return (
               <button
-                onClick={handleCancel}
-                style={{
-                  padding: 12,
-                  background: "#6b7280",
-                  color: "white",
-                  border: "none",
-                  borderRadius: 6,
-                  cursor: "pointer",
-                  fontWeight: 600,
-                }}
+                key={date}
+                type="button"
+                className={`tea-day-card ${isSelected ? "is-selected" : ""} ${
+                  isBulkSelected ? "is-bulk-selected" : ""
+                } ${blocked ? "is-blocked" : ""} ${isWeekend ? "is-weekend" : ""}`}
+                onClick={() => handleDateClick(date)}
+                disabled={isWeekend || blocked}
               >
+                <div className="tea-day-top">
+                  <strong>{label.day}, {label.date}</strong>
+                  <span>{label.month}</span>
+                </div>
+
+                {blocked ? (
+                  <div className="tea-day-state is-danger">Unavailable</div>
+                ) : isWeekend ? (
+                  <div className="tea-day-state">Weekend</div>
+                ) : order ? (
+                  <div className="tea-day-orders">
+                    {order.morning ? <BeveragePill beverage={order.morning} locked={morningPastCutoff} /> : null}
+                    {order.evening ? <BeveragePill beverage={order.evening} locked={eveningPastCutoff} /> : null}
+                  </div>
+                ) : (
+                  <div className="tea-day-state">{isBulkSelected ? "Selected for bulk" : "No order"}</div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      {selectedDate ? (
+        <div className="admin-modal-overlay">
+          <div className="admin-modal">
+            <div className="admin-modal-header">
+              <div>
+                <h2>Order Beverage</h2>
+                <p>{formatDateLabel(selectedDate).full}</p>
+              </div>
+            </div>
+
+            <div className="tea-modal-content">
+              <SlotSelector
+                label="Morning"
+                cutoff={`By ${MORNING_CUTOFF}`}
+                value={tempSelection.morning}
+                locked={isPastCutoff(selectedDate, "morning")}
+                onToggle={(option) => handleSlotToggle("morning", option)}
+              />
+
+              <SlotSelector
+                label="Evening"
+                cutoff={`By ${EVENING_CUTOFF}`}
+                value={tempSelection.evening}
+                locked={isPastCutoff(selectedDate, "evening")}
+                onToggle={(option) => handleSlotToggle("evening", option)}
+              />
+            </div>
+
+            <div className="admin-modal-actions">
+              <button className="fiori-button secondary" onClick={handleCancel}>
                 Cancel
+              </button>
+              {orders[selectedDate] ? (
+                <button className="fiori-button secondary danger" onClick={handleDeleteOrder}>
+                  Cancel order
+                </button>
+              ) : null}
+              <button className="fiori-button primary" onClick={handleSubmit}>
+                Submit order
               </button>
             </div>
           </div>
         </div>
-      )}
-    </div>
+      ) : null}
+
+      {message ? (
+        <div className="admin-toast is-success">{message}</div>
+      ) : null}
+    </section>
   );
 };
 

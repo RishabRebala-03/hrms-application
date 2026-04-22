@@ -1,5 +1,23 @@
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
+import { CalendarDays, Cake, ChevronLeft, ChevronRight, RefreshCw, Sparkles } from "lucide-react";
+
+const monthNames = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+const weekdayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 const Calendar = ({ user }) => {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -9,154 +27,133 @@ const Calendar = ({ user }) => {
   const [error, setError] = useState("");
   const [showBirthdays, setShowBirthdays] = useState(true);
   const [hasDirectReports, setHasDirectReports] = useState(false);
-  
+
   const isAdmin = user?.role === "Admin";
   const isManager = user?.role === "Manager";
-  const isEmployee = user?.role === "Employee";
 
-  const monthNames = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"
-  ];
+  const processBirthdays = useCallback(
+    (users) =>
+      users
+        .filter((person) => person && person.dateOfBirth)
+        .map((person) => {
+          let dateOfBirth = person.dateOfBirth;
+          if (typeof dateOfBirth === "object" && dateOfBirth.$date) {
+            dateOfBirth = dateOfBirth.$date;
+          }
 
-  useEffect(() => {
-    fetchData();
-  }, [selectedYear]);
+          const parsedDate = new Date(dateOfBirth);
+          if (Number.isNaN(parsedDate.getTime())) return null;
 
-  const fetchData = async () => {
+          const month = String(parsedDate.getMonth() + 1).padStart(2, "0");
+          const day = String(parsedDate.getDate()).padStart(2, "0");
+
+          return {
+            date: `${selectedYear}-${month}-${day}`,
+            name: person.name,
+            employeeId: person.employeeId || person._id,
+            isCurrentUser: String(person._id) === String(user?.id),
+          };
+        })
+        .filter(Boolean),
+    [selectedYear, user?.id]
+  );
+
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
-      
+
       const startDate = `${selectedYear}-01-01`;
       const endDate = `${selectedYear}-12-31`;
-      
-      const holidaysRes = await axios.get(
+
+      const holidaysResponse = await axios.get(
         `${process.env.REACT_APP_BACKEND_URL}/api/holidays/?start=${startDate}&end=${endDate}`
       );
-      setHolidays(holidaysRes.data);
+      setHolidays(Array.isArray(holidaysResponse.data) ? holidaysResponse.data : []);
 
       if (isAdmin) {
-        console.log("🔍 Admin: Fetching all birthdays");
-        const usersRes = await axios.get(`${process.env.REACT_APP_BACKEND_URL}/api/users/`);
-        const users = usersRes.data;
-        const birthdayList = processBirthdays(users);
-        setBirthdays(birthdayList);
-      } else if (isManager) {
-        console.log("🔍 Manager: Fetching team birthdays");
-        const teamRes = await axios.get(
-          `${process.env.REACT_APP_BACKEND_URL}/api/users/get_employees_by_manager/${encodeURIComponent(user.email)}`
-        );
-        const teamMembers = teamRes.data;
-        
-        const currentUserRes = await axios.get(
-          `${process.env.REACT_APP_BACKEND_URL}/api/users/${user.id}`
-        );
-        const currentUserData = currentUserRes.data;
-        
-        const allPeople = [...teamMembers, currentUserData];
-        const birthdayList = processBirthdays(allPeople);
-        setBirthdays(birthdayList);
-        
-        if (teamMembers.length > 0) {
-          setHasDirectReports(true);
-        }
-      } else {
-        console.log("🔍 Employee: Checking for direct reports");
-        try {
-          const teamRes = await axios.get(
-            `${process.env.REACT_APP_BACKEND_URL}/api/users/get_employees_by_manager/${encodeURIComponent(user.email)}`
-          );
-          const teamMembers = Array.isArray(teamRes.data) ? teamRes.data : [];
-          
-          const currentUserRes = await axios.get(
-            `${process.env.REACT_APP_BACKEND_URL}/api/users/${user.id}`
-          );
-          const currentUserData = currentUserRes.data;
-          
-          if (teamMembers.length > 0) {
-            console.log(`✅ Employee has ${teamMembers.length} direct reports`);
-            setHasDirectReports(true);
-            const allPeople = [...teamMembers, currentUserData];
-            const birthdayList = processBirthdays(allPeople);
-            setBirthdays(birthdayList);
-          } else {
-            console.log("✅ Regular employee: showing only own birthday");
-            setHasDirectReports(false);
-            const birthdayList = processBirthdays([currentUserData]);
-            setBirthdays(birthdayList);
-          }
-        } catch (err) {
-          console.log("⚠️ Error checking direct reports, showing only own birthday");
-          try {
-            const currentUserRes = await axios.get(
-              `${process.env.REACT_APP_BACKEND_URL}/api/users/${user.id}`
-            );
-            const birthdayList = processBirthdays([currentUserRes.data]);
-            setBirthdays(birthdayList);
-          } catch (userErr) {
-            console.error("Error fetching user data:", userErr);
-            setBirthdays([]);
-          }
-        }
+        const usersResponse = await axios.get(`${process.env.REACT_APP_BACKEND_URL}/api/users/`);
+        setBirthdays(processBirthdays(usersResponse.data || []));
+        setHasDirectReports(true);
+        return;
       }
-    } catch (err) {
-      console.error("Error fetching data:", err);
+
+      const currentUserResponse = await axios.get(
+        `${process.env.REACT_APP_BACKEND_URL}/api/users/${user.id}`
+      );
+      const currentUserData = currentUserResponse.data;
+
+      try {
+        const teamResponse = await axios.get(
+          `${process.env.REACT_APP_BACKEND_URL}/api/users/get_employees_by_manager/${encodeURIComponent(
+            user.email
+          )}`
+        );
+        const teamMembers = Array.isArray(teamResponse.data) ? teamResponse.data : [];
+        const visiblePeople = teamMembers.length > 0 ? [...teamMembers, currentUserData] : [currentUserData];
+        setHasDirectReports(teamMembers.length > 0);
+        setBirthdays(processBirthdays(visiblePeople));
+      } catch (teamError) {
+        console.error("Error fetching direct reports:", teamError);
+        setHasDirectReports(false);
+        setBirthdays(processBirthdays([currentUserData]));
+      }
+    } catch (fetchError) {
+      console.error("Error fetching calendar data:", fetchError);
       setError("Failed to load calendar data");
     } finally {
       setLoading(false);
     }
+  }, [isAdmin, processBirthdays, selectedYear, user?.email, user?.id]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
+
+  const getFirstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
+
+  const findHoliday = (year, month, day) => {
+    const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    return holidays.find((holiday) => holiday.date === dateStr);
   };
 
-  const processBirthdays = (users) => {
-    return users
-      .filter(user => user && user.dateOfBirth)
-      .map(user => {
-        let dobValue = user.dateOfBirth;
-        if (typeof dobValue === "object" && dobValue.$date) {
-          dobValue = dobValue.$date;
-        }
-
-        const dob = new Date(dobValue);
-        if (isNaN(dob.getTime())) return null;
-
-        const month = String(dob.getMonth() + 1).padStart(2, '0');
-        const day = String(dob.getDate()).padStart(2, '0');
-
-        return {
-          date: `${selectedYear}-${month}-${day}`,
-          name: user.name,
-          employeeId: user.employeeId || user._id,
-          isCurrentUser: String(user._id) === String(user.id) || String(user._id) === String(user?.id),
-        };
-      })
-      .filter(Boolean);
-  };
-
-  const getDaysInMonth = (year, month) => {
-    return new Date(year, month + 1, 0).getDate();
-  };
-
-  const getFirstDayOfMonth = (year, month) => {
-    return new Date(year, month, 1).getDay();
-  };
-
-  const isHoliday = (year, month, day) => {
-    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    return holidays.find(h => h.date === dateStr);
-  };
-
-  const isBirthday = (year, month, day) => {
-    if (!showBirthdays) return null;
-    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    return birthdays.filter(b => b.date === dateStr);
+  const findBirthdays = (year, month, day) => {
+    if (!showBirthdays) return [];
+    const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    return birthdays.filter((birthday) => birthday.date === dateStr);
   };
 
   const isToday = (year, month, day) => {
     const today = new Date();
-    return today.getFullYear() === year && 
-           today.getMonth() === month && 
-           today.getDate() === day;
+    return (
+      today.getFullYear() === year &&
+      today.getMonth() === month &&
+      today.getDate() === day
+    );
+  };
+
+  const yearOptions = [2024, 2025, 2026, 2027, 2028];
+
+  const sortedHolidays = useMemo(() => {
+    return [...holidays].sort((a, b) => new Date(a.date) - new Date(b.date));
+  }, [holidays]);
+
+  const sortedBirthdays = useMemo(() => {
+    return [...birthdays].sort((a, b) => new Date(a.date) - new Date(b.date));
+  }, [birthdays]);
+
+  const publicHolidays = holidays.filter((holiday) => holiday.type === "public");
+  const optionalHolidays = holidays.filter(
+    (holiday) => holiday.type === "optional" || holiday.is_optional
+  );
+
+  const getBirthdayVisibilityMessage = () => {
+    if (isAdmin) return "All employee birthdays";
+    if (isManager) return "Your birthday plus direct-report birthdays";
+    if (hasDirectReports) return "Your birthday plus direct-report birthdays";
+    return "Your birthday only";
   };
 
   const renderMonth = (monthIndex) => {
@@ -164,561 +161,264 @@ const Calendar = ({ user }) => {
     const firstDay = getFirstDayOfMonth(selectedYear, monthIndex);
     const days = [];
 
-    for (let i = 0; i < firstDay; i++) {
-      days.push(<div key={`empty-${i}`} className="calendar-day empty"></div>);
+    for (let index = 0; index < firstDay; index += 1) {
+      days.push(<div key={`empty-${monthIndex}-${index}`} className="enterprise-calendar-day empty" />);
     }
 
-    for (let day = 1; day <= daysInMonth; day++) {
-      const holiday = isHoliday(selectedYear, monthIndex, day);
-      const birthdayList = isBirthday(selectedYear, monthIndex, day);
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const holiday = findHoliday(selectedYear, monthIndex, day);
+      const birthdayList = findBirthdays(selectedYear, monthIndex, day);
       const today = isToday(selectedYear, monthIndex, day);
-      
-      let bgColor = "white";
-      let borderColor = "#e5e7eb";
-      let textColor = "#374151";
-      
-      if (today) {
-        bgColor = "#dbeafe";
-        borderColor = "#3b82f6";
-        textColor = "#1e40af";
-      } else if (holiday) {
-        if (holiday.type === "Public") {
-          bgColor = "#fee2e2";
-          textColor = "#991b1b";
-          borderColor = "#fecaca";
-        } else if (holiday.type === "optional") {
-          bgColor = "#fef3c7";
-          textColor = "#92400e";
-          borderColor = "#fde68a";
-        } else {
-          bgColor = "#e0f2fe";
-          textColor = "#075985";
-          borderColor = "#bae6fd";
-        }
-      } else if (birthdayList && birthdayList.length > 0) {
-        bgColor = "#fce7f3";
-        textColor = "#831843";
-        borderColor = "#fbcfe8";
-      }
-      
-      let titleText = "";
-      if (holiday) titleText += `Holiday: ${holiday.name}`;
-      if (birthdayList && birthdayList.length > 0) {
-        if (titleText) titleText += "\n";
-        titleText += "Birthday: " + birthdayList.map(b => 
-          b.isCurrentUser ? `${b.name} (You)` : b.name
-        ).join(", ");
-      }
-      
+
+      const classNames = ["enterprise-calendar-day"];
+      if (today) classNames.push("is-today");
+      if (holiday) classNames.push(`is-holiday-${holiday.type}`);
+      if (birthdayList.length > 0) classNames.push("has-birthday");
+
+      const title = [
+        holiday ? `Holiday: ${holiday.name}` : null,
+        birthdayList.length > 0
+          ? `Birthday: ${birthdayList
+              .map((birthday) => (birthday.isCurrentUser ? `${birthday.name} (You)` : birthday.name))
+              .join(", ")}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
+
       days.push(
-        <div 
-          key={day} 
-          className="calendar-day"
-          style={{
-            background: bgColor,
-            border: today ? "2px solid #3b82f6" : `1px solid ${borderColor}`,
-            fontWeight: today || holiday || (birthdayList && birthdayList.length > 0) ? 600 : 400,
-            color: textColor,
-            position: "relative"
-          }}
-          title={titleText}
-        >
-          {day}
-          {holiday && (
-            <div style={{
-              position: "absolute",
-              bottom: 2,
-              left: "50%",
-              transform: "translateX(-50%)",
-              width: 4,
-              height: 4,
-              borderRadius: "50%",
-              background: holiday.type === "public" ? "#dc2626" : 
-                         holiday.type === "optional" ? "#d97706" : "#0284c7"
-            }}></div>
-          )}
-          {birthdayList && birthdayList.length > 0 && (
-            <div style={{
-              position: "absolute",
-              top: 2,
-              right: 2,
-              fontSize: 10,
-            }}>🎂</div>
-          )}
+        <div key={`${monthIndex}-${day}`} className={classNames.join(" ")} title={title}>
+          <span>{day}</span>
+          {birthdayList.length > 0 ? <i>🎂</i> : null}
         </div>
       );
     }
 
     return (
-      <div className="calendar-month-container" key={monthIndex}>
-        <div className="calendar-month-header">
+      <article key={monthNames[monthIndex]} className="enterprise-calendar-month-card">
+        <div className="enterprise-calendar-month-header">
           {monthNames[monthIndex]} {selectedYear}
         </div>
-        <div className="calendar-month">
-          <div className="calendar-weekdays">
-            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
-              <div key={day} className="calendar-weekday">{day}</div>
+        <div className="enterprise-calendar-month-body">
+          <div className="enterprise-calendar-weekdays">
+            {weekdayNames.map((dayName) => (
+              <div key={dayName}>{dayName}</div>
             ))}
           </div>
-          <div className="calendar-days">
-            {days}
-          </div>
+          <div className="enterprise-calendar-days">{days}</div>
         </div>
-      </div>
+      </article>
     );
-  };
-
-  const publicHolidays = holidays.filter(h => h.type === "public");
-  const optionalHolidays = holidays.filter(h => h.type === "optional");
-
-  const getBirthdayVisibilityMessage = () => {
-    if (isAdmin) {
-      return "All employee birthdays";
-    } else if (isManager) {
-      return "Your birthday + team birthdays";
-    } else if (hasDirectReports) {
-      return "Your birthday + direct reports' birthdays";
-    } else {
-      return "Your birthday only";
-    }
   };
 
   if (loading) {
     return (
-      <div className="panel" style={{ textAlign: "center", padding: 60 }}>
-        <div style={{ fontSize: 48, marginBottom: 16 }}>⏳</div>
-        <div style={{ fontSize: 18, color: "#6b7280" }}>Loading calendar...</div>
-      </div>
+      <section className="enterprise-calendar-workspace">
+        <div className="fiori-loading-card">
+          <CalendarDays size={28} />
+          <div>
+            <strong>Loading enterprise calendar</strong>
+            <p>Preparing holidays, birthdays, and the yearly view.</p>
+          </div>
+        </div>
+      </section>
     );
   }
 
   return (
-    <div className="panel">
-      {/* ✅ FIXED: Mobile-responsive header */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
-          <div style={{ flex: "1 1 auto", minWidth: 0 }}>
-            <h3 style={{ margin: 0, fontSize: window.innerWidth <= 480 ? 16 : 18 }}>Company Calendar {selectedYear}</h3>
-            <p className="muted" style={{ margin: "4px 0 0 0", fontSize: window.innerWidth <= 480 ? 12 : 14 }}>
-              Organization Holidays & Birthdays
-            </p>
+    <section className="enterprise-calendar-workspace">
+      <header className="admin-hero">
+        <div>
+          <div className="admin-section-overline">Enterprise Calendar</div>
+          <h1>Enterprise Calendar</h1>
+          <p>
+            Browse the yearly holiday calendar, review birthday visibility for your role, and keep
+            the workforce aligned on important dates.
+          </p>
+        </div>
+
+        <div className="admin-hero-meta">
+          <div className="admin-hero-meta-item">
+            <span>Year</span>
+            <strong>{selectedYear}</strong>
           </div>
-          
-          {/* ✅ FIXED: Responsive year selector */}
-          <div style={{ 
-            display: "flex", 
-            gap: 6, 
-            alignItems: "center",
-            flexWrap: "wrap",
-            justifyContent: window.innerWidth <= 480 ? "flex-start" : "flex-end",
-            width: window.innerWidth <= 480 ? "100%" : "auto"
-          }}>
-            <button 
-              className="btn ghost" 
-              onClick={() => setSelectedYear(selectedYear - 1)}
-              style={{ padding: "6px 10px", fontSize: 12, flex: window.innerWidth <= 480 ? "0 0 auto" : "initial" }}
-            >
-              ← {selectedYear - 1}
+          <div className="admin-hero-meta-item">
+            <span>Holidays</span>
+            <strong>{holidays.length}</strong>
+          </div>
+          <div className="admin-hero-meta-item">
+            <span>Birthdays</span>
+            <strong>{showBirthdays ? birthdays.length : "Hidden"}</strong>
+          </div>
+        </div>
+      </header>
+
+      <section className="calendar-summary-grid">
+        <article className="fiori-stat-card">
+          <div className="fiori-stat-topline">
+            <span className="fiori-stat-label">Public Holidays</span>
+            <CalendarDays size={18} />
+          </div>
+          <div className="fiori-stat-value">{publicHolidays.length}</div>
+          <div className="fiori-stat-note">Public holidays configured for the selected year</div>
+        </article>
+
+        <article className="fiori-stat-card">
+          <div className="fiori-stat-topline">
+            <span className="fiori-stat-label">Optional Holidays</span>
+            <Sparkles size={18} />
+          </div>
+          <div className="fiori-stat-value">{optionalHolidays.length}</div>
+          <div className="fiori-stat-note">Optional holidays visible in the current calendar scope</div>
+        </article>
+
+        <article className="fiori-stat-card">
+          <div className="fiori-stat-topline">
+            <span className="fiori-stat-label">Birthday Visibility</span>
+            <Cake size={18} />
+          </div>
+          <div className="fiori-stat-value calendar-stat-text">{getBirthdayVisibilityMessage()}</div>
+          <div className="fiori-stat-note">Birthdays shown based on your role and reporting scope</div>
+        </article>
+      </section>
+
+      <section className="fiori-panel">
+        <div className="fiori-panel-header">
+          <div>
+            <h3>Calendar Controls</h3>
+            <p>Switch years, refresh data, and show or hide birthdays</p>
+          </div>
+        </div>
+
+        <div className="calendar-toolbar">
+          <div className="calendar-year-controls">
+            <button className="fiori-button secondary" onClick={() => setSelectedYear(selectedYear - 1)}>
+              <ChevronLeft size={16} />
+              <span>{selectedYear - 1}</span>
             </button>
-            <select 
-              className="input" 
+            <select
+              className="input calendar-year-select"
               value={selectedYear}
-              onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-              style={{ width: window.innerWidth <= 480 ? 100 : 120, padding: "6px 10px", fontSize: 12 }}
+              onChange={(event) => setSelectedYear(Number(event.target.value))}
             >
-              <option value={2024}>2024</option>
-              <option value={2025}>2025</option>
-              <option value={2026}>2026</option>
-              <option value={2027}>2027</option>
-              <option value={2028}>2028</option>
+              {yearOptions.map((year) => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
             </select>
-            <button 
-              className="btn ghost" 
-              onClick={() => setSelectedYear(selectedYear + 1)}
-              style={{ padding: "6px 10px", fontSize: 12, flex: window.innerWidth <= 480 ? "0 0 auto" : "initial" }}
-            >
-              {selectedYear + 1} →
+            <button className="fiori-button secondary" onClick={() => setSelectedYear(selectedYear + 1)}>
+              <span>{selectedYear + 1}</span>
+              <ChevronRight size={16} />
             </button>
-            <button
-              className="btn"
-              onClick={fetchData}
-              style={{ 
-                padding: "6px 10px", 
-                fontSize: 12,
-                marginLeft: window.innerWidth <= 480 ? 0 : 8,
-                width: window.innerWidth <= 480 ? "100%" : "auto",
-                marginTop: window.innerWidth <= 480 ? 8 : 0
-              }}
-              title="Refresh calendar"
-            >
-              🔄 {window.innerWidth <= 480 ? "Refresh" : "Refresh"}
+          </div>
+
+          <div className="calendar-toolbar-actions">
+            <label className="calendar-birthday-toggle">
+              <input
+                type="checkbox"
+                checked={showBirthdays}
+                onChange={(event) => setShowBirthdays(event.target.checked)}
+              />
+              <span>Show birthdays</span>
+            </label>
+            <button className="fiori-button secondary" onClick={fetchData}>
+              <RefreshCw size={16} />
+              <span>Refresh</span>
             </button>
           </div>
         </div>
+
+        {error && <div className="calendar-inline-error">{error}</div>}
+
+        <div className="calendar-legend">
+          <span><i className="is-public" /> Public holiday</span>
+          <span><i className="is-optional" /> Optional holiday</span>
+          <span><i className="is-company" /> Company holiday</span>
+          <span><i className="is-today" /> Today</span>
+          <span><i className="is-birthday" /> Birthday</span>
+        </div>
+      </section>
+
+      <div className="enterprise-calendar-grid">
+        {monthNames.map((_, monthIndex) => renderMonth(monthIndex))}
       </div>
 
-      {error && (
-        <div style={{
-          background: "#fef2f2",
-          border: "1px solid #fecaca",
-          color: "#dc2626",
-          padding: 12,
-          borderRadius: 8,
-          marginBottom: 20,
-          fontSize: 14
-        }}>
-          ⚠️ {error}
-        </div>
-      )}
-
-      {/* Legend with Birthday Toggle */}
-      <div style={{ 
-        display: "flex", 
-        gap: window.innerWidth <= 480 ? 8 : 20,
-        marginBottom: 24, 
-        padding: 16, 
-        background: "#f9fafb", 
-        borderRadius: 8,
-        flexWrap: "wrap",
-        alignItems: "center",
-        fontSize: window.innerWidth <= 480 ? 11 : 13
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ width: 16, height: 16, background: "#fee2e2", border: "1px solid #fecaca", borderRadius: 4, flexShrink: 0 }}></div>
-          <span>Public Holiday ({publicHolidays.length})</span>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ width: 16, height: 16, background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 4, flexShrink: 0 }}></div>
-          <span>Optional Holiday ({optionalHolidays.length})</span>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ width: 16, height: 16, background: "#dbeafe", border: "2px solid #3b82f6", borderRadius: 4, flexShrink: 0 }}></div>
-          <span>Today</span>
-        </div>
-        
-        <div style={{ 
-          marginLeft: window.innerWidth <= 480 ? 0 : "auto",
-          width: window.innerWidth <= 480 ? "100%" : "auto",
-          display: "flex", 
-          alignItems: "center", 
-          gap: 8,
-          padding: "6px 12px",
-          background: showBirthdays ? "#fce7f3" : "white",
-          border: showBirthdays ? "2px solid #fbcfe8" : "2px solid #e5e7eb",
-          borderRadius: 8,
-          cursor: "pointer",
-          transition: "all 0.2s"
-        }}
-        onClick={() => setShowBirthdays(!showBirthdays)}
-        >
-          <input 
-            type="checkbox" 
-            checked={showBirthdays} 
-            onChange={(e) => setShowBirthdays(e.target.checked)}
-            style={{ cursor: "pointer" }}
-          />
-          <span style={{ fontWeight: 600 }}>
-            🎂 Show Birthdays ({birthdays.length})
-          </span>
-        </div>
-      </div>
-
-      {showBirthdays && birthdays.length > 0 && (
-        <div style={{
-          background: "#fffbeb",
-          border: "1px solid #fde68a",
-          borderRadius: 8,
-          padding: 12,
-          marginBottom: 20,
-          fontSize: window.innerWidth <= 480 ? 12 : 13,
-          color: "#92400e",
-          display: "flex",
-          alignItems: "center",
-          gap: 8
-        }}>
-          <span>ℹ️</span>
-          <span>
-            <strong>Birthday visibility:</strong> {getBirthdayVisibilityMessage()}
-          </span>
-        </div>
-      )}
-
-      {/* Calendar Grid */}
-      <div style={{ 
-        display: "grid", 
-        gridTemplateColumns: window.innerWidth <= 480 ? "1fr" : "repeat(auto-fit, minmax(280px, 1fr))",
-        gap: 20,
-        marginBottom: 30
-      }}>
-        {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(month => renderMonth(month))}
-      </div>
-
-      {/* Holiday List */}
-      <div className="card" style={{ padding: window.innerWidth <= 480 ? 14 : 20, marginBottom: 20 }}>
-        <h4 style={{ marginTop: 0, marginBottom: 16, fontSize: window.innerWidth <= 480 ? 15 : 16 }}>
-          Holiday List {selectedYear} ({holidays.length} holidays)
-        </h4>
-        
-        {holidays.length > 0 ? (
-          <div style={{ display: "grid", gap: 8 }}>
-            {holidays
-              .sort((a, b) => new Date(a.date) - new Date(b.date))
-              .map((holiday, idx) => {
-                const [year, month, day] = holiday.date.split('-').map(Number);
-                const date = new Date(year, month - 1, day);
-                const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
-                const dateStr = date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-                
-                let bgColor, borderColor, badgeColor;
-                if (holiday.type === "public") {
-                  bgColor = "#fef2f2";
-                  borderColor = "#fecaca";
-                  badgeColor = "#dc2626";
-                } else if (holiday.type === "optional") {
-                  bgColor = "#fffbeb";
-                  borderColor = "#fde68a";
-                  badgeColor = "#d97706";
-                } else {
-                  bgColor = "#f0f9ff";
-                  borderColor = "#bae6fd";
-                  badgeColor = "#0284c7";
-                }
-                
-                return (
-                  <div 
-                    key={idx}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      flexWrap: window.innerWidth <= 480 ? "wrap" : "nowrap",
-                      padding: "10px 12px",
-                      background: bgColor,
-                      borderRadius: 6,
-                      border: `1px solid ${borderColor}`,
-                      gap: 8
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: 12, flex: "1 1 auto", minWidth: 0 }}>
-                      <div style={{ 
-                        width: 48, 
-                        textAlign: "center",
-                        fontWeight: 600,
-                        fontSize: 13,
-                        flexShrink: 0
-                      }}>
-                        <div style={{ color: "#6b7280" }}>{dayName}</div>
-                        <div>{dateStr}</div>
-                      </div>
-                      <div style={{ minWidth: 0, flex: "1 1 auto" }}>
-                        <div style={{ fontWeight: 600, fontSize: window.innerWidth <= 480 ? 13 : 14, wordWrap: "break-word" }}>{holiday.name}</div>
-                        {holiday.description && (
-                          <div style={{ fontSize: window.innerWidth <= 480 ? 11 : 12, color: "#6b7280", marginTop: 2 }}>
-                            {holiday.description}
-                          </div>
-                        )}
-                        {holiday.region && (
-                          <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>
-                            📍 {holiday.region}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-                      {holiday.is_optional && (
-                        <span style={{
-                          fontSize: 11,
-                          padding: "3px 8px",
-                          background: "#f3f4f6",
-                          borderRadius: 4,
-                          color: "#6b7280",
-                          fontWeight: 500
-                        }}>
-                          Optional
-                        </span>
-                      )}
-                      <span 
-                        className="badge"
-                        style={{
-                          background: badgeColor,
-                          color: "white",
-                          fontSize: 11,
-                          padding: "4px 10px",
-                          textTransform: "capitalize"
-                        }}
-                      >
-                        {holiday.type}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-          </div>
-        ) : (
-          <div className="muted" style={{ textAlign: "center", padding: 40 }}>
-            <div style={{ fontSize: 48, marginBottom: 12 }}>📅</div>
-            <div>No holidays added for {selectedYear}</div>
-            <div style={{ fontSize: 13, marginTop: 8 }}>
-              Admin can add holidays from the Holidays section
+      <section className="enterprise-calendar-details-grid">
+        <section className="fiori-panel">
+          <div className="fiori-panel-header">
+            <div>
+              <h3>Holiday List</h3>
+              <p>Chronological view of the holidays configured for {selectedYear}</p>
             </div>
           </div>
-        )}
-      </div>
 
-      {/* Birthday List */}
-      {showBirthdays && birthdays.length > 0 && (
-        <div className="card" style={{ padding: window.innerWidth <= 480 ? 14 : 20 }}>
-          <h4 style={{ marginTop: 0, marginBottom: 16, fontSize: window.innerWidth <= 480 ? 15 : 16 }}>
-            🎂 Birthdays {selectedYear} ({birthdays.length} birthday{birthdays.length !== 1 ? 's' : ''})
-          </h4>
-          <div style={{
-            fontSize: 12,
-            color: "#6b7280",
-            marginBottom: 16,
-            padding: 8,
-            background: "#f9fafb",
-            borderRadius: 6
-          }}>
-            {getBirthdayVisibilityMessage()}
-          </div>
-          
-          <div style={{ display: "grid", gap: 8 }}>
-            {birthdays
-              .sort((a, b) => new Date(a.date) - new Date(b.date))
-              .map((birthday, idx) => {
-                const [year, month, day] = birthday.date.split('-').map(Number);
-                const date = new Date(year, month - 1, day);
-                const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
-                const dateStr = date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-                
-                return (
-                  <div 
-                    key={idx}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      flexWrap: window.innerWidth <= 480 ? "wrap" : "nowrap",
-                      padding: "10px 12px",
-                      background: birthday.isCurrentUser ? "#fef3c7" : "#fef5f7",
-                      borderRadius: 6,
-                      border: birthday.isCurrentUser ? "2px solid #fbbf24" : "1px solid #fbcfe8",
-                      gap: 8
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: 12, flex: "1 1 auto", minWidth: 0 }}>
-                      <div style={{ fontSize: 24, flexShrink: 0 }}>🎂</div>
-                      <div style={{ 
-                        width: 48, 
-                        textAlign: "center",
-                        fontWeight: 600,
-                        fontSize: 13,
-                        flexShrink: 0
-                      }}>
-                        <div style={{ color: "#6b7280" }}>{dayName}</div>
-                        <div>{dateStr}</div>
-                      </div>
-                      <div style={{ minWidth: 0, flex: "1 1 auto" }}>
-                        <div style={{ 
-                          fontWeight: 600, 
-                          fontSize: window.innerWidth <= 480 ? 13 : 14, 
-                          color: birthday.isCurrentUser ? "#92400e" : "#831843",
-                          wordWrap: "break-word"
-                        }}>
-                          {birthday.name} {birthday.isCurrentUser && "(You)"}
-                        </div>
-                        <div style={{ fontSize: window.innerWidth <= 480 ? 11 : 12, color: "#9ca3af", marginTop: 2 }}>
-                          ID: {birthday.employeeId}
-                        </div>
-                      </div>
-                    </div>
-                    <span 
-                      className="badge"
-                      style={{
-                        background: birthday.isCurrentUser ? "#f59e0b" : "#ec4899",
-                        color: "white",
-                        fontSize: 11,
-                        padding: "4px 10px",
-                        flexShrink: 0
-                      }}
-                    >
-                      {birthday.isCurrentUser ? "Your Birthday" : "Birthday"}
-                    </span>
+          {sortedHolidays.length === 0 ? (
+            <div className="admin-empty-state">
+              <CalendarDays size={24} />
+              <div>
+                <strong>No holidays configured for {selectedYear}</strong>
+                <p>Admins can add holidays from the Holiday Calendar workspace.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="calendar-list">
+              {sortedHolidays.map((holiday) => (
+                <article key={`${holiday.date}-${holiday.name}`} className="calendar-list-card">
+                  <div>
+                    <strong>{holiday.name}</strong>
+                    <p>{holiday.description || "No additional description"}</p>
                   </div>
-                );
-              })}
-          </div>
-        </div>
-      )}
+                  <div className="calendar-list-meta">
+                    <span>{holiday.date}</span>
+                    <span className="fiori-status-pill is-neutral">{holiday.type}</span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
 
-      <style jsx>{`
-        .calendar-month-container {
-          background: white;
-          border-radius: 8px;
-          overflow: hidden;
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        }
+        {showBirthdays && (
+          <section className="fiori-panel">
+            <div className="fiori-panel-header">
+              <div>
+                <h3>Birthday List</h3>
+                <p>{getBirthdayVisibilityMessage()}</p>
+              </div>
+            </div>
 
-        .calendar-month-header {
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          color: white;
-          padding: 12px;
-          font-weight: 600;
-          text-align: center;
-          font-size: 14px;
-        }
-
-        .calendar-month {
-          padding: 16px;
-        }
-
-        .calendar-weekdays {
-          display: grid;
-          grid-template-columns: repeat(7, 1fr);
-          gap: 4px;
-          margin-bottom: 8px;
-        }
-
-        .calendar-weekday {
-          text-align: center;
-          font-size: 12px;
-          font-weight: 600;
-          color: #6b7280;
-          padding: 4px 0;
-        }
-
-        .calendar-days {
-          display: grid;
-          grid-template-columns: repeat(7, 1fr);
-          gap: 4px;
-          justify-items: center;
-          align-items: center;
-        }
-
-        .calendar-day {
-          aspect-ratio: 1;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 13px;
-          border-radius: 4px;
-          cursor: pointer;
-          transition: all 0.2s;
-          width: 100%;
-          text-align: center;
-        }
-
-        .calendar-day:not(.empty):hover {
-          transform: scale(1.05);
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        .calendar-day.empty {
-          border: none;
-        }
-      `}</style>
-
-    </div>
+            {sortedBirthdays.length === 0 ? (
+              <div className="admin-empty-state">
+                <Cake size={24} />
+                <div>
+                  <strong>No birthdays visible for the selected year</strong>
+                  <p>Birthday data appears here based on your access scope.</p>
+                </div>
+              </div>
+            ) : (
+              <div className="calendar-list">
+                {sortedBirthdays.map((birthday) => (
+                  <article key={`${birthday.employeeId}-${birthday.date}`} className="calendar-list-card">
+                    <div>
+                      <strong>
+                        {birthday.name}
+                        {birthday.isCurrentUser ? " (You)" : ""}
+                      </strong>
+                      <p>ID: {birthday.employeeId}</p>
+                    </div>
+                    <div className="calendar-list-meta">
+                      <span>{birthday.date}</span>
+                      <span className="fiori-status-pill is-pending">Birthday</span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+      </section>
+    </section>
   );
 };
 

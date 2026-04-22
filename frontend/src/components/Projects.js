@@ -1,12 +1,30 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  ArrowLeft,
+  CalendarDays,
+  ClipboardList,
+  FolderKanban,
+  Plus,
+  Search,
+  Target,
+  Trash2,
+} from "lucide-react";
+
+const statusToneMap = {
+  Active: "is-approved",
+  Completed: "is-neutral",
+  "On Hold": "is-pending",
+  Planning: "is-neutral",
+};
 
 const Projects = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("All");
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
-  const [selectedProject, setSelectedProject] = useState(null);
+  const [selectedProjectId, setSelectedProjectId] = useState(null);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [projectForm, setProjectForm] = useState({
     projectId: "",
@@ -14,7 +32,7 @@ const Projects = () => {
     startDate: "",
     endDate: "",
     description: "",
-    status: "Active"
+    status: "Active",
   });
 
   const statuses = ["All", "Active", "Completed", "On Hold", "Planning"];
@@ -26,712 +44,496 @@ const Projects = () => {
   const fetchProjects = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/projects/`);
-      const data = await res.json();
-      setProjects(data);
-    } catch (err) {
-      console.error("Error fetching projects:", err);
+      const response = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/projects/`);
+      const data = await response.json();
+      setProjects(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Error fetching projects:", error);
       setMessage("Failed to load projects");
     } finally {
       setLoading(false);
     }
   };
 
-  const filteredProjects = projects.filter((project) => {
-    const matchesSearch = 
-      project.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      project.projectId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      project.description.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesStatus = selectedStatus === "All" || project.status === selectedStatus;
+  const filteredProjects = useMemo(() => {
+    const normalizedQuery = searchQuery.toLowerCase();
 
-    return matchesSearch && matchesStatus;
-  });
+    return projects.filter((project) => {
+      const matchesSearch =
+        project.title?.toLowerCase().includes(normalizedQuery) ||
+        project.projectId?.toLowerCase().includes(normalizedQuery) ||
+        project.description?.toLowerCase().includes(normalizedQuery);
+
+      const matchesStatus =
+        selectedStatus === "All" || project.status === selectedStatus;
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [projects, searchQuery, selectedStatus]);
+
+  const selectedProject = useMemo(
+    () => projects.find((project) => project._id === selectedProjectId) || null,
+    [projects, selectedProjectId]
+  );
+
+  const activeProjects = projects.filter((project) => project.status === "Active").length;
+
+  const formatDate = (value) => {
+    if (!value) return "Not set";
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "Not set";
+
+    return date.toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  const showToast = (nextMessage) => {
+    setMessage(nextMessage);
+    window.setTimeout(() => setMessage(""), 3000);
+  };
+
+  const resetProjectForm = () => {
+    setProjectForm({
+      projectId: "",
+      title: "",
+      startDate: "",
+      endDate: "",
+      description: "",
+      status: "Active",
+    });
+  };
 
   const handleCreateProject = async () => {
     if (!projectForm.projectId || !projectForm.title || !projectForm.startDate) {
-      setMessage("Please fill all required fields");
+      showToast("Please fill all required fields");
       return;
     }
 
-    setLoading(true);
+    setSaving(true);
     try {
-      const res = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/projects/create`, {
+      const response = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/projects/create`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(projectForm)
+        body: JSON.stringify(projectForm),
       });
 
-      const data = await res.json();
+      const data = await response.json();
 
-      if (res.ok) {
-        setMessage("Project created successfully ✓");
-        setShowNewProjectModal(false);
-        setProjectForm({
-          projectId: "",
-          title: "",
-          startDate: "",
-          endDate: "",
-          description: "",
-          status: "Active"
-        });
-        fetchProjects();
-        setTimeout(() => setMessage(""), 3000);
-      } else {
-        setMessage(data.error || "Failed to create project");
+      if (!response.ok) {
+        showToast(data.error || "Failed to create project");
+        return;
       }
-    } catch (err) {
-      setMessage("Network error");
+
+      await fetchProjects();
+      setShowNewProjectModal(false);
+      resetProjectForm();
+      showToast("Project created successfully");
+    } catch (error) {
+      console.error("Error creating project:", error);
+      showToast("Network error while creating project");
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
   const handleDeleteProject = async (projectId) => {
-    if (!window.confirm("Are you sure? This will remove the project from all assigned employees.")) return;
+    if (!window.confirm("Delete this project and remove it from assigned employees?")) {
+      return;
+    }
 
     try {
-      const res = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/projects/${projectId}`, {
-        method: "DELETE"
-      });
+      const response = await fetch(
+        `${process.env.REACT_APP_BACKEND_URL}/api/projects/${projectId}`,
+        { method: "DELETE" }
+      );
 
-      if (res.ok) {
-        setMessage("Project deleted successfully ✓");
-        fetchProjects();
-        setSelectedProject(null);
-        setTimeout(() => setMessage(""), 3000);
+      if (!response.ok) {
+        showToast("Failed to delete project");
+        return;
       }
-    } catch (err) {
-      setMessage("Failed to delete project");
-    }
-  };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "Active":
-        return { bg: "#d1f4dd", text: "#0a5d2c", border: "#10b981" };
-      case "Completed":
-        return { bg: "#dbeafe", text: "#1e40af", border: "#3b82f6" };
-      case "On Hold":
-        return { bg: "#fef3c7", text: "#92400e", border: "#f59e0b" };
-      case "Planning":
-        return { bg: "#f3e8ff", text: "#6b21a8", border: "#a855f7" };
-      default:
-        return { bg: "#f3f4f6", text: "#6b7280", border: "#9ca3af" };
+      await fetchProjects();
+      setSelectedProjectId(null);
+      showToast("Project deleted successfully");
+    } catch (error) {
+      console.error("Error deleting project:", error);
+      showToast("Failed to delete project");
     }
-  };
-
-  const formatDate = (date) => {
-    if (!date) return "N/A";
-    const d = new Date(date);
-    return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
   };
 
   if (selectedProject) {
-    const project = projects.find(p => p._id === selectedProject);
-    
     return (
-      <div style={{ 
-        minHeight: "100vh",
-        background: "#f8f9fa",
-        fontFamily: "Inter, system-ui, sans-serif"
-      }}>
-        <div style={{
-          background: "white",
-          borderBottom: "1px solid #e5e7eb",
-          padding: "24px 40px"
-        }}>
-          <div style={{ maxWidth: 1400, margin: "0 auto" }}>
+      <section className="projects-workspace">
+        <header className="admin-hero">
+          <div>
             <button
-              onClick={() => setSelectedProject(null)}
-              style={{
-                background: "transparent",
-                border: "none",
-                cursor: "pointer",
-                fontSize: 16,
-                color: "#0066cc",
-                fontWeight: 600,
-                marginBottom: 16,
-                display: "flex",
-                alignItems: "center",
-                gap: 8
-              }}
+              className="fiori-button secondary project-back-button"
+              onClick={() => setSelectedProjectId(null)}
             >
-              ← Back to Projects
+              <ArrowLeft size={16} />
+              <span>Back to projects</span>
             </button>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
-              <div>
-                <div style={{ fontSize: 14, color: "#6b7280", marginBottom: 4 }}>
-                  {project.projectId}
-                </div>
-                <h1 style={{ margin: 0, fontSize: 32, fontWeight: 700, color: "#111827" }}>
-                  {project.title}
-                </h1>
-              </div>
-              <div style={{
-                padding: "10px 20px",
-                background: getStatusColor(project.status).bg,
-                color: getStatusColor(project.status).text,
-                borderRadius: 8,
-                fontSize: 14,
-                fontWeight: 600
-              }}>
-                {project.status}
-              </div>
+            <div className="admin-section-overline">Project Portfolio</div>
+            <h1>{selectedProject.title}</h1>
+            <p>
+              Review the schedule, delivery notes, and current status for this project in one
+              place.
+            </p>
+          </div>
+
+          <div className="admin-hero-meta">
+            <div className="admin-hero-meta-item">
+              <span>Project ID</span>
+              <strong>{selectedProject.projectId}</strong>
+            </div>
+            <div className="admin-hero-meta-item">
+              <span>Status</span>
+              <strong>{selectedProject.status}</strong>
+            </div>
+            <div className="admin-hero-meta-item">
+              <span>Timeline</span>
+              <strong>{formatDate(selectedProject.startDate)}</strong>
             </div>
           </div>
-        </div>
+        </header>
 
-        <div style={{ maxWidth: 1400, margin: "40px auto", padding: "0 40px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 32 }}>
-            <div>
-              <div style={{
-                background: "white",
-                borderRadius: 16,
-                padding: 32,
-                marginBottom: 24,
-                boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
-              }}>
-                <h2 style={{ margin: "0 0 16px 0", fontSize: 20, fontWeight: 700 }}>
-                  Project Overview
-                </h2>
-                <p style={{ margin: 0, color: "#6b7280", lineHeight: 1.6, fontSize: 15 }}>
-                  {project.description || "No description provided"}
-                </p>
-              </div>
-            </div>
-
-            <div>
-              <div style={{
-                background: "white",
-                borderRadius: 16,
-                padding: 24,
-                marginBottom: 20,
-                boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
-              }}>
-                <div style={{ fontSize: 13, color: "#6b7280", marginBottom: 8 }}>
-                  📅 Start Date
+        <section className="projects-detail-grid">
+          <div className="projects-detail-main">
+            <section className="fiori-panel">
+              <div className="fiori-panel-header">
+                <div>
+                  <h3>Project Overview</h3>
+                  <p>Delivery context and core scope for the selected project</p>
                 </div>
-                <div style={{ fontSize: 18, fontWeight: 700, color: "#111827" }}>
-                  {formatDate(project.startDate)}
-                </div>
+                <span
+                  className={`fiori-status-pill ${
+                    statusToneMap[selectedProject.status] || "is-neutral"
+                  }`}
+                >
+                  {selectedProject.status}
+                </span>
               </div>
 
-              <div style={{
-                background: "white",
-                borderRadius: 16,
-                padding: 24,
-                marginBottom: 20,
-                boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
-              }}>
-                <div style={{ fontSize: 13, color: "#6b7280", marginBottom: 8 }}>
-                  📅 End Date
-                </div>
-                <div style={{ fontSize: 18, fontWeight: 700, color: "#111827" }}>
-                  {formatDate(project.endDate)}
-                </div>
+              <div className="projects-overview-copy">
+                {selectedProject.description || "No project description has been added yet."}
               </div>
-
-              <button 
-                onClick={() => handleDeleteProject(project._id)}
-                style={{
-                  width: "100%",
-                  padding: 16,
-                  background: "#ef4444",
-                  color: "white",
-                  border: "none",
-                  borderRadius: 12,
-                  fontSize: 15,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  marginTop: 20
-                }}
-              >
-                Delete Project
-              </button>
-            </div>
+            </section>
           </div>
-        </div>
-      </div>
+
+          <aside className="projects-detail-side">
+            <article className="fiori-stat-card">
+              <div className="fiori-stat-topline">
+                <span className="fiori-stat-label">Start Date</span>
+                <CalendarDays size={18} />
+              </div>
+              <div className="fiori-stat-value project-detail-value">
+                {formatDate(selectedProject.startDate)}
+              </div>
+              <div className="fiori-stat-note">Planned project kickoff</div>
+            </article>
+
+            <article className="fiori-stat-card">
+              <div className="fiori-stat-topline">
+                <span className="fiori-stat-label">End Date</span>
+                <Target size={18} />
+              </div>
+              <div className="fiori-stat-value project-detail-value">
+                {formatDate(selectedProject.endDate)}
+              </div>
+              <div className="fiori-stat-note">Target completion milestone</div>
+            </article>
+
+            <button
+              className="fiori-button secondary danger full-width"
+              onClick={() => handleDeleteProject(selectedProject._id)}
+            >
+              <Trash2 size={16} />
+              <span>Delete project</span>
+            </button>
+          </aside>
+        </section>
+      </section>
     );
   }
 
   return (
-    <div style={{ 
-      minHeight: "100vh",
-      background: "#f8f9fa",
-      fontFamily: "Inter, system-ui, sans-serif"
-    }}>
-      {message && (
-        <div style={{
-          position: "fixed",
-          top: 20,
-          right: 20,
-          background: message.includes("✓") ? "#10b981" : "#ef4444",
-          color: "white",
-          padding: "12px 24px",
-          borderRadius: 8,
-          zIndex: 10000,
-          boxShadow: "0 4px 12px rgba(0,0,0,0.15)"
-        }}>
-          {message}
+    <section className="projects-workspace">
+      <header className="admin-hero">
+        <div>
+          <div className="admin-section-overline">Project Portfolio</div>
+          <h1>Projects</h1>
+          <p>
+            Track the delivery portfolio, filter active work quickly, and create new project
+            records from the same workspace.
+          </p>
         </div>
-      )}
 
-      <div style={{
-        background: "white",
-        borderBottom: "1px solid #e5e7eb",
-        padding: "32px 40px"
-      }}>
-        <div style={{ maxWidth: 1400, margin: "0 auto" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
-            <div>
-              <h1 style={{ 
-                margin: 0, 
-                fontSize: 36, 
-                fontWeight: 700,
-                color: "#111827",
-                marginBottom: 8
-              }}>
-                Projects
-              </h1>
-              <p style={{ 
-                margin: 0, 
-                fontSize: 16,
-                color: "#6b7280"
-              }}>
-                Manage and track all projects
-              </p>
-            </div>
-            <button
-              onClick={() => setShowNewProjectModal(true)}
-              style={{
-                padding: "14px 24px",
-                background: "#0066cc",
-                color: "white",
-                border: "none",
-                borderRadius: 10,
-                fontSize: 15,
-                fontWeight: 600,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                boxShadow: "0 4px 12px rgba(0, 102, 204, 0.3)"
-              }}
-            >
-              + New Project
-            </button>
+        <div className="admin-hero-meta">
+          <div className="admin-hero-meta-item">
+            <span>Total projects</span>
+            <strong>{projects.length}</strong>
+          </div>
+          <div className="admin-hero-meta-item">
+            <span>Active projects</span>
+            <strong>{activeProjects}</strong>
+          </div>
+          <div className="admin-hero-meta-item">
+            <span>Filtered view</span>
+            <strong>{filteredProjects.length}</strong>
           </div>
         </div>
-      </div>
+      </header>
 
-      <div style={{ maxWidth: 1400, margin: "32px auto", padding: "0 40px" }}>
-        <div style={{
-          background: "white",
-          borderRadius: 12,
-          padding: 20,
-          marginBottom: 32,
-          boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
-        }}>
-          <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-            <div style={{ flex: 1, position: "relative" }}>
-              <span style={{
-                position: "absolute",
-                left: 16,
-                top: "50%",
-                transform: "translateY(-50%)",
-                fontSize: 18,
-                color: "#9ca3af"
-              }}>
-                🔍
-              </span>
+      <section className="projects-summary-grid">
+        <article className="fiori-stat-card">
+          <div className="fiori-stat-topline">
+            <span className="fiori-stat-label">Portfolio Size</span>
+            <FolderKanban size={18} />
+          </div>
+          <div className="fiori-stat-value">{projects.length}</div>
+          <div className="fiori-stat-note">Projects available in the current workspace</div>
+        </article>
+
+        <article className="fiori-stat-card">
+          <div className="fiori-stat-topline">
+            <span className="fiori-stat-label">Active Delivery</span>
+            <Target size={18} />
+          </div>
+          <div className="fiori-stat-value">{activeProjects}</div>
+          <div className="fiori-stat-note">Projects marked as actively in motion</div>
+        </article>
+
+        <article className="fiori-stat-card is-actionable" onClick={() => setShowNewProjectModal(true)}>
+          <div className="fiori-stat-topline">
+            <span className="fiori-stat-label">Create New</span>
+            <Plus size={18} />
+          </div>
+          <div className="fiori-stat-value">New</div>
+          <div className="fiori-inline-link">Open the project creation form</div>
+        </article>
+      </section>
+
+      <section className="fiori-panel">
+        <div className="fiori-panel-header">
+          <div>
+            <h3>Filters</h3>
+            <p>Search across the project portfolio by title, ID, description, or status</p>
+          </div>
+        </div>
+
+        <div className="projects-filter-grid">
+          <label className="employee-filter-field employee-filter-search">
+            <span>Search</span>
+            <div className="employee-filter-input-shell">
+              <Search size={16} />
               <input
+                className="input"
                 type="text"
-                placeholder="Search projects..."
+                placeholder="Search by title, project ID, or description"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "12px 16px 12px 48px",
-                  fontSize: 15,
-                  border: "1px solid #e5e7eb",
-                  borderRadius: 8,
-                  outline: "none"
-                }}
+                onChange={(event) => setSearchQuery(event.target.value)}
               />
             </div>
+          </label>
 
+          <label className="employee-filter-field">
+            <span>Status</span>
             <select
+              className="input"
               value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
-              style={{
-                padding: "12px 40px 12px 16px",
-                fontSize: 14,
-                border: "1px solid #e5e7eb",
-                borderRadius: 8,
-                background: "white",
-                cursor: "pointer",
-                fontWeight: 500
-              }}
+              onChange={(event) => setSelectedStatus(event.target.value)}
             >
               {statuses.map((status) => (
                 <option key={status} value={status}>
-                  {status === "All" ? "All Status" : status}
+                  {status === "All" ? "All statuses" : status}
                 </option>
               ))}
             </select>
+          </label>
+        </div>
+      </section>
+
+      {loading ? (
+        <div className="fiori-loading-card">
+          <FolderKanban size={28} />
+          <div>
+            <strong>Loading project portfolio</strong>
+            <p>Preparing current project records and delivery status.</p>
           </div>
         </div>
-
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(380px, 1fr))",
-          gap: 24
-        }}>
-          {filteredProjects.map((project) => {
-            const statusColors = getStatusColor(project.status);
-            
-            return (
-              <div
-                key={project._id}
-                style={{
-                  background: "white",
-                  borderRadius: 16,
-                  padding: 0,
-                  boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-                  border: "1px solid #e5e7eb",
-                  overflow: "hidden",
-                  transition: "all 0.3s ease",
-                  cursor: "pointer"
-                }}
-                onClick={() => setSelectedProject(project._id)}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.boxShadow = "0 8px 24px rgba(0,0,0,0.12)";
-                  e.currentTarget.style.transform = "translateY(-4px)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.1)";
-                  e.currentTarget.style.transform = "translateY(0)";
-                }}
-              >
-                <div style={{
-                  padding: "24px 24px 20px 24px",
-                  background: "#f9fafb"
-                }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 12 }}>
-                    <div style={{ 
-                      fontSize: 13, 
-                      fontWeight: 600,
-                      color: "#6b7280",
-                      letterSpacing: "0.5px"
-                    }}>
-                      {project.projectId}
-                    </div>
-                    <div style={{
-                      padding: "6px 12px",
-                      background: statusColors.bg,
-                      color: statusColors.text,
-                      borderRadius: 6,
-                      fontSize: 12,
-                      fontWeight: 700
-                    }}>
-                      {project.status}
-                    </div>
-                  </div>
-                  <h3 style={{
-                    margin: 0,
-                    fontSize: 20,
-                    fontWeight: 700,
-                    color: "#111827",
-                    lineHeight: 1.3
-                  }}>
-                    {project.title}
-                  </h3>
+      ) : filteredProjects.length === 0 ? (
+        <div className="admin-empty-state">
+          <ClipboardList size={28} />
+          <div>
+            <strong>No projects match the current filters</strong>
+            <p>Adjust the search or status filter to expand the portfolio view.</p>
+          </div>
+        </div>
+      ) : (
+        <div className="projects-card-grid">
+          {filteredProjects.map((project) => (
+            <article
+              key={project._id}
+              className="projects-card"
+              onClick={() => setSelectedProjectId(project._id)}
+            >
+              <div className="projects-card-top">
+                <div>
+                  <div className="projects-card-id">{project.projectId}</div>
+                  <h3>{project.title}</h3>
                 </div>
+                <span
+                  className={`fiori-status-pill ${
+                    statusToneMap[project.status] || "is-neutral"
+                  }`}
+                >
+                  {project.status}
+                </span>
+              </div>
 
-                <div style={{ padding: 24 }}>
-                  <div style={{ marginBottom: 20 }}>
-                    <div style={{ 
-                      display: "flex", 
-                      alignItems: "center",
-                      gap: 8,
-                      marginBottom: 8
-                    }}>
-                      <span style={{ fontSize: 16 }}>📅</span>
-                      <div>
-                        <div style={{ fontSize: 12, color: "#9ca3af", marginBottom: 2 }}>
-                          Start Date
-                        </div>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>
-                          {formatDate(project.startDate)}
-                        </div>
-                      </div>
-                    </div>
-                    <div style={{ 
-                      display: "flex", 
-                      alignItems: "center",
-                      gap: 8
-                    }}>
-                      <span style={{ fontSize: 16 }}>📅</span>
-                      <div>
-                        <div style={{ fontSize: 12, color: "#9ca3af", marginBottom: 2 }}>
-                          End Date
-                        </div>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>
-                          {formatDate(project.endDate)}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{
-                    padding: "16px",
-                    background: "#f9fafb",
-                    borderRadius: 8
-                  }}>
-                    <div style={{ display: "flex", alignItems: "start", gap: 8 }}>
-                      <span style={{ fontSize: 16, marginTop: 2 }}>📄</span>
-                      <p style={{
-                        margin: 0,
-                        fontSize: 14,
-                        color: "#6b7280",
-                        lineHeight: 1.5
-                      }}>
-                        {project.description || "No description"}
-                      </p>
-                    </div>
-                  </div>
+              <div className="projects-card-dates">
+                <div>
+                  <span>Start</span>
+                  <strong>{formatDate(project.startDate)}</strong>
+                </div>
+                <div>
+                  <span>End</span>
+                  <strong>{formatDate(project.endDate)}</strong>
                 </div>
               </div>
-            );
-          })}
-        </div>
 
-        {filteredProjects.length === 0 && (
-          <div style={{
-            background: "white",
-            borderRadius: 16,
-            padding: 60,
-            textAlign: "center",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
-          }}>
-            <div style={{ fontSize: 64, marginBottom: 16 }}>🔍</div>
-            <h3 style={{ 
-              margin: "0 0 8px 0",
-              fontSize: 20,
-              fontWeight: 600,
-              color: "#111827"
-            }}>
-              No projects found
-            </h3>
-            <p style={{ 
-              margin: 0,
-              fontSize: 14,
-              color: "#6b7280"
-            }}>
-              Try adjusting your search or filters
-            </p>
-          </div>
-        )}
-      </div>
+              <p>{project.description || "No project description available."}</p>
+
+              <div className="fiori-card-link">Open project details</div>
+            </article>
+          ))}
+        </div>
+      )}
 
       {showNewProjectModal && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: "rgba(0,0,0,0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 9999
-          }}
-          onClick={() => setShowNewProjectModal(false)}
-        >
-          <div
-            style={{
-              background: "white",
-              padding: 32,
-              borderRadius: 16,
-              maxWidth: 600,
-              width: "90%",
-              boxShadow: "0 25px 50px rgba(0,0,0,0.4)"
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 style={{ margin: "0 0 24px 0", fontSize: 24, fontWeight: 700 }}>
-              Create New Project
-            </h3>
-            
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div className="admin-modal-overlay" onClick={() => setShowNewProjectModal(false)}>
+          <div className="admin-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="admin-modal-header">
               <div>
-                <label style={{ display: "block", marginBottom: 8, fontWeight: 600 }}>
-                  Project ID *
-                </label>
-                <input
-                  type="text"
-                  value={projectForm.projectId}
-                  onChange={(e) => setProjectForm({ ...projectForm, projectId: e.target.value })}
-                  style={{
-                    width: "100%",
-                    padding: 12,
-                    border: "1px solid #e5e7eb",
-                    borderRadius: 8,
-                    fontSize: 14
-                  }}
-                  placeholder="PROJ-001"
-                />
-              </div>
-
-              <div>
-                <label style={{ display: "block", marginBottom: 8, fontWeight: 600 }}>
-                  Project Title *
-                </label>
-                <input
-                  type="text"
-                  value={projectForm.title}
-                  onChange={(e) => setProjectForm({ ...projectForm, title: e.target.value })}
-                  style={{
-                    width: "100%",
-                    padding: 12,
-                    border: "1px solid #e5e7eb",
-                    borderRadius: 8,
-                    fontSize: 14
-                  }}
-                  placeholder="HR Management System"
-                />
-              </div>
-
-              <div>
-                <label style={{ display: "block", marginBottom: 8, fontWeight: 600 }}>
-                  Start Date *
-                </label>
-                <input
-                  type="date"
-                  value={projectForm.startDate}
-                  onChange={(e) => setProjectForm({ ...projectForm, startDate: e.target.value })}
-                  style={{
-                    width: "100%",
-                    padding: 12,
-                    border: "1px solid #e5e7eb",
-                    borderRadius: 8,
-                    fontSize: 14
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: "block", marginBottom: 8, fontWeight: 600 }}>
-                End Date (Optional - Leave empty if ongoing)
-                </label>
-                <input
-                  type="date"
-                  value={projectForm.endDate}
-                  onChange={(e) => setProjectForm({ ...projectForm, endDate: e.target.value })}
-                  style={{
-                    width: "100%",
-                    padding: 12,
-                    border: "1px solid #e5e7eb",
-                    borderRadius: 8,
-                    fontSize: 14
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: "block", marginBottom: 8, fontWeight: 600 }}>
-                  Description
-                </label>
-                <textarea
-                  value={projectForm.description}
-                  onChange={(e) => setProjectForm({ ...projectForm, description: e.target.value })}
-                  style={{
-                    width: "100%",
-                    padding: 12,
-                    border: "1px solid #e5e7eb",
-                    borderRadius: 8,
-                    fontSize: 14,
-                    minHeight: 100,
-                    resize: "vertical"
-                  }}
-                  placeholder="Project description..."
-                />
-              </div>
-
-              <div>
-                <label style={{ display: "block", marginBottom: 8, fontWeight: 600 }}>
-                  Status
-                </label>
-                <select
-                  value={projectForm.status}
-                  onChange={(e) => setProjectForm({ ...projectForm, status: e.target.value })}
-                  style={{
-                    width: "100%",
-                    padding: 12,
-                    border: "1px solid #e5e7eb",
-                    borderRadius: 8,
-                    fontSize: 14
-                  }}
-                >
-                  <option value="Active">Active</option>
-                  <option value="Planning">Planning</option>
-                  <option value="On Hold">On Hold</option>
-                  <option value="Completed">Completed</option>
-                </select>
+                <h2>Create Project</h2>
+                <p>Add a new project record to the delivery portfolio</p>
               </div>
             </div>
 
-            <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 24 }}>
+            <div className="projects-modal-grid">
+              <label className="fiori-form-field">
+                <label>Project ID</label>
+                <input
+                  className="input"
+                  value={projectForm.projectId}
+                  onChange={(event) =>
+                    setProjectForm({ ...projectForm, projectId: event.target.value })
+                  }
+                  placeholder="PROJ-001"
+                />
+              </label>
+
+              <label className="fiori-form-field">
+                <label>Project Title</label>
+                <input
+                  className="input"
+                  value={projectForm.title}
+                  onChange={(event) =>
+                    setProjectForm({ ...projectForm, title: event.target.value })
+                  }
+                  placeholder="People operations platform"
+                />
+              </label>
+
+              <label className="fiori-form-field">
+                <label>Start Date</label>
+                <input
+                  className="input"
+                  type="date"
+                  value={projectForm.startDate}
+                  onChange={(event) =>
+                    setProjectForm({ ...projectForm, startDate: event.target.value })
+                  }
+                />
+              </label>
+
+              <label className="fiori-form-field">
+                <label>End Date</label>
+                <input
+                  className="input"
+                  type="date"
+                  value={projectForm.endDate}
+                  onChange={(event) =>
+                    setProjectForm({ ...projectForm, endDate: event.target.value })
+                  }
+                />
+              </label>
+
+              <label className="fiori-form-field">
+                <label>Status</label>
+                <select
+                  className="input"
+                  value={projectForm.status}
+                  onChange={(event) =>
+                    setProjectForm({ ...projectForm, status: event.target.value })
+                  }
+                >
+                  {statuses
+                    .filter((status) => status !== "All")
+                    .map((status) => (
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
+                    ))}
+                </select>
+              </label>
+
+              <label className="fiori-form-field projects-modal-description">
+                <label>Description</label>
+                <textarea
+                  value={projectForm.description}
+                  onChange={(event) =>
+                    setProjectForm({ ...projectForm, description: event.target.value })
+                  }
+                  placeholder="Describe the scope, goals, or current delivery notes"
+                />
+              </label>
+            </div>
+
+            <div className="admin-modal-actions">
               <button
+                className="fiori-button secondary"
                 onClick={() => {
                   setShowNewProjectModal(false);
-                  setProjectForm({
-                    projectId: "",
-                    title: "",
-                    startDate: "",
-                    endDate: "",
-                    description: "",
-                    status: "Active"
-                  });
-                }}
-                style={{
-                  padding: "12px 24px",
-                  background: "#f3f4f6",
-                  color: "#374151",
-                  border: "none",
-                  borderRadius: 8,
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: "pointer"
+                  resetProjectForm();
                 }}
               >
                 Cancel
               </button>
-              <button
-                onClick={handleCreateProject}
-                disabled={loading}
-                style={{
-                  padding: "12px 24px",
-                  background: loading ? "#9ca3af" : "#0066cc",
-                  color: "white",
-                  border: "none",
-                  borderRadius: 8,
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: loading ? "not-allowed" : "pointer"
-                }}
-              >
-                {loading ? "Creating..." : "Create Project"}
+              <button className="fiori-button primary" onClick={handleCreateProject} disabled={saving}>
+                {saving ? "Creating..." : "Create project"}
               </button>
             </div>
           </div>
         </div>
       )}
-    </div>
+
+      {message && (
+        <div
+          className={`admin-toast ${
+            message.toLowerCase().includes("failed") || message.toLowerCase().includes("please")
+              ? "is-error"
+              : "is-success"
+          }`}
+        >
+          {message}
+        </div>
+      )}
+    </section>
   );
 };
 
