@@ -341,6 +341,393 @@ body {
   color: var(--muted);
 }
 
+.org-search-shell {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+}
+
+.org-search-input-shell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: #fff;
+  box-shadow: 0 0.125rem 0.35rem rgba(31, 50, 69, 0.06);
+}
+
+.org-search-input-shell:focus-within {
+  border-color: #99c5ef;
+  box-shadow: 0 0 0 3px rgba(10, 110, 209, 0.08);
+}
+
+.org-search-input-shell .input {
+  border: none;
+  background: transparent;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.org-search-input-shell .input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.org-search-results {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  right: 0;
+  padding: 8px;
+  border-radius: 16px;
+  border: 1px solid var(--panel-border);
+  background: #fff;
+  box-shadow: 0 1rem 2rem rgba(31, 50, 69, 0.18);
+  z-index: 1200;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.org-search-result-card {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.org-search-result-card:hover {
+  background: #f8fafc;
+  border-color: #e5ebf1;
+}
+
+.org-search-result-avatar-wrap,
+.org-search-person-avatar-wrap,
+.org-search-profile-avatar-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.org-search-result-avatar-wrap,
+.org-search-person-avatar-wrap {
+  width: 42px;
+  height: 42px;
+}
+
+.org-search-profile-avatar-wrap {
+  width: 72px;
+  height: 72px;
+}
+
+.org-search-result-avatar,
+.org-search-person-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--border);
+}
+
+.org-search-result-avatar-fallback,
+.org-search-person-avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #d8e7f6;
+  color: #0f3b63;
+  font-weight: 700;
+}
+
+.org-search-result-status,
+.org-search-person-status,
+.org-search-profile-status {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  border-radius: 50%;
+  border: 1px solid #dfe7ef;
+  z-index: 1;
+}
+
+.org-search-result-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.org-search-result-copy strong {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.org-search-result-copy p,
+.org-search-result-copy small {
+  margin: 0;
+  color: var(--muted);
+}
+
+.org-search-result-copy p {
+  font-size: 12px;
+}
+
+.org-search-result-copy small {
+  font-size: 11px;
+}
+
+.org-search-empty {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+}
+
+.org-search-empty strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text);
+}
+
+.org-search-empty p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.org-search-profile-modal {
+  width: min(100%, 980px);
+  max-height: 88vh;
+  overflow: auto;
+  padding: 0;
+  background: #fff;
+  border-radius: 24px;
+}
+
+.org-search-profile-hero {
+  position: relative;
+  padding: 30px 34px;
+  color: #fff;
+  background:
+    linear-gradient(180deg, rgba(10, 110, 209, 0.92), rgba(15, 39, 66, 0.92)),
+    linear-gradient(120deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+  border-top-left-radius: 24px;
+  border-top-right-radius: 24px;
+  margin: 0;
+}
+
+.org-search-profile-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  cursor: pointer;
+  font-size: 18px;
+}
+
+.org-search-profile-top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.org-search-profile-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid rgba(255, 255, 255, 0.35);
+}
+
+.org-search-profile-avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.16);
+  font-size: 28px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.org-search-profile-top h2 {
+  margin: 0 0 6px;
+  font-size: 1.6rem;
+  font-weight: 400;
+  color: #fff;
+}
+
+.org-search-profile-top p {
+  margin: 0;
+  opacity: 0.92;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.org-search-profile-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px;
+  overflow-x: hidden;
+}
+
+.org-search-profile-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.org-search-stat-text {
+  font-size: 1.05rem;
+  line-height: 1.15;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.org-search-profile-summary .fiori-stat-card {
+  min-width: 0;
+}
+
+.org-search-profile-summary .fiori-stat-value {
+  font-size: clamp(0.95rem, 1.55vw, 1.85rem);
+  line-height: 1.05;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.org-search-profile-summary .fiori-stat-note {
+  max-width: 100%;
+}
+
+.org-search-detail-grid,
+.org-search-network-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.org-search-detail-grid {
+  grid-template-columns: 1fr;
+}
+
+.org-search-detail-card {
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: #f8fafc;
+  border: 1px solid #e5ebf1;
+}
+
+.org-search-detail-card span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.org-search-detail-card strong {
+  display: block;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.org-search-person-card {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: #f8fafc;
+  border: 1px solid #e5ebf1;
+}
+
+.org-search-person-card.is-accent {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.org-search-person-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.org-search-person-copy span {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.org-search-person-copy strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.org-search-person-copy p,
+.org-search-person-copy small {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.org-search-person-copy p {
+  font-size: 12px;
+}
+
+.org-search-person-copy small {
+  font-size: 11px;
+}
+
+.org-search-inline-note {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f3f4f6;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.org-search-inline-note.is-loading {
+  background: #fff7e8;
+  color: #8d5a00;
+}
+
 .profile-dropdown-menu {
   background: #fff;
   border: 1px solid var(--border);
@@ -3240,7 +3627,10 @@ body {
   .tea-employee-summary,
   .tea-bulk-grid,
   .tea-modal-content,
-  .tea-admin-slot-grid {
+  .tea-admin-slot-grid,
+  .org-search-profile-summary,
+  .org-search-detail-grid,
+  .org-search-network-grid {
     grid-template-columns: 1fr;
   }
 
@@ -3256,7 +3646,8 @@ body {
   .audit-log-event-top,
   .tea-admin-day-top,
   .tea-admin-total,
-  .tea-bulk-footer {
+  .tea-bulk-footer,
+  .org-search-profile-top {
     flex-direction: column;
     align-items: stretch;
   }
@@ -4149,6 +4540,10 @@ body {
 
   .tea-admin-metric-grid {
     grid-template-columns: 1fr !important;
+  }
+
+  .org-search-shell {
+    max-width: 100%;
   }
   
   .policy-content,
