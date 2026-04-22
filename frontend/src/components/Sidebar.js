@@ -2,6 +2,8 @@ import React from "react";
 import {
   Briefcase,
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
   ClipboardList,
   Coffee,
   FileText,
@@ -28,20 +30,20 @@ const buttons = [
   { key: "calendar", label: "Enterprise Calendar", roles: ["Admin", "Manager", "Employee"], icon: CalendarDays },
 ];
 
-const Sidebar = ({ section, setSection, role, restricted = [], isOpen }) => {
+const Sidebar = ({ section, setSection, role, restricted = [], isOpen, isCollapsed, onToggleCollapse }) => {
   const visibleButtons = buttons.filter(
     (btn) => !restricted.includes(btn.key) && (!role || btn.roles.includes(role))
   );
 
   return (
-    <aside className={`sidebar ${isOpen ? "open" : ""}`}>
+    <aside className={`sidebar ${isOpen ? "open" : ""} ${isCollapsed ? "collapsed" : ""}`}>
       <div className="brand">
-        <div className="brand-mark">
-          <img src={logo} alt="Naxrita" />
-        </div>
+        <img className="brand-mark" src={logo} alt="Naxrita" />
         <div className="brand-copy">
-          <span className="brand-eyebrow">Human Resources</span>
-          <strong>Enterprise Workbench</strong>
+          <strong>
+            <span>Naxrita</span>
+            <span>HRMS Portal</span>
+          </strong>
         </div>
       </div>
 
@@ -67,8 +69,15 @@ const Sidebar = ({ section, setSection, role, restricted = [], isOpen }) => {
       </nav>
 
       <div className="footer">
-        <div className="footer-title">Naxrita HRMS</div>
-        <div className="footer-meta">Enterprise operations console</div>
+        <button
+          type="button"
+          className="sidebar-collapse-btn desktop-only sidebar-collapse-btn-bottom"
+          onClick={onToggleCollapse}
+          aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+        </button>
       </div>
     </aside>
   );

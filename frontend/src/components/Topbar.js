@@ -3,7 +3,7 @@ import { ChevronDown, LogOut, Menu, UserCircle2 } from "lucide-react";
 import UniversalSearch from "./UniversalSearch";
 import Notifications from "./Notifications";
 
-const Topbar = ({ user, onLogout, onNavigateToProfile, onToggleSidebar }) => {
+const Topbar = ({ user, onLogout, onNavigateToProfile, onToggleSidebar, isSidebarCollapsed }) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const containerRef = useRef(null);
   const isMobile = typeof window !== "undefined" && window.innerWidth <= 480;
@@ -62,7 +62,11 @@ const Topbar = ({ user, onLogout, onNavigateToProfile, onToggleSidebar }) => {
   return (
     <header className="topbar">
       <div className="topbar-title-group">
-        <button className="mobile-menu-btn" onClick={onToggleSidebar} aria-label="Open navigation">
+        <button
+          className="mobile-menu-btn"
+          onClick={onToggleSidebar}
+          aria-label={isSidebarCollapsed ? "Open navigation" : "Toggle navigation"}
+        >
           <Menu size={20} />
         </button>
 

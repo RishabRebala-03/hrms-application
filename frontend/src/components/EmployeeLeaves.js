@@ -1,6 +1,44 @@
-// src/components/EmployeeLeaves.js - WITH INTERN RESTRICTIONS + LOOPHOLE FIX
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
+import {
+  CalendarCheck2,
+  Clock3,
+  Search,
+  ShieldCheck,
+  TriangleAlert,
+  Users,
+} from "lucide-react";
+
+const statusToneMap = {
+  Approved: "is-approved",
+  Rejected: "is-rejected",
+  Cancelled: "is-neutral",
+  Pending: "is-pending",
+};
+
+const formatDate = (dateStr) => {
+  if (!dateStr) return "Not available";
+
+  try {
+    const value = typeof dateStr === "object" && dateStr.$date ? dateStr.$date : dateStr;
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) return "Not available";
+
+    return date.toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return "Not available";
+  }
+};
+
+const messageTone = (message) =>
+  message.includes("Error") || message.includes("Failed") || message.includes("⚠️")
+    ? "is-error"
+    : "is-success";
 
 const EmployeeLeaves = ({ user }) => {
   const [balance, setBalance] = useState(null);
@@ -17,197 +55,189 @@ const EmployeeLeaves = ({ user }) => {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [editingLeave, setEditingLeave] = useState(null);
-  const [showTeamApprovals, setShowTeamApprovals] = useState(false);
   const [hasReportees, setHasReportees] = useState(false);
+  const [reportees, setReportees] = useState([]);
   const [teamPendingLeaves, setTeamPendingLeaves] = useState([]);
-  const [expandedTeamLeave, setExpandedTeamLeave] = useState(null);
+  const [teamDecisionHistory, setTeamDecisionHistory] = useState([]);
+  const [teamHistoryLoading, setTeamHistoryLoading] = useState(false);
   const [rejectModal, setRejectModal] = useState({ show: false, leaveId: null, reason: "" });
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState("newest");
-  
   const [historySearchTerm, setHistorySearchTerm] = useState("");
   const [historyFilterStatus, setHistoryFilterStatus] = useState("all");
   const [historyFilterType, setHistoryFilterType] = useState("all");
   const [historySortBy, setHistorySortBy] = useState("newest");
-  
   const [activeTab, setActiveTab] = useState("my-leaves");
 
-  const fetchData = async () => {
+  const isIntern = user?.employment_type === "Intern";
+
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
+      const [balanceRes, historyRes] = await Promise.all([
+        axios.get(`${process.env.REACT_APP_BACKEND_URL}/api/leaves/balance/${user.id}`),
+        axios.get(`${process.env.REACT_APP_BACKEND_URL}/api/leaves/history/${user.id}`),
+      ]);
 
-      const balanceRes = await axios.get(
-        `${process.env.REACT_APP_BACKEND_URL}/api/leaves/balance/${user.id}`
-      );
       setBalance(balanceRes.data);
-
-      const historyRes = await axios.get(
-        `${process.env.REACT_APP_BACKEND_URL}/api/leaves/history/${user.id}`
-      );
-      setHistory(historyRes.data);
+      setHistory(Array.isArray(historyRes.data) ? historyRes.data : []);
     } catch (err) {
       console.error("Error fetching leave data:", err);
       setMessage("Failed to load leave data");
     } finally {
       setLoading(false);
     }
-  };
+  }, [user.id]);
 
-  const checkForReportees = async () => {
+  const checkForReportees = useCallback(async () => {
     try {
       const res = await axios.get(
         `${process.env.REACT_APP_BACKEND_URL}/api/users/get_employees_by_manager/${encodeURIComponent(user.email)}`
       );
-      const reportees = res.data;
-      
-      if (Array.isArray(reportees) && reportees.length > 0) {
-        setHasReportees(true);
-      } else {
-        setHasReportees(false);
-      }
+      const nextReportees = Array.isArray(res.data) ? res.data : [];
+      setReportees(nextReportees);
+      setHasReportees(nextReportees.length > 0);
     } catch (err) {
       console.error("Error checking reportees:", err);
+      setReportees([]);
       setHasReportees(false);
     }
-  };
+  }, [user.email]);
 
-  const fetchTeamPendingLeaves = async () => {
+  const fetchTeamPendingLeaves = useCallback(async () => {
     try {
       const res = await axios.get(
         `${process.env.REACT_APP_BACKEND_URL}/api/leaves/pending/${encodeURIComponent(user.email)}`
       );
-      setTeamPendingLeaves(res.data);
+      setTeamPendingLeaves(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error("Error fetching team pending leaves:", err);
+      setTeamPendingLeaves([]);
     }
-  };
+  }, [user.email]);
+
+  const fetchTeamDecisionHistory = useCallback(async () => {
+    if (!reportees.length) {
+      setTeamDecisionHistory([]);
+      return;
+    }
+
+    try {
+      setTeamHistoryLoading(true);
+
+      const historyResponses = await Promise.all(
+        reportees.map(async (reportee) => {
+          const employeeId = reportee._id || reportee.id;
+          const response = await axios.get(
+            `${process.env.REACT_APP_BACKEND_URL}/api/leaves/history/${employeeId}`
+          );
+
+          const records = Array.isArray(response.data) ? response.data : [];
+          return records.map((record) => ({
+            ...record,
+            employee_name: reportee.name,
+            employee_email: reportee.email,
+            employee_department: reportee.department,
+            employee_designation: reportee.designation,
+          }));
+        })
+      );
+
+      const flattened = historyResponses
+        .flat()
+        .filter((record) => ["Approved", "Rejected"].includes(record.status))
+        .sort((first, second) => {
+          const firstDate = new Date(first.approved_on || first.rejected_on || first.applied_on || 0);
+          const secondDate = new Date(second.approved_on || second.rejected_on || second.applied_on || 0);
+          return secondDate - firstDate;
+        });
+
+      setTeamDecisionHistory(flattened);
+    } catch (err) {
+      console.error("Error fetching team decision history:", err);
+      setTeamDecisionHistory([]);
+    } finally {
+      setTeamHistoryLoading(false);
+    }
+  }, [reportees]);
 
   useEffect(() => {
-    if (user?.id && user?.email) { 
+    if (user?.id && user?.email) {
       fetchData();
       checkForReportees();
     }
-  }, [user?.id, user?.email]);
+  }, [checkForReportees, fetchData, user?.email, user?.id]);
 
   useEffect(() => {
     if (hasReportees && activeTab === "team-leaves") {
       fetchTeamPendingLeaves();
+      fetchTeamDecisionHistory();
     }
-  }, [hasReportees, activeTab]);
+  }, [activeTab, fetchTeamDecisionHistory, fetchTeamPendingLeaves, hasReportees]);
 
-  const isBirthdayDate = (dateStr) => {
-    if (!dateStr || !user?.dateOfBirth) return false;
-    
-    try {
-      let dob = user.dateOfBirth;
-      if (typeof dob === "object" && dob.$date) {
-        dob = new Date(dob.$date);
-      } else {
-        dob = new Date(dob);
-      }
-      
-      const selectedDate = new Date(dateStr);
-      
-      return (
-        dob.getMonth() === selectedDate.getMonth() &&
-        dob.getDate() === selectedDate.getDate()
-      );
-    } catch (err) {
-      return false;
-    }
-  };
-
-  // ============================================================
-  // ✅ LOOPHOLE FIX: getMinDate and getMaxDate now accept an
-  //    optional leaveType param so the edit modal uses the same
-  //    date constraints as the apply form.
-  // ============================================================
   const getMinDate = (leaveType) => {
     const type = (leaveType || leave.leave_type).toLowerCase();
     const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
+    const todayStr = today.toISOString().split("T")[0];
 
     if (type === "planned") {
       const minDate = new Date(today);
-      minDate.setDate(today.getDate() + 8); // 7 days advance
-      return minDate.toISOString().split('T')[0];
+      minDate.setDate(today.getDate() + 8);
+      return minDate.toISOString().split("T")[0];
     }
 
-    return todayStr; // sick, early logout, lwp, optional — today at earliest
+    return todayStr;
   };
 
   const getMaxDate = (leaveType) => {
     const type = (leaveType || leave.leave_type).toLowerCase();
+
     if (type === "sick") {
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
-      return tomorrow.toISOString().split('T')[0];
+      return tomorrow.toISOString().split("T")[0];
     }
+
     return undefined;
   };
 
-  const isDateBlockedForPlanned = (dateStr) => {
-    if (leave.leave_type !== "Planned") return false;
-    
-    const selectedDate = new Date(dateStr);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    selectedDate.setHours(0, 0, 0, 0);
-    
-    const daysDifference = Math.floor((selectedDate - today) / (1000 * 60 * 60 * 24));
-    return daysDifference < 7;
-  };
-
-  const handleDateClick = (e, dateField) => {
-    const selectedDate = e.target.value;
-    
-    if (dateField === "start") {
-      handleStartDateChange(selectedDate);
-    } else {
-      setLeave(prev => ({ ...prev, end_date: selectedDate }));
-    }
-  };
-
   const handleHalfDayChange = (checked) => {
-    setLeave(prev => ({
-      ...prev,
+    setLeave((previous) => ({
+      ...previous,
       is_half_day: checked,
       half_day_period: checked ? "morning" : "",
-      end_date: checked ? prev.start_date : prev.end_date
+      end_date: checked ? previous.start_date : previous.end_date,
     }));
   };
 
   const handleStartDateChange = (value) => {
-    setLeave(prev => ({
-      ...prev,
+    setLeave((previous) => ({
+      ...previous,
       start_date: value,
-      end_date: prev.is_half_day ? value : prev.end_date
+      end_date: previous.is_half_day ? value : previous.end_date,
     }));
   };
 
-  // ============================================================
-  // ✅ LOOPHOLE FIX: Client-side edit validation — mirrors apply
-  //    rules so the user sees errors before the request is sent.
-  // ============================================================
   const validateEditLeave = (editData) => {
     const { leave_type, start_date, end_date, is_half_day, half_day_period, logout_time } = editData;
     const type = leave_type.toLowerCase();
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+
     const start = new Date(start_date);
     start.setHours(0, 0, 0, 0);
+
     const end = new Date(end_date);
     end.setHours(0, 0, 0, 0);
 
     const daysDiff = Math.round((start - today) / (1000 * 60 * 60 * 24));
 
     if (type === "planned") {
-      if (daysDiff < 7) {
-        return "Planned leave must be applied at least 7 days in advance.";
-      }
+      if (daysDiff < 7) return "Planned leave must be applied at least 7 days in advance.";
     } else if (type === "sick") {
       const tomorrow = new Date(today);
       tomorrow.setDate(today.getDate() + 1);
+
       if (start < today) return `Sick leave cannot be applied for past dates (${start_date}).`;
       if (start > tomorrow) return "Sick leave can only be applied for today or tomorrow.";
       if (end > tomorrow) return "Sick leave end date cannot be beyond tomorrow.";
@@ -226,7 +256,7 @@ const EmployeeLeaves = ({ user }) => {
       }
     }
 
-    return null; // no error
+    return null;
   };
 
   const applyLeave = async () => {
@@ -237,19 +267,16 @@ const EmployeeLeaves = ({ user }) => {
 
     if (!leave.reason || !leave.reason.trim()) {
       setMessage("⚠️ Reason is mandatory. Please provide a reason for your leave.");
-      setTimeout(() => setMessage(""), 5000);
       return;
     }
 
     if (leave.is_half_day && !leave.half_day_period) {
       setMessage("⚠️ Please select half-day period (morning or afternoon)");
-      setTimeout(() => setMessage(""), 5000);
       return;
     }
 
     if (leave.leave_type === "Early Logout" && !leave.logout_time) {
       setMessage("⚠️ Logout time is mandatory for early logout");
-      setTimeout(() => setMessage(""), 5000);
       return;
     }
 
@@ -267,39 +294,35 @@ const EmployeeLeaves = ({ user }) => {
       });
 
       if (res.status === 201) {
-        setMessage("Leave applied successfully ✓");
-        setLeave({ 
-          leave_type: "Sick", 
-          start_date: "", 
-          end_date: "", 
-          reason: "", 
+        setMessage("Leave applied successfully");
+        setLeave({
+          leave_type: "Sick",
+          start_date: "",
+          end_date: "",
+          reason: "",
           logout_time: "",
           is_half_day: false,
           half_day_period: "",
         });
         fetchData();
-        setTimeout(() => setMessage(""), 3000);
       }
     } catch (err) {
       console.error(err);
-      setMessage("Error: " + (err.response?.data?.error || "Failed to apply leave"));
-      setTimeout(() => setMessage(""), 3000);
+      setMessage(`Error: ${err.response?.data?.error || "Failed to apply leave"}`);
     } finally {
       setLoading(false);
     }
   };
 
   const updateLeave = async () => {
-    if (!editingLeave.start_date || !editingLeave.end_date) {
+    if (!editingLeave?.start_date || !editingLeave?.end_date) {
       setMessage("Please select start and end dates");
       return;
     }
 
-    // ✅ LOOPHOLE FIX: Run client-side validation before submitting
     const validationError = validateEditLeave(editingLeave);
     if (validationError) {
-      setMessage("⚠️ " + validationError);
-      setTimeout(() => setMessage(""), 5000);
+      setMessage(`⚠️ ${validationError}`);
       return;
     }
 
@@ -319,173 +342,42 @@ const EmployeeLeaves = ({ user }) => {
       );
 
       if (res.status === 200) {
-        setMessage("Leave updated successfully ✓");
+        setMessage("Leave updated successfully");
         setEditingLeave(null);
         fetchData();
-        setTimeout(() => setMessage(""), 3000);
       }
     } catch (err) {
       console.error(err);
-      setMessage("Error: " + (err.response?.data?.error || "Failed to update leave"));
-      setTimeout(() => setMessage(""), 3000);
+      setMessage(`Error: ${err.response?.data?.error || "Failed to update leave"}`);
     } finally {
       setLoading(false);
     }
   };
-
-  const formatDate = (dateStr) => {
-    if (!dateStr) return "N/A";
-    try {
-      let dateValue = dateStr;
-      if (typeof dateStr === "object" && dateStr.$date) {
-        dateValue = dateStr.$date;
-      }
-      const date = new Date(dateValue);
-      if (isNaN(date.getTime())) return "N/A";
-      return date.toLocaleDateString("en-IN", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      });
-    } catch {
-      return "N/A";
-    }
-  };
-
-  const isBirthdayLeave = (leave) => {
-    if (!leave.employee_dateOfBirth) return false;
-    try {
-      const dob = new Date(leave.employee_dateOfBirth);
-      const start = new Date(leave.start_date);
-
-      return (
-        dob.getMonth() === start.getMonth() &&
-        dob.getDate() === start.getDate()
-      );
-    } catch {
-      return false;
-    }
-  };
-
-  const getFilteredAndSortedHistory = (leaves) => {
-    let filtered = [...leaves];
-    
-    if (historySearchTerm.trim()) {
-      filtered = filtered.filter(leave => 
-        (leave.leave_type || "").toLowerCase().includes(historySearchTerm.toLowerCase()) ||
-        (leave.reason || "").toLowerCase().includes(historySearchTerm.toLowerCase()) ||
-        (leave.status || "").toLowerCase().includes(historySearchTerm.toLowerCase())
-      );
-    }
-    
-    if (historyFilterStatus !== "all") {
-      filtered = filtered.filter(leave => 
-        leave.status?.toLowerCase() === historyFilterStatus.toLowerCase()
-      );
-    }
-    
-    if (historyFilterType !== "all") {
-      filtered = filtered.filter(leave => 
-        leave.leave_type?.toLowerCase() === historyFilterType.toLowerCase()
-      );
-    }
-    
-    const sorted = [...filtered].sort((a, b) => {
-      switch (historySortBy) {
-        case "newest":
-          return new Date(b.applied_on) - new Date(a.applied_on);
-        case "oldest":
-          return new Date(a.applied_on) - new Date(b.applied_on);
-        case "start_date":
-          return new Date(b.start_date) - new Date(a.start_date);
-        case "status":
-          return (a.status || "").localeCompare(b.status || "");
-        case "type":
-          return (a.leave_type || "").localeCompare(b.leave_type || "");
-        default:
-          return 0;
-      }
-    });
-    
-    return sorted;
-  };
-
-  const getFilteredAndSortedTeamLeaves = (leaves) => {
-    let filtered = leaves;
-    
-    if (searchTerm.trim()) {
-      filtered = filtered.filter(leave => 
-        (leave.employee_name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (leave.employee_email || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (leave.employee_designation || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (leave.employee_department || "").toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-    
-    const sorted = [...filtered].sort((a, b) => {
-      switch (sortBy) {
-        case "newest":
-          return new Date(b.applied_on) - new Date(a.applied_on);
-        case "oldest":
-          return new Date(a.applied_on) - new Date(b.applied_on);
-        case "name":
-          return (a.employee_name || "").localeCompare(b.employee_name || "");
-        case "department":
-          return (a.employee_department || "").localeCompare(b.employee_department || "");
-        default:
-          return 0;
-      }
-    });
-    
-    return sorted;
-  };
-
-  const displayHistory = getFilteredAndSortedHistory(history);
-  const displayTeamLeaves = getFilteredAndSortedTeamLeaves(teamPendingLeaves);
 
   const cancelLeave = async (leaveId) => {
     if (!window.confirm("Are you sure you want to cancel this leave?")) return;
 
     try {
       setLoading(true);
-
-      const res = await axios.put(
-        `${process.env.REACT_APP_BACKEND_URL}/api/leaves/cancel/${leaveId}`
-      );
+      const res = await axios.put(`${process.env.REACT_APP_BACKEND_URL}/api/leaves/cancel/${leaveId}`);
 
       if (res.status === 200) {
-        setMessage("Leave cancelled successfully ✓");
+        setMessage("Leave cancelled successfully");
         fetchData();
-        setTimeout(() => setMessage(""), 3000);
       }
     } catch (err) {
       console.error(err);
-      setMessage(
-        "Error: " + (err.response?.data?.error || "Failed to cancel leave")
-      );
-      setTimeout(() => setMessage(""), 3000);
+      setMessage(`Error: ${err.response?.data?.error || "Failed to cancel leave"}`);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleTeamReject = (leaveId) => {
-    setRejectModal({ show: true, leaveId, reason: "" });
-  };
-
-  const confirmTeamReject = async () => {
-    if (!rejectModal.reason.trim()) {
-      setMessage("Please enter a rejection reason");
-      return;
-    }
-    await updateTeamLeaveStatus(rejectModal.leaveId, "Rejected", rejectModal.reason);
-  };
-
   const updateTeamLeaveStatus = async (leaveId, status, rejectionReason = "") => {
     try {
-      const payload = { 
+      const payload = {
         status,
-        approved_by: user.name || user.email
+        approved_by: user.name || user.email,
       };
 
       if (status === "Rejected" && rejectionReason.trim()) {
@@ -498,489 +390,405 @@ const EmployeeLeaves = ({ user }) => {
       );
 
       if (res.status === 200) {
-        setMessage(`Leave ${status.toLowerCase()} successfully ✓`);
+        setMessage(`Leave ${status.toLowerCase()} successfully`);
         setRejectModal({ show: false, leaveId: null, reason: "" });
         fetchTeamPendingLeaves();
-        setTimeout(() => setMessage(""), 3000);
-        
-        // Trigger notification refresh
-        window.dispatchEvent(new Event('refreshNotifications'));
+        window.dispatchEvent(new Event("refreshNotifications"));
       }
     } catch (err) {
       console.error(err);
       setMessage("Error updating leave status");
-      setTimeout(() => setMessage(""), 3000);
     }
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "Approved":
-        return { bg: "#d1f4dd", text: "#0a5d2c", border: "#7de3a6" };
-      case "Rejected":
-        return { bg: "#ffe0e0", text: "#c41e3a", border: "#ffb3b3" };
-      case "Cancelled":
-        return { bg: "#ffe0e0", text: "#c41e3a", border: "#ffb3b3" };
-      default:
-        return { bg: "#fff4e6", text: "#d97706", border: "#fbbf24" };
+  const confirmTeamReject = async () => {
+    if (!rejectModal.reason.trim()) {
+      setMessage("Please enter a rejection reason");
+      return;
+    }
+
+    await updateTeamLeaveStatus(rejectModal.leaveId, "Rejected", rejectModal.reason);
+  };
+
+  const isBirthdayLeave = (leaveRecord) => {
+    if (!leaveRecord.employee_dateOfBirth) return false;
+
+    try {
+      const dob = new Date(leaveRecord.employee_dateOfBirth);
+      const start = new Date(leaveRecord.start_date);
+
+      return dob.getMonth() === start.getMonth() && dob.getDate() === start.getDate();
+    } catch {
+      return false;
     }
   };
 
-  const totalBalance = balance
-    ? (balance.sick || 0) + (balance.planned || 0)
-    : 0;
+  const getFilteredAndSortedHistory = useCallback(
+    (leaves) => {
+      let filtered = [...leaves];
 
-  // Check if user is an intern
-  const isIntern = user.employment_type === "Intern";
+      if (historySearchTerm.trim()) {
+        filtered = filtered.filter(
+          (item) =>
+            (item.leave_type || "").toLowerCase().includes(historySearchTerm.toLowerCase()) ||
+            (item.reason || "").toLowerCase().includes(historySearchTerm.toLowerCase()) ||
+            (item.status || "").toLowerCase().includes(historySearchTerm.toLowerCase())
+        );
+      }
+
+      if (historyFilterStatus !== "all") {
+        filtered = filtered.filter(
+          (item) => item.status?.toLowerCase() === historyFilterStatus.toLowerCase()
+        );
+      }
+
+      if (historyFilterType !== "all") {
+        filtered = filtered.filter(
+          (item) => item.leave_type?.toLowerCase() === historyFilterType.toLowerCase()
+        );
+      }
+
+      return [...filtered].sort((first, second) => {
+        switch (historySortBy) {
+          case "newest":
+            return new Date(second.applied_on) - new Date(first.applied_on);
+          case "oldest":
+            return new Date(first.applied_on) - new Date(second.applied_on);
+          case "start_date":
+            return new Date(second.start_date) - new Date(first.start_date);
+          case "status":
+            return (first.status || "").localeCompare(second.status || "");
+          case "type":
+            return (first.leave_type || "").localeCompare(second.leave_type || "");
+          default:
+            return 0;
+        }
+      });
+    },
+    [historyFilterStatus, historyFilterType, historySearchTerm, historySortBy]
+  );
+
+  const getFilteredAndSortedTeamLeaves = useCallback(
+    (leaves) => {
+      let filtered = [...leaves];
+
+      if (searchTerm.trim()) {
+        filtered = filtered.filter(
+          (item) =>
+            (item.employee_name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (item.employee_email || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (item.employee_designation || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (item.employee_department || "").toLowerCase().includes(searchTerm.toLowerCase())
+        );
+      }
+
+      return [...filtered].sort((first, second) => {
+        switch (sortBy) {
+          case "newest":
+            return new Date(second.applied_on) - new Date(first.applied_on);
+          case "oldest":
+            return new Date(first.applied_on) - new Date(second.applied_on);
+          case "name":
+            return (first.employee_name || "").localeCompare(second.employee_name || "");
+          case "department":
+            return (first.employee_department || "").localeCompare(second.employee_department || "");
+          default:
+            return 0;
+        }
+      });
+    },
+    [searchTerm, sortBy]
+  );
+
+  const displayHistory = useMemo(() => getFilteredAndSortedHistory(history), [getFilteredAndSortedHistory, history]);
+  const displayTeamLeaves = useMemo(
+    () => getFilteredAndSortedTeamLeaves(teamPendingLeaves),
+    [getFilteredAndSortedTeamLeaves, teamPendingLeaves]
+  );
+  const totalBalance = balance ? (balance.sick || 0) + (balance.planned || 0) + (balance.optional || 0) : 0;
+
+  const balanceCards = useMemo(() => {
+    if (!balance) return [];
+
+    const cards = [
+      {
+        label: "Sick leave",
+        value: balance.sick || 0,
+        note: `${balance.sickTotal || 6} allocated`,
+      },
+    ];
+
+    if (!isIntern) {
+      cards.push(
+        {
+          label: "Planned leave",
+          value: balance.planned || 0,
+          note: `${balance.plannedTotal || 12} allocated`,
+        },
+        {
+          label: "Optional leave",
+          value: balance.optional || 0,
+          note: `${balance.optionalTotal || 2} allocated`,
+        }
+      );
+    }
+
+    cards.push({
+      label: "LOP used",
+      value: balance.lwp || 0,
+      note: "Unpaid leave recorded",
+    });
+
+    return cards;
+  }, [balance, isIntern]);
 
   return (
-    <div className="panel">
-      {/* Header */}
-      <div style={{ marginBottom: 24 }}>
-        <h3 style={{ margin: 0, marginBottom: 8 }}>
-          {hasReportees && activeTab === "team-leaves" ? "Team Leave Approvals" : "My Leaves"}
-        </h3>
-        <p className="muted">
-          {hasReportees && activeTab === "team-leaves" 
-            ? "Review and approve leave requests from your team" 
-            : "Apply for leave and track your leave balance"}
-        </p>
-      </div>
+    <div className="admin-dashboard leave-workspace employee-workspace">
+      <header className="admin-hero">
+        <div>
+          <div className="admin-section-overline">Employee leave workspace</div>
+          <h1>{activeTab === "team-leaves" ? "Team Leave Approvals" : "Leave Management"}</h1>
+          <p>
+            {activeTab === "team-leaves"
+              ? "Review pending requests from your direct reports using the same approval style as the admin workspace."
+              : "Apply for leave, review balances, and track every request from one employee-focused workspace."}
+          </p>
+        </div>
 
-      {/* Tab Navigation for users with reportees */}
-      {hasReportees && (
-        <div style={{ 
-          display: "flex", 
-          gap: 8, 
-          marginBottom: 24,
-          borderBottom: "2px solid #e5e7eb"
-        }}>
+        <div className="admin-hero-meta">
+          <div className="admin-hero-meta-item">
+            <span>Total balance</span>
+            <strong>{isIntern ? balance?.sick || 0 : totalBalance} days</strong>
+          </div>
+          <div className="admin-hero-meta-item">
+            <span>Pending requests</span>
+            <strong>{history.filter((item) => item.status === "Pending").length} awaiting decisions</strong>
+          </div>
+          <div className="admin-hero-meta-item">
+            <span>Manager queue</span>
+            <strong>{hasReportees ? `${teamPendingLeaves.length} requests to review` : "No reportees assigned"}</strong>
+          </div>
+        </div>
+      </header>
+
+      {hasReportees ? (
+        <div className="leave-tab-strip">
           <button
+            type="button"
+            className={`leave-tab-button ${activeTab === "my-leaves" ? "active" : ""}`}
             onClick={() => setActiveTab("my-leaves")}
-            style={{
-              padding: "12px 24px",
-              background: activeTab === "my-leaves" ? "white" : "transparent",
-              border: "none",
-              borderBottom: activeTab === "my-leaves" ? "3px solid #667eea" : "3px solid transparent",
-              color: activeTab === "my-leaves" ? "#667eea" : "#6b7280",
-              fontWeight: activeTab === "my-leaves" ? 600 : 400,
-              cursor: "pointer",
-              fontSize: 15,
-              transition: "all 0.2s"
-            }}
           >
             My Leaves
           </button>
           <button
+            type="button"
+            className={`leave-tab-button ${activeTab === "team-leaves" ? "active" : ""}`}
             onClick={() => setActiveTab("team-leaves")}
-            style={{
-              padding: "12px 24px",
-              background: activeTab === "team-leaves" ? "white" : "transparent",
-              border: "none",
-              borderBottom: activeTab === "team-leaves" ? "3px solid #667eea" : "3px solid transparent",
-              color: activeTab === "team-leaves" ? "#667eea" : "#6b7280",
-              fontWeight: activeTab === "team-leaves" ? 600 : 400,
-              cursor: "pointer",
-              fontSize: 15,
-              transition: "all 0.2s",
-              position: "relative"
-            }}
           >
-            Team Leaves
-            {teamPendingLeaves.length > 0 && (
-              <span style={{
-                position: "absolute",
-                top: 8,
-                right: 8,
-                background: "#ef4444",
-                color: "white",
-                borderRadius: "50%",
-                width: 20,
-                height: 20,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 11,
-                fontWeight: 700
-              }}>
-                {teamPendingLeaves.length}
-              </span>
-            )}
+            Team Leaves {teamPendingLeaves.length ? `(${teamPendingLeaves.length})` : ""}
           </button>
         </div>
-      )}
+      ) : null}
 
-      {/* CONDITIONAL RENDERING BASED ON ACTIVE TAB */}
+      {message ? <div className={`admin-toast ${messageTone(message)}`}>{message}</div> : null}
+
+      <div className="admin-dashboard-grid admin-dashboard-grid-compact">
+        {balanceCards.map((card) => (
+          <article key={card.label} className="fiori-stat-card employee-balance-card">
+            <div className="fiori-stat-label">{card.label}</div>
+            <div className="fiori-stat-value">{card.value}</div>
+            <div className="fiori-stat-note">{card.note}</div>
+          </article>
+        ))}
+      </div>
+
       {activeTab === "my-leaves" ? (
-        <>
-          {/* Leave Balance Section */}
-          <div
-            style={{
-              background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-              color: "white",
-              borderRadius: 12,
-              padding: 24,
-              marginBottom: 24,
-              boxShadow: "0 4px 12px rgba(102, 126, 234, 0.3)",
-            }}
-          >
-            <div style={{ fontSize: 14, opacity: 0.9, marginBottom: 4 }}>
-              Total Leave Balance
-            </div>
-            <div style={{ fontSize: 42, fontWeight: 700, marginBottom: 16 }}>
-              {isIntern ? (balance?.sick || 0) : totalBalance} days
-            </div>
-            
-            {balance && (
-              <>
-                {isIntern ? (
-                  // INTERNS: ONLY Sick Leave Card
-                  <div style={{ maxWidth: 300 }}>
-                    <div style={{ background: "rgba(255, 255, 255, 0.2)", padding: 14, borderRadius: 8, border: "1px solid rgba(255, 255, 255, 0.3)" }}>
-                      <div style={{ fontSize: 12, opacity: 0.9, marginBottom: 6 }}>🤒 Sick</div>
-                      <div style={{ fontSize: 28, fontWeight: 700, marginBottom: 4 }}>{balance.sick || 0} days</div>
-                      <div style={{ fontSize: 10, opacity: 0.8, borderTop: "1px solid rgba(255, 255, 255, 0.2)", paddingTop: 6 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
-                          <span>Total:</span>
-                          <strong>{balance.sickTotal || 0} days</strong>
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                          <span>Used:</span>
-                          <strong>{(balance.sickTotal || 0) - (balance.sick || 0)} days</strong>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  // REGULAR EMPLOYEES: All Leave Cards
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 }}>
-                    {/* Sick */}
-                    <div style={{ background: "rgba(255, 255, 255, 0.2)", padding: 14, borderRadius: 8, border: "1px solid rgba(255, 255, 255, 0.3)" }}>
-                      <div style={{ fontSize: 12, opacity: 0.9, marginBottom: 6 }}>🤒 Sick</div>
-                      <div style={{ fontSize: 28, fontWeight: 700, marginBottom: 4 }}>{balance.sick} days</div>
-                      <div style={{ fontSize: 10, opacity: 0.8, borderTop: "1px solid rgba(255, 255, 255, 0.2)", paddingTop: 6 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
-                          <span>Total:</span>
-                          <strong>{balance.sickTotal || 6} days</strong>
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                          <span>Used:</span>
-                          <strong>{(balance.sickTotal || 6) - balance.sick} days</strong>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Planned */}
-                    <div style={{ background: "rgba(255, 255, 255, 0.2)", padding: 14, borderRadius: 8, border: "1px solid rgba(255, 255, 255, 0.3)" }}>
-                      <div style={{ fontSize: 12, opacity: 0.9, marginBottom: 6 }}>📅 Planned</div>
-                      <div style={{ fontSize: 28, fontWeight: 700, marginBottom: 4 }}>{balance.planned} days</div>
-                      <div style={{ fontSize: 10, opacity: 0.8, borderTop: "1px solid rgba(255, 255, 255, 0.2)", paddingTop: 6 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
-                          <span>Total:</span>
-                          <strong>{balance.plannedTotal || 12} days</strong>
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                          <span>Used:</span>
-                          <strong>{(balance.plannedTotal || 12) - balance.planned} days</strong>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Optional Holiday */}
-                    <div style={{ background: "rgba(255,255,255,0.2)", padding: 14, borderRadius: 8, border: "1px solid rgba(255,255,255,0.3)" }}>
-                      <div style={{ fontSize: 12, opacity: 0.9, marginBottom: 6 }}>Optional</div>
-                      <div style={{ fontSize: 28, fontWeight: 700, marginBottom: 4 }}>{balance.optional || 0} days</div>
-                      <div style={{ fontSize: 10, opacity: 0.8, borderTop: "1px solid rgba(255,255,255,0.2)", paddingTop: 6 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
-                          <span>Total:</span>
-                          <strong>{balance.optionalTotal || 2} days</strong>
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                          <span>Used:</span>
-                          <strong>{(balance.optionalTotal || 2) - (balance.optional || 0)} days</strong>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* LWP */}
-                    <div style={{ background: "rgba(255, 255, 255, 0.2)", padding: 14, borderRadius: 8, border: "1px solid rgba(255, 255, 255, 0.3)" }}>
-                      <div style={{ fontSize: 12, opacity: 0.9, marginBottom: 6 }}>📋 LOP</div>
-                      <div style={{ fontSize: 28, fontWeight: 700, marginBottom: 4 }}>{balance.lwp} days</div>
-                      <div style={{ fontSize: 10, opacity: 0.8, borderTop: "1px solid rgba(255, 255, 255, 0.2)", paddingTop: 6 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
-                          <span>Total:</span>
-                          <strong>∞</strong>
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                          <span>Used:</span>
-                          <strong>{balance.lwp} days</strong>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-
-          {/* Apply Leave Form */}
-          <div className="card" style={{ padding: 20, marginBottom: 24 }}>
-            <h4 style={{ marginTop: 0, marginBottom: 16 }}>Apply for Leave</h4>
-            
-            {message && (
-              <div style={{
-                padding: 12,
-                marginBottom: 16,
-                borderRadius: 8,
-                background: message.includes("Error") || message.includes("⚠️") ? "#fee2e2" : "#d1f4dd",
-                color: message.includes("Error") || message.includes("⚠️") ? "#dc2626" : "#0a5d2c",
-                border: `1px solid ${message.includes("Error") || message.includes("⚠️") ? "#fecaca" : "#7de3a6"}`,
-                fontSize: 14,
-                fontWeight: 500
-              }}>
-                {message}
-              </div>
-            )}
-
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 16, marginBottom: 16 }}>
+        <div className="employee-leave-layout">
+          <section className="fiori-panel">
+            <div className="fiori-panel-header">
               <div>
-                <label className="label">Leave Type</label>
+                <h3>Apply for leave</h3>
+                <p>Submit a request with the same field structure and card language as the admin workspace.</p>
+              </div>
+              <span className="fiori-status-pill is-neutral">{isIntern ? "Intern policy" : "Standard policy"}</span>
+            </div>
+
+            <div className="employee-form-grid">
+              <div className="fiori-form-field">
+                <label>Leave type</label>
                 <select
                   className="input"
                   value={leave.leave_type}
-                  onChange={(e) => {
-                    const newType = e.target.value;
+                  onChange={(event) => {
+                    const newType = event.target.value;
                     const allowsHalfDay = ["Sick", "LWP", "LOP"].includes(newType);
-                    setLeave(prev => ({
-                      ...prev,
+                    setLeave((previous) => ({
+                      ...previous,
                       leave_type: newType,
-                      is_half_day: allowsHalfDay ? prev.is_half_day : false,
-                      half_day_period: allowsHalfDay ? prev.half_day_period : "",
+                      is_half_day: allowsHalfDay ? previous.is_half_day : false,
+                      half_day_period: allowsHalfDay ? previous.half_day_period : "",
                       start_date: "",
                       end_date: "",
                     }));
                   }}
                 >
                   <option value="Sick">Sick Leave</option>
-                  {isIntern ? (
-                    <>
-                      <option value="LOP">Leave Without Pay (LOP)</option>
-                      <option value="Early Logout">Early Logout</option>
-                    </>
-                  ) : (
-                    <>
-                      <option value="Planned">Planned Leave</option>
-                      <option value="Optional">Optional Holiday</option>
-                      <option value="LOP">Leave Without Pay (LOP)</option>
-                      <option value="Early Logout">Early Logout</option>
-                    </>
-                  )}
+                  {isIntern ? null : <option value="Planned">Planned Leave</option>}
+                  {isIntern ? null : <option value="Optional">Optional Holiday</option>}
+                  <option value="LOP">Leave Without Pay (LOP)</option>
+                  <option value="Early Logout">Early Logout</option>
                 </select>
               </div>
 
-              <div>
-                <label className="label">Start Date</label>
+              <div className="fiori-form-field">
+                <label>Start date</label>
                 <input
                   className="input"
                   type="date"
                   value={leave.start_date}
-                  onChange={(e) => handleDateClick(e, "start")}
+                  onChange={(event) => handleStartDateChange(event.target.value)}
                   min={getMinDate()}
                   max={getMaxDate()}
                 />
               </div>
 
-              <div>
-                <label className="label">End Date</label>
+              <div className="fiori-form-field">
+                <label>End date</label>
                 <input
                   className="input"
                   type="date"
                   value={leave.end_date}
-                  onChange={(e) => handleDateClick(e, "end")}
+                  onChange={(event) => setLeave((previous) => ({ ...previous, end_date: event.target.value }))}
                   min={leave.start_date || getMinDate()}
                   max={leave.leave_type === "Sick" ? getMaxDate() : undefined}
                   disabled={leave.is_half_day}
                 />
               </div>
 
-              {leave.leave_type === "Early Logout" && (
-                <div>
-                  <label className="label">Logout Time *</label>
+              {leave.leave_type === "Early Logout" ? (
+                <div className="fiori-form-field">
+                  <label>Logout time</label>
                   <input
                     className="input"
                     type="time"
                     value={leave.logout_time}
-                    onChange={(e) => setLeave({ ...leave, logout_time: e.target.value })}
+                    onChange={(event) => setLeave((previous) => ({ ...previous, logout_time: event.target.value }))}
                   />
                 </div>
-              )}
+              ) : null}
             </div>
 
-            {/* Planned Leave Warning Message */}
-            {leave.leave_type === "Planned" && !isIntern && (
-              <div style={{ 
-                marginBottom: 16, 
-                padding: 12, 
-                background: "#fef3c7", 
-                borderRadius: 8, 
-                border: "1px solid #fbbf24",
-                display: "flex",
-                gap: 10,
-                alignItems: "start"
-              }}>
-                <span style={{ fontSize: 18 }}>⚠️</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14, color: "#92400e", marginBottom: 4 }}>
-                    Planned Leave Policy
-                  </div>
-                  <div style={{ fontSize: 13, color: "#92400e" }}>
-                    Planned leave must be applied at least <strong>7 days in advance</strong>. 
-                    The calendar above will only allow you to select dates that are 7 or more days from today.
-                  </div>
+            {leave.leave_type === "Planned" && !isIntern ? (
+              <div className="employee-policy-callout warning">
+                <TriangleAlert size={18} />
+                <div>
+                  <strong>Planned leave policy</strong>
+                  <p>Planned leave must be applied at least 7 days in advance.</p>
                 </div>
               </div>
-            )}
+            ) : null}
 
-            {/* Sick Leave Policy Warning */}
-            {leave.leave_type === "Sick" && (
-              <div style={{ 
-                marginBottom: 16, 
-                padding: 12, 
-                background: "#e0f2fe", 
-                borderRadius: 8, 
-                border: "1px solid #0ea5e9",
-                display: "flex",
-                gap: 10,
-                alignItems: "start"
-              }}>
-                <span style={{ fontSize: 18 }}>ℹ️</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14, color: "#075985", marginBottom: 4 }}>
-                    Sick Leave Policy
-                  </div>
-                  <div style={{ fontSize: 13, color: "#075985", lineHeight: 1.6 }}>
-                    • Sick leave can only be applied for <strong>today or tomorrow</strong><br/>
-                    • Sick leave exceeding <strong>3 days</strong> must be supported with medical documentation 
-                    (such as a medical certificate or doctor's note). Please ensure you submit the necessary 
-                    documents to HR for leave approval.
-                  </div>
+            {leave.leave_type === "Sick" ? (
+              <div className="employee-policy-callout info">
+                <ShieldCheck size={18} />
+                <div>
+                  <strong>Sick leave policy</strong>
+                  <p>Sick leave can only be raised for today or tomorrow. Leaves above 3 days require documentation.</p>
                 </div>
               </div>
-            )}
+            ) : null}
 
-            {/* Half-Day Option for Sick Leave and LOP/LWP */}
-            {["Sick", "LWP", "LOP"].includes(leave.leave_type) && (
-              <div style={{ marginBottom: 16, padding: 14, background: "#f9fafb", borderRadius: 8, border: "1px solid #e5e7eb" }}>
-                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+            {["Sick", "LWP", "LOP"].includes(leave.leave_type) ? (
+              <div className="employee-halfday-panel">
+                <label className="employee-checkbox-row">
                   <input
                     type="checkbox"
                     checked={leave.is_half_day}
-                    onChange={(e) => handleHalfDayChange(e.target.checked)}
-                    style={{ width: 18, height: 18, cursor: "pointer" }}
+                    onChange={(event) => handleHalfDayChange(event.target.checked)}
                   />
-                  <span style={{ fontWeight: 500, fontSize: 14 }}>This is a half-day leave</span>
+                  <span>This request is for a half day</span>
                 </label>
 
-                {leave.is_half_day && (
-                  <div style={{ marginTop: 12 }}>
-                    <label className="label">Half-Day Period *</label>
-                    <div style={{ display: "flex", gap: 12 }}>
-                      <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
-                        <input
-                          type="radio"
-                          name="half_day_period"
-                          value="morning"
-                          checked={leave.half_day_period === "morning"}
-                          onChange={(e) => setLeave({ ...leave, half_day_period: e.target.value })}
-                          style={{ cursor: "pointer" }}
-                        />
-                        <span>Morning (First Half)</span>
-                      </label>
-                      <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
-                        <input
-                          type="radio"
-                          name="half_day_period"
-                          value="afternoon"
-                          checked={leave.half_day_period === "afternoon"}
-                          onChange={(e) => setLeave({ ...leave, half_day_period: e.target.value })}
-                          style={{ cursor: "pointer" }}
-                        />
-                        <span>Afternoon (Second Half)</span>
-                      </label>
-                    </div>
+                {leave.is_half_day ? (
+                  <div className="employee-radio-row">
+                    <label>
+                      <input
+                        type="radio"
+                        name="half_day_period"
+                        value="morning"
+                        checked={leave.half_day_period === "morning"}
+                        onChange={(event) =>
+                          setLeave((previous) => ({ ...previous, half_day_period: event.target.value }))
+                        }
+                      />
+                      <span>Morning</span>
+                    </label>
+                    <label>
+                      <input
+                        type="radio"
+                        name="half_day_period"
+                        value="afternoon"
+                        checked={leave.half_day_period === "afternoon"}
+                        onChange={(event) =>
+                          setLeave((previous) => ({ ...previous, half_day_period: event.target.value }))
+                        }
+                      />
+                      <span>Afternoon</span>
+                    </label>
                   </div>
-                )}
+                ) : null}
               </div>
-            )}
+            ) : null}
 
-            <div style={{ marginBottom: 16 }}>
-              <label className="label">
-                Reason <span style={{ color: "#ef4444", fontWeight: 600 }}>*</span>
-              </label>
+            <div className="fiori-form-field">
+              <label>Reason</label>
               <textarea
-                className="input"
+                rows={4}
                 value={leave.reason}
-                onChange={(e) => setLeave({ ...leave, reason: e.target.value })}
-                rows={3}
-                placeholder="Enter reason for leave (mandatory)"
-                required
-                style={{
-                  border: !leave.reason.trim() && message.includes("Reason") ? "1px solid #ef4444" : undefined
-                }}
+                onChange={(event) => setLeave((previous) => ({ ...previous, reason: event.target.value }))}
+                placeholder="Share the context for your request"
               />
             </div>
 
-            <button
-              className="btn btn-primary"
-              onClick={applyLeave}
-              disabled={loading}
-              style={{ width: "100%" }}
-            >
-              {loading ? "Applying..." : "Apply for Leave"}
-            </button>
-          </div>
+            <div className="admin-modal-actions">
+              <button className="fiori-button primary full-width" onClick={applyLeave} disabled={loading}>
+                {loading ? "Submitting..." : "Apply for Leave"}
+              </button>
+            </div>
+          </section>
 
-          {/* Leave History Section */}
-          <div className="card" style={{ padding: 20 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <h4 style={{ margin: 0 }}>Leave History</h4>
-              <span style={{ fontSize: 14, color: "#6b7280" }}>
-                {displayHistory.length} of {history.length} records
+          <section className="fiori-panel">
+            <div className="fiori-panel-header">
+              <div>
+                <h3>Leave history</h3>
+                <p>Filter your requests by type, status, and application date.</p>
+              </div>
+              <span className="fiori-status-pill is-neutral">
+                {displayHistory.length} of {history.length}
               </span>
             </div>
 
-            {/* Search and Filter Controls */}
-            <div style={{ 
-              display: "grid", 
-              gridTemplateColumns: "2fr 1fr 1fr 1fr", 
-              gap: 12, 
-              marginBottom: 16,
-              padding: 16,
-              background: "#f9fafb",
-              borderRadius: 8,
-              border: "1px solid #e5e7eb"
-            }}>
-              <div>
-                <label className="label" style={{ fontSize: 12, marginBottom: 4 }}>Search</label>
+            <div className="leave-filter-grid">
+              <div className="fiori-form-field leave-search-field employee-history-search">
+                <label className="leave-field-label">Search</label>
+                <Search size={16} />
                 <input
                   type="text"
                   className="input"
-                  placeholder="Search by type, status, reason..."
+                  placeholder="Search by type, reason, or status"
                   value={historySearchTerm}
-                  onChange={(e) => setHistorySearchTerm(e.target.value)}
-                  style={{ fontSize: 14 }}
+                  onChange={(event) => setHistorySearchTerm(event.target.value)}
                 />
               </div>
 
-              <div>
-                <label className="label" style={{ fontSize: 12, marginBottom: 4 }}>Status</label>
+              <div className="fiori-form-field">
+                <label className="leave-field-label">Status</label>
                 <select
                   className="input"
                   value={historyFilterStatus}
-                  onChange={(e) => setHistoryFilterStatus(e.target.value)}
-                  style={{ fontSize: 14 }}
+                  onChange={(event) => setHistoryFilterStatus(event.target.value)}
                 >
-                  <option value="all">All Status</option>
+                  <option value="all">All status</option>
                   <option value="pending">Pending</option>
                   <option value="approved">Approved</option>
                   <option value="rejected">Rejected</option>
@@ -988,519 +796,453 @@ const EmployeeLeaves = ({ user }) => {
                 </select>
               </div>
 
-              <div>
-                <label className="label" style={{ fontSize: 12, marginBottom: 4 }}>Type</label>
+              <div className="fiori-form-field">
+                <label className="leave-field-label">Type</label>
                 <select
                   className="input"
                   value={historyFilterType}
-                  onChange={(e) => setHistoryFilterType(e.target.value)}
-                  style={{ fontSize: 14 }}
+                  onChange={(event) => setHistoryFilterType(event.target.value)}
                 >
-                  <option value="all">All Types</option>
+                  <option value="all">All types</option>
                   <option value="sick">Sick</option>
-                  {!isIntern && (
-                    <>
-                      <option value="planned">Planned</option>
-                      <option value="optional">Optional</option>
-                      <option value="lwp">LWP</option>
-                      <option value="early logout">Early Logout</option>
-                    </>
-                  )}
+                  {isIntern ? null : <option value="planned">Planned</option>}
+                  {isIntern ? null : <option value="optional">Optional</option>}
+                  <option value="lop">LOP</option>
+                  <option value="early logout">Early Logout</option>
                 </select>
               </div>
 
-              <div>
-                <label className="label" style={{ fontSize: 12, marginBottom: 4 }}>Sort By</label>
+              <div className="fiori-form-field">
+                <label className="leave-field-label">Sort by</label>
                 <select
                   className="input"
                   value={historySortBy}
-                  onChange={(e) => setHistorySortBy(e.target.value)}
-                  style={{ fontSize: 14 }}
+                  onChange={(event) => setHistorySortBy(event.target.value)}
                 >
-                  <option value="newest">Newest First</option>
-                  <option value="oldest">Oldest First</option>
-                  <option value="start_date">Start Date</option>
+                  <option value="newest">Newest first</option>
+                  <option value="oldest">Oldest first</option>
+                  <option value="start_date">Start date</option>
                   <option value="status">Status</option>
-                  <option value="type">Leave Type</option>
+                  <option value="type">Leave type</option>
                 </select>
               </div>
             </div>
 
-            {/* History Table */}
+            <div className="leave-results-bar employee-history-toolbar">
+              <div className="leave-results-meta">
+                <CalendarCheck2 size={16} />
+                <span>Request history and edit actions stay available here.</span>
+              </div>
+            </div>
+
             {loading ? (
-              <div style={{ textAlign: "center", padding: 40, color: "#6b7280" }}>
-                Loading leave history...
+              <div className="fiori-loading-card">
+                <Clock3 size={20} />
+                <div>
+                  <strong>Loading history</strong>
+                  <p>We are syncing your latest leave records.</p>
+                </div>
               </div>
             ) : displayHistory.length === 0 ? (
-              <div style={{ textAlign: "center", padding: 40, color: "#6b7280" }}>
-                {history.length === 0 
-                  ? "No leave history found"
-                  : "No records match your filters"}
+              <div className="admin-empty-state">
+                <CalendarCheck2 size={22} />
+                <div>
+                  <strong>{history.length === 0 ? "No leave history found" : "No records match these filters"}</strong>
+                  <p>Try changing the filters or submit your first leave request.</p>
+                </div>
               </div>
             ) : (
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <div className="fiori-table-shell employee-history-shell">
+                <table className="fiori-table employee-history-table">
                   <thead>
-                    <tr style={{ background: "#f9fafb", borderBottom: "2px solid #e5e7eb" }}>
-                      <th style={{ padding: 12, textAlign: "left", fontSize: 13, fontWeight: 600 }}>Leave Type</th>
-                      <th style={{ padding: 12, textAlign: "left", fontSize: 13, fontWeight: 600 }}>Period</th>
-                      <th style={{ padding: 12, textAlign: "left", fontSize: 13, fontWeight: 600 }}>Days</th>
-                      <th style={{ padding: 12, textAlign: "left", fontSize: 13, fontWeight: 600 }}>Status</th>
-                      <th style={{ padding: 12, textAlign: "left", fontSize: 13, fontWeight: 600 }}>Applied On</th>
-                      <th style={{ padding: 12, textAlign: "left", fontSize: 13, fontWeight: 600 }}>Actions</th>
+                    <tr>
+                      <th>Leave Type</th>
+                      <th>Period</th>
+                      <th>Days</th>
+                      <th>Status</th>
+                      <th>Applied On</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {displayHistory.map((item, idx) => {
-                      const statusStyle = getStatusColor(item.status);
-                      return (
-                        <tr key={idx} style={{ borderBottom: "1px solid #e5e7eb" }}>
-                          <td style={{ padding: 12, fontSize: 14 }}>
-                            <div style={{ fontWeight: 500 }}>{item.leave_type}</div>
-                            {item.is_half_day && (
-                              <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
-                                Half-day ({item.half_day_period})
-                              </div>
-                            )}
-                            {item.reason && (
-                              <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
-                                {item.reason}
-                              </div>
-                            )}
-                          </td>
-                          <td style={{ padding: 12, fontSize: 13 }}>
-                            {formatDate(item.start_date)} - {formatDate(item.end_date)}
-                          </td>
-                          <td style={{ padding: 12, fontSize: 14, fontWeight: 500 }}>
-                            {item.leave_type === "Early Logout"
-                              ? `🕐 ${item.logout_time || "N/A"}`
-                              : item.days}
-                          </td>
-                          <td style={{ padding: 12 }}>
-                            <span style={{
-                              padding: "4px 12px",
-                              borderRadius: 16,
-                              fontSize: 12,
-                              fontWeight: 500,
-                              background: statusStyle.bg,
-                              color: statusStyle.text,
-                              border: `1px solid ${statusStyle.border}`
-                            }}>
-                              {item.status}
-                            </span>
-                          </td>
-                          <td style={{ padding: 12, fontSize: 13, color: "#6b7280" }}>
-                            {formatDate(item.applied_on)}
-                          </td>
-                          <td style={{ padding: 12 }}>
-                            {item.status === "Pending" && (
-                              <div style={{ display: "flex", gap: 8 }}>
-                                <button
-                                  className="btn btn-sm"
-                                  onClick={() => setEditingLeave(item)}
-                                  style={{ fontSize: 12, padding: "4px 12px" }}
-                                >
-                                  Edit
-                                </button>
-                                <button
-                                  className="btn btn-sm btn-danger"
-                                  onClick={() => cancelLeave(item._id)}
-                                  style={{ fontSize: 12, padding: "4px 12px" }}
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {displayHistory.map((item) => (
+                      <tr key={item._id}>
+                        <td className="employee-history-type-cell">
+                          <div className="fiori-primary-cell employee-history-primary">
+                            <strong>{item.leave_type}</strong>
+                            <span className="employee-history-reason">{item.reason || "No reason shared"}</span>
+                            {item.is_half_day ? <span>Half day: {item.half_day_period}</span> : null}
+                          </div>
+                        </td>
+                        <td className="employee-history-period-cell">
+                          <div className="employee-history-period">
+                            <strong>{formatDate(item.start_date)}</strong>
+                            <span>to</span>
+                            <strong>{formatDate(item.end_date)}</strong>
+                          </div>
+                        </td>
+                        <td className="employee-history-days-cell">
+                          {item.leave_type === "Early Logout" ? `Logout ${item.logout_time || "N/A"}` : item.days}
+                        </td>
+                        <td>
+                          <span className={`fiori-status-pill ${statusToneMap[item.status] || "is-neutral"}`}>
+                            {item.status}
+                          </span>
+                        </td>
+                        <td>{formatDate(item.applied_on)}</td>
+                        <td className="employee-history-actions-cell">
+                          {item.status === "Pending" ? (
+                            <div className="employee-table-actions">
+                              <button className="fiori-button secondary" onClick={() => setEditingLeave(item)}>
+                                Edit
+                              </button>
+                              <button className="fiori-button secondary danger" onClick={() => cancelLeave(item._id)}>
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="fiori-stat-note">No actions</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
             )}
-          </div>
-        </>
+          </section>
+        </div>
       ) : (
-        /* TEAM LEAVES TAB */
-        <div className="card" style={{ padding: 20 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-            <h4 style={{ margin: 0 }}>Pending Leave Requests</h4>
-            <span style={{ fontSize: 14, color: "#6b7280" }}>
-              {displayTeamLeaves.length} pending request{displayTeamLeaves.length !== 1 ? "s" : ""}
-            </span>
+        <div className="employee-team-history-layout">
+        <section className="fiori-panel">
+          <div className="fiori-panel-header">
+            <div>
+              <h3>Pending team requests</h3>
+              <p>Approve or reject requests from your reportees with the same workspace structure as admin.</p>
+            </div>
+            <span className="fiori-status-pill is-pending">{displayTeamLeaves.length} pending</span>
           </div>
 
-          {/* Team Search and Sort */}
-          <div style={{ 
-            display: "grid", 
-            gridTemplateColumns: "2fr 1fr", 
-            gap: 12, 
-            marginBottom: 16,
-            padding: 16,
-            background: "#f9fafb",
-            borderRadius: 8,
-            border: "1px solid #e5e7eb"
-          }}>
-            <div>
-              <label className="label" style={{ fontSize: 12, marginBottom: 4 }}>Search Employee</label>
+          <div className="leave-filter-grid leave-filter-grid-compact">
+            <div className="fiori-form-field leave-search-field">
+              <label className="leave-field-label">Search employee</label>
+              <Search size={16} />
               <input
                 type="text"
                 className="input"
-                placeholder="Search by name, email, department..."
+                placeholder="Search by name, email, department, or role"
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                style={{ fontSize: 14 }}
+                onChange={(event) => setSearchTerm(event.target.value)}
               />
             </div>
-            <div>
-              <label className="label" style={{ fontSize: 12, marginBottom: 4 }}>Sort By</label>
-              <select
-                className="input"
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                style={{ fontSize: 14 }}
-              >
-                <option value="newest">Newest First</option>
-                <option value="oldest">Oldest First</option>
-                <option value="name">Employee Name</option>
+
+            <div className="fiori-form-field">
+              <label className="leave-field-label">Sort by</label>
+              <select className="input" value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="name">Employee name</option>
                 <option value="department">Department</option>
               </select>
             </div>
           </div>
 
-          {/* Team Leaves List */}
           {displayTeamLeaves.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 40, color: "#6b7280" }}>
-              {teamPendingLeaves.length === 0 
-                ? "No pending leave requests"
-                : "No requests match your search"}
+            <div className="admin-empty-state">
+              <Users size={22} />
+              <div>
+                <strong>{teamPendingLeaves.length === 0 ? "No pending team requests" : "No requests match this search"}</strong>
+                <p>Your approval queue is clear for now.</p>
+              </div>
             </div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {displayTeamLeaves.map((teamLeave) => {
-                const isExpanded = expandedTeamLeave === teamLeave._id;
-                const isBirthday = isBirthdayLeave(teamLeave);
+            <div className="admin-approval-list">
+              {displayTeamLeaves.map((teamLeave) => (
+                <article
+                  key={teamLeave._id}
+                  className={`admin-approval-card ${isBirthdayLeave(teamLeave) ? "employee-approval-card-birthday" : ""}`}
+                >
+                  <div className="admin-approval-card-header">
+                    <div>
+                      <h4>{teamLeave.employee_name || "Unknown employee"}</h4>
+                      <p>
+                        {teamLeave.employee_email || "No email"}
+                        {teamLeave.employee_designation ? ` • ${teamLeave.employee_designation}` : ""}
+                        {teamLeave.employee_department ? ` • ${teamLeave.employee_department}` : ""}
+                      </p>
+                    </div>
+                    {isBirthdayLeave(teamLeave) ? <span className="fiori-status-pill is-pending">Birthday</span> : null}
+                  </div>
 
-                return (
-                  <div
-                    key={teamLeave._id}
-                    style={{
-                      border: "1px solid #e5e7eb",
-                      borderRadius: 8,
-                      padding: 16,
-                      background: isBirthday ? "#fef3c7" : "white",
-                    }}
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                          <h4 style={{ margin: 0, fontSize: 16 }}>
-                            {teamLeave.employee_name || "Unknown"}
-                          </h4>
-                          {isBirthday && (
-                            <span style={{
-                              background: "#fbbf24",
-                              color: "white",
-                              padding: "2px 8px",
-                              borderRadius: 12,
-                              fontSize: 11,
-                              fontWeight: 600
-                            }}>
-                              🎂 BIRTHDAY
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ fontSize: 13, color: "#6b7280", marginBottom: 8 }}>
-                          {teamLeave.employee_email}
-                          {teamLeave.employee_designation && ` • ${teamLeave.employee_designation}`}
-                          {teamLeave.employee_department && ` • ${teamLeave.employee_department}`}
-                        </div>
-                        <div style={{ fontSize: 14, marginBottom: 8 }}>
-                          <strong>{teamLeave.leave_type}</strong>
-                          {teamLeave.is_half_day && (
-                            <span style={{ marginLeft: 8, color: "#6b7280" }}>
-                              (Half-day - {teamLeave.half_day_period})
-                            </span>
-                          )}
-                          {" • "}
-                          {formatDate(teamLeave.start_date)} to {formatDate(teamLeave.end_date)}
-                          {" • "}
-                          {teamLeave.leave_type === "Early Logout" ? (
-                            <strong>🕐 Logout at {teamLeave.logout_time || "N/A"}</strong>
-                          ) : (
-                            <strong>{teamLeave.days} day{teamLeave.days !== 1 ? "s" : ""}</strong>
-                          )}
-                        </div>
-                        {teamLeave.reason && (
-                          <div style={{ 
-                            fontSize: 13, 
-                            color: "#374151",
-                            background: "#f3f4f6",
-                            padding: 8,
-                            borderRadius: 4,
-                            marginBottom: 8
-                          }}>
-                            <strong>Reason:</strong> {teamLeave.reason}
-                          </div>
-                        )}
+                  <div className="admin-approval-metadata">
+                    <span>{teamLeave.leave_type}</span>
+                    <span>
+                      {formatDate(teamLeave.start_date)} to {formatDate(teamLeave.end_date)}
+                    </span>
+                    <span>
+                      {teamLeave.leave_type === "Early Logout"
+                        ? `Logout ${teamLeave.logout_time || "N/A"}`
+                        : `${teamLeave.days || 0} day(s)`}
+                    </span>
+                  </div>
+
+                  <div className="admin-approval-details">
+                    <div className="is-wide">
+                      <span>Reason</span>
+                      <strong>{teamLeave.reason || "No reason shared"}</strong>
+                    </div>
+                    {teamLeave.is_half_day ? (
+                      <div>
+                        <span>Half day</span>
+                        <strong>{teamLeave.half_day_period || "Selected"}</strong>
                       </div>
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <button
-                          className="btn btn-success btn-sm"
-                          onClick={() => updateTeamLeaveStatus(teamLeave._id, "Approved")}
-                          style={{ fontSize: 13, padding: "6px 16px" }}
-                        >
-                          ✓ Approve
-                        </button>
-                        <button
-                          className="btn btn-danger btn-sm"
-                          onClick={() => handleTeamReject(teamLeave._id)}
-                          style={{ fontSize: 13, padding: "6px 16px" }}
-                        >
-                          ✕ Reject
-                        </button>
-                      </div>
+                    ) : null}
+                    <div>
+                      <span>Applied on</span>
+                      <strong>{formatDate(teamLeave.applied_on)}</strong>
                     </div>
                   </div>
-                );
-              })}
+
+                  <div className="admin-approval-actions">
+                    <button
+                      className="fiori-button secondary danger"
+                      onClick={() => setRejectModal({ show: true, leaveId: teamLeave._id, reason: "" })}
+                    >
+                      Reject
+                    </button>
+                    <button
+                      className="fiori-button primary"
+                      onClick={() => updateTeamLeaveStatus(teamLeave._id, "Approved")}
+                    >
+                      Approve
+                    </button>
+                  </div>
+                </article>
+              ))}
             </div>
           )}
+        </section>
+        <section className="fiori-panel">
+          <div className="fiori-panel-header">
+            <div>
+              <h3>Approval and rejection history</h3>
+              <p>Recent decisions across your reportees so you can review what was actioned.</p>
+            </div>
+            <span className="fiori-status-pill is-neutral">{teamDecisionHistory.length} decisions</span>
+          </div>
+
+          {teamHistoryLoading ? (
+            <div className="fiori-loading-card">
+              <Clock3 size={20} />
+              <div>
+                <strong>Loading team decision history</strong>
+                <p>We are compiling approvals and rejections from your reportees.</p>
+              </div>
+            </div>
+          ) : teamDecisionHistory.length === 0 ? (
+            <div className="admin-empty-state">
+              <Users size={22} />
+              <div>
+                <strong>No team decisions recorded yet</strong>
+                <p>Approvals and rejections will appear here once you start acting on requests.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="admin-approval-list employee-team-history-list">
+              {teamDecisionHistory.slice(0, 12).map((record) => (
+                <article key={`${record._id}-${record.status}`} className="admin-approval-card employee-team-history-card">
+                  <div className="admin-approval-card-header">
+                    <div>
+                      <h4>{record.employee_name || "Unknown employee"}</h4>
+                      <p>
+                        {record.employee_designation ? `${record.employee_designation} • ` : ""}
+                        {record.employee_department || "Department not set"}
+                      </p>
+                    </div>
+                    <span className={`fiori-status-pill ${statusToneMap[record.status] || "is-neutral"}`}>
+                      {record.status}
+                    </span>
+                  </div>
+
+                  <div className="admin-approval-metadata">
+                    <span>{record.leave_type}</span>
+                    <span>
+                      {formatDate(record.start_date)} to {formatDate(record.end_date)}
+                    </span>
+                    <span>{record.days || 0} day(s)</span>
+                    <span>{record.employee_email || "No email"}</span>
+                  </div>
+
+                  <div className="admin-approval-details">
+                    <div>
+                      <span>Applied on</span>
+                      <strong>{formatDate(record.applied_on)}</strong>
+                    </div>
+                    <div>
+                      <span>Resolved on</span>
+                      <strong>{formatDate(record.approved_on || record.rejected_on)}</strong>
+                    </div>
+                    <div className="is-wide">
+                      <span>Reason</span>
+                      <strong>{record.reason || "No reason shared"}</strong>
+                    </div>
+                    {record.approved_by ? (
+                      <div>
+                        <span>Approved by</span>
+                        <strong>{record.approved_by}</strong>
+                      </div>
+                    ) : null}
+                    {record.rejection_reason ? (
+                      <div className="is-wide">
+                        <span>Rejection note</span>
+                        <strong>{record.rejection_reason}</strong>
+                      </div>
+                    ) : null}
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
         </div>
       )}
 
-      {/* ============================================================
-          ✅ LOOPHOLE FIX: Edit Leave Modal
-          - Leave type dropdown restricted for interns
-          - Date inputs use getMinDate/getMaxDate with the *edited* type
-          - Logout time field shown when editing Early Logout
-          - validateEditLeave() called before submitting
-          ============================================================ */}
-      {editingLeave && (
-        <div style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: "rgba(0,0,0,0.5)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 1000
-        }}>
-          <div style={{
-            background: "white",
-            padding: 24,
-            borderRadius: 12,
-            maxWidth: 500,
-            width: "90%",
-            maxHeight: "90vh",
-            overflow: "auto"
-          }}>
-            <h4 style={{ marginTop: 0 }}>Edit Leave Request</h4>
-
-            {/* Inline message for edit modal */}
-            {message && (
-              <div style={{
-                padding: 10,
-                marginBottom: 14,
-                borderRadius: 8,
-                background: message.includes("Error") || message.includes("⚠️") ? "#fee2e2" : "#d1f4dd",
-                color: message.includes("Error") || message.includes("⚠️") ? "#dc2626" : "#0a5d2c",
-                border: `1px solid ${message.includes("Error") || message.includes("⚠️") ? "#fecaca" : "#7de3a6"}`,
-                fontSize: 13,
-                fontWeight: 500
-              }}>
-                {message}
+      {editingLeave ? (
+        <div className="admin-modal-overlay" onClick={() => setEditingLeave(null)}>
+          <div className="admin-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="admin-modal-header">
+              <div>
+                <div className="admin-section-overline">Pending request</div>
+                <h2>Edit leave request</h2>
+                <p>Update dates or reason before your approver reviews it.</p>
               </div>
-            )}
-
-            <div style={{ marginBottom: 16 }}>
-              <label className="label">Leave Type</label>
-              <div
-                className="input"
-                style={{
-                  background: "#f3f4f6",
-                  color: "#6b7280",
-                  cursor: "not-allowed",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8
-                }}
-              >
-                🔒 {editingLeave.leave_type}
-                <span style={{ fontSize: 11, marginLeft: "auto", color: "#9ca3af" }}>
-                  Cannot be changed
-                </span>
-              </div>
+              <button className="fiori-button secondary" onClick={() => setEditingLeave(null)}>
+                Close
+              </button>
             </div>
 
-            {/* ✅ Policy reminder in edit modal for Planned */}
-            {editingLeave.leave_type === "Planned" && (
-              <div style={{
-                marginBottom: 14,
-                padding: 10,
-                background: "#fef3c7",
-                borderRadius: 8,
-                border: "1px solid #fbbf24",
-                fontSize: 13,
-                color: "#92400e"
-              }}>
-                ⚠️ Planned leave must be at least <strong>7 days in advance</strong>.
+            <div className="employee-edit-grid">
+              <div className="fiori-form-field">
+                <label>Leave type</label>
+                <div className="input employee-readonly-field">{editingLeave.leave_type}</div>
               </div>
-            )}
 
-            {/* ✅ Policy reminder for Sick in edit modal */}
-            {editingLeave.leave_type === "Sick" && (
-              <div style={{
-                marginBottom: 14,
-                padding: 10,
-                background: "#e0f2fe",
-                borderRadius: 8,
-                border: "1px solid #0ea5e9",
-                fontSize: 13,
-                color: "#075985"
-              }}>
-                ℹ️ Sick leave can only be for <strong>today or tomorrow</strong>.
-              </div>
-            )}
-
-            <div style={{ marginBottom: 16 }}>
-              <label className="label">Start Date</label>
-              <input
-                className="input"
-                type="date"
-                value={editingLeave.start_date}
-                min={getMinDate(editingLeave.leave_type)}
-                max={getMaxDate(editingLeave.leave_type)}
-                onChange={(e) =>
-                  setEditingLeave({
-                    ...editingLeave,
-                    start_date: e.target.value,
-                    end_date: editingLeave.is_half_day ? e.target.value : editingLeave.end_date,
-                  })
-                }
-              />
-            </div>
-
-            <div style={{ marginBottom: 16 }}>
-              <label className="label">End Date</label>
-              <input
-                className="input"
-                type="date"
-                value={editingLeave.end_date}
-                min={editingLeave.start_date || getMinDate(editingLeave.leave_type)}
-                max={getMaxDate(editingLeave.leave_type)}
-                disabled={editingLeave.is_half_day}
-                onChange={(e) =>
-                  setEditingLeave({ ...editingLeave, end_date: e.target.value })
-                }
-              />
-            </div>
-
-            {/* ✅ Logout time shown when editing Early Logout */}
-            {editingLeave.leave_type === "Early Logout" && (
-              <div style={{ marginBottom: 16 }}>
-                <label className="label">Logout Time *</label>
+              <div className="fiori-form-field">
+                <label>Start date</label>
                 <input
                   className="input"
-                  type="time"
-                  value={editingLeave.logout_time || ""}
-                  onChange={(e) =>
-                    setEditingLeave({ ...editingLeave, logout_time: e.target.value })
+                  type="date"
+                  value={editingLeave.start_date}
+                  min={getMinDate(editingLeave.leave_type)}
+                  max={getMaxDate(editingLeave.leave_type)}
+                  onChange={(event) =>
+                    setEditingLeave((previous) => ({
+                      ...previous,
+                      start_date: event.target.value,
+                      end_date: previous.is_half_day ? event.target.value : previous.end_date,
+                    }))
                   }
                 />
               </div>
-            )}
 
-            <div style={{ marginBottom: 16 }}>
-              <label className="label">Reason</label>
+              <div className="fiori-form-field">
+                <label>End date</label>
+                <input
+                  className="input"
+                  type="date"
+                  value={editingLeave.end_date}
+                  min={editingLeave.start_date || getMinDate(editingLeave.leave_type)}
+                  max={getMaxDate(editingLeave.leave_type)}
+                  disabled={editingLeave.is_half_day}
+                  onChange={(event) =>
+                    setEditingLeave((previous) => ({ ...previous, end_date: event.target.value }))
+                  }
+                />
+              </div>
+
+              {editingLeave.leave_type === "Early Logout" ? (
+                <div className="fiori-form-field">
+                  <label>Logout time</label>
+                  <input
+                    className="input"
+                    type="time"
+                    value={editingLeave.logout_time || ""}
+                    onChange={(event) =>
+                      setEditingLeave((previous) => ({ ...previous, logout_time: event.target.value }))
+                    }
+                  />
+                </div>
+              ) : null}
+            </div>
+
+            <div className="fiori-form-field">
+              <label>Reason</label>
               <textarea
-                className="input"
+                rows={4}
                 value={editingLeave.reason || ""}
-                onChange={(e) => setEditingLeave({ ...editingLeave, reason: e.target.value })}
-                rows={3}
+                onChange={(event) =>
+                  setEditingLeave((previous) => ({ ...previous, reason: event.target.value }))
+                }
               />
             </div>
 
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                className="btn btn-primary"
-                onClick={updateLeave}
-                disabled={loading}
-                style={{ flex: 1 }}
-              >
-                {loading ? "Updating..." : "Update Leave"}
-              </button>
-              <button
-                className="btn"
-                onClick={() => { setEditingLeave(null); setMessage(""); }}
-                style={{ flex: 1 }}
-              >
+            <div className="admin-modal-actions">
+              <button className="fiori-button secondary" onClick={() => setEditingLeave(null)}>
                 Cancel
+              </button>
+              <button className="fiori-button primary" onClick={updateLeave} disabled={loading}>
+                {loading ? "Updating..." : "Update Leave"}
               </button>
             </div>
           </div>
         </div>
-      )}
+      ) : null}
 
-      {/* Reject Modal */}
-      {rejectModal.show && (
-        <div style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: "rgba(0,0,0,0.5)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 1000
-        }}>
-          <div style={{
-            background: "white",
-            padding: 24,
-            borderRadius: 12,
-            maxWidth: 500,
-            width: "90%"
-          }}>
-            <h4 style={{ marginTop: 0, color: "#dc2626" }}>Reject Leave Request</h4>
-            
-            <div style={{ marginBottom: 16 }}>
-              <label className="label">Rejection Reason *</label>
+      {rejectModal.show ? (
+        <div
+          className="admin-modal-overlay"
+          onClick={() => setRejectModal({ show: false, leaveId: null, reason: "" })}
+        >
+          <div className="admin-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="admin-modal-header">
+              <div>
+                <div className="admin-section-overline">Approval action</div>
+                <h2>Reject leave request</h2>
+                <p>Provide a clear reason so the employee knows how to correct the request.</p>
+              </div>
+            </div>
+
+            <div className="fiori-form-field">
+              <label>Rejection reason</label>
               <textarea
-                className="input"
-                value={rejectModal.reason}
-                onChange={(e) => setRejectModal({ ...rejectModal, reason: e.target.value })}
                 rows={4}
-                placeholder="Please provide a reason for rejection..."
+                value={rejectModal.reason}
+                onChange={(event) =>
+                  setRejectModal((previous) => ({ ...previous, reason: event.target.value }))
+                }
+                placeholder="Explain why this request cannot be approved"
                 autoFocus
               />
             </div>
 
-            <div style={{ display: "flex", gap: 8 }}>
+            <div className="admin-modal-actions">
               <button
-                className="btn btn-danger"
-                onClick={confirmTeamReject}
-                disabled={!rejectModal.reason.trim()}
-                style={{ flex: 1 }}
-              >
-                Confirm Rejection
-              </button>
-              <button
-                className="btn"
+                className="fiori-button secondary"
                 onClick={() => setRejectModal({ show: false, leaveId: null, reason: "" })}
-                style={{ flex: 1 }}
               >
                 Cancel
+              </button>
+              <button
+                className="fiori-button danger"
+                onClick={confirmTeamReject}
+                disabled={!rejectModal.reason.trim()}
+              >
+                Confirm Rejection
               </button>
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 };

@@ -284,7 +284,7 @@ const OrganizationHierarchy = ({ user, onClose }) => {
     }
     // Junior levels (14+)
     else {
-      return { bg: '#e0e7ff', text: '#3730a3', border: '#6366f1' };
+      return { bg: '#eef3f8', text: '#35516e', border: '#91aac4' };
     }
   };
 
@@ -312,12 +312,12 @@ const OrganizationHierarchy = ({ user, onClose }) => {
             position: 'relative',
             width: CARD_WIDTH,
             background: isCurrentUser 
-              ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+              ? 'linear-gradient(135deg, #0a6ed1 0%, #35516e 100%)'
               : isVirtual 
               ? '#f3f4f6'
               : 'white',
             border: isCurrentUser 
-              ? '3px solid #667eea'
+              ? '3px solid #0a6ed1'
               : '2px solid #e5e7eb',
             borderRadius: 12,
             padding: 16,
@@ -392,7 +392,7 @@ const OrganizationHierarchy = ({ user, onClose }) => {
                       ? 'rgba(255,255,255,0.3)'
                       : isVirtual
                       ? '#d1d5db'
-                      : 'linear-gradient(135deg, #667eea, #764ba2)',
+                      : 'linear-gradient(135deg, #0a6ed1, #35516e)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -581,24 +581,25 @@ const OrganizationHierarchy = ({ user, onClose }) => {
         left: 0,
         right: 0,
         bottom: 0,
-        background: 'rgba(0, 0, 0, 0.6)',
+        background: 'rgba(15, 39, 66, 0.46)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 9999,
-        padding: 20,
+        padding: 24,
       }}
       onClick={onClose}
     >
       <div
         style={{
-          background: 'white',
-          borderRadius: 16,
-          maxWidth: 1200,
+          background: 'linear-gradient(180deg, rgba(255,255,255,0.99), rgba(248,250,252,0.98))',
+          borderRadius: 24,
+          border: '1px solid #dce4ec',
+          maxWidth: 1280,
           width: '100%',
           maxHeight: '90vh',
           overflow: 'auto',
-          boxShadow: '0 25px 50px rgba(0, 0, 0, 0.4)',
+          boxShadow: '0 1.5rem 4rem rgba(31, 50, 69, 0.24)',
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -606,18 +607,31 @@ const OrganizationHierarchy = ({ user, onClose }) => {
         <div
           style={{
             padding: '24px 32px',
-            borderBottom: '1px solid #e5e7eb',
+            borderBottom: '1px solid #e8edf3',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
             position: 'sticky',
             top: 0,
-            background: 'white',
+            background: 'rgba(255,255,255,0.94)',
+            backdropFilter: 'blur(12px)',
             zIndex: 10,
           }}
         >
           <div>
-            <h2 style={{ margin: 0, marginBottom: 4, fontSize: 24, fontWeight: 700, color: '#111827' }}>
+            <div
+              style={{
+                marginBottom: 8,
+                color: '#5b738b',
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                fontSize: 11,
+                fontWeight: 700,
+              }}
+            >
+              Organization Hierarchy
+            </div>
+            <h2 style={{ margin: 0, marginBottom: 4, fontSize: 28, fontWeight: 400, color: '#223548' }}>
               Organization Hierarchy
             </h2>
             <p style={{ margin: 0, fontSize: 14, color: '#6b7280' }}>
@@ -630,7 +644,7 @@ const OrganizationHierarchy = ({ user, onClose }) => {
               width: 40,
               height: 40,
               borderRadius: 10,
-              border: '1px solid #e5e7eb',
+              border: '1px solid #dce4ec',
               background: 'white',
               cursor: 'pointer',
               fontSize: 20,
@@ -661,18 +675,18 @@ const OrganizationHierarchy = ({ user, onClose }) => {
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
                   gap: 16,
                   marginBottom: 24,
                 }}
               >
                 <div
                   style={{
-                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    background: 'linear-gradient(135deg, #0a6ed1 0%, #35516e 100%)',
                     color: 'white',
-                    borderRadius: 12,
+                    borderRadius: 18,
                     padding: 20,
-                    boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)',
+                    boxShadow: '0 0.75rem 2rem rgba(10, 110, 209, 0.2)',
                   }}
                 >
                   <div style={{ fontSize: 14, opacity: 0.9, marginBottom: 4 }}>Your Level</div>
@@ -684,9 +698,10 @@ const OrganizationHierarchy = ({ user, onClose }) => {
                 <div
                   style={{
                     background: 'white',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: 12,
+                    border: '1px solid #dce4ec',
+                    borderRadius: 18,
                     padding: 20,
+                    boxShadow: '0 0.5rem 1.5rem rgba(31, 50, 69, 0.08)',
                   }}
                 >
                   <div style={{ fontSize: 14, color: '#6b7280', marginBottom: 4 }}>
@@ -719,9 +734,9 @@ const OrganizationHierarchy = ({ user, onClose }) => {
               {escalationPath && escalationPath.length > 1 && (
                 <div
                   style={{
-                    background: '#fffbeb',
-                    border: '2px solid #fbbf24',
-                    borderRadius: 12,
+                    background: '#fffaf0',
+                    border: '1px solid #f6d27b',
+                    borderRadius: 18,
                     padding: 20,
                     marginBottom: 24,
                   }}
@@ -738,11 +753,11 @@ const OrganizationHierarchy = ({ user, onClose }) => {
                             alignItems: 'center',
                             gap: 10,
                             padding: '10px 16px',
-                            background: person._id === user.id ? '#fef3c7' : 'white',
-                            borderRadius: 8,
-                            border: person._id === user.id ? '2px solid #f59e0b' : '1px solid #e5e7eb',
-                          }}
-                        >
+                              background: person._id === user.id ? '#fef3c7' : 'white',
+                              borderRadius: 12,
+                              border: person._id === user.id ? '1px solid #f59e0b' : '1px solid #dce4ec',
+                            }}
+                          >
                           <div
                             style={{
                               width: 32,
@@ -750,7 +765,7 @@ const OrganizationHierarchy = ({ user, onClose }) => {
                               borderRadius: '50%',
                               background: person._id === user.id 
                                 ? '#f59e0b'
-                                : 'linear-gradient(135deg, #667eea, #764ba2)',
+                                : 'linear-gradient(135deg, #0a6ed1, #35516e)',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
@@ -797,10 +812,11 @@ const OrganizationHierarchy = ({ user, onClose }) => {
               {/* Hierarchy Tree */}
               <div
                 style={{
-                  background: '#f9fafb',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: 12,
+                  background: '#fbfcfd',
+                  border: '1px solid #dce4ec',
+                  borderRadius: 18,
                   padding: 24,
+                  boxShadow: '0 0.75rem 2rem rgba(31, 50, 69, 0.08)',
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
@@ -816,8 +832,8 @@ const OrganizationHierarchy = ({ user, onClose }) => {
                     style={{
                       padding: '8px 16px',
                       background: 'white',
-                      border: '1px solid #d1d5db',
-                      borderRadius: 8,
+                      border: '1px solid #dce4ec',
+                      borderRadius: 10,
                       fontSize: 13,
                       fontWeight: 600,
                       cursor: 'pointer',
@@ -833,8 +849,10 @@ const OrganizationHierarchy = ({ user, onClose }) => {
                   style={{
                     width: '100%',
                     overflow: 'auto',
-                    border: '1px solid #e5e7eb',
+                    border: '1px solid #e8edf3',
+                    borderRadius: 16,
                     padding: 20,
+                    background: 'linear-gradient(180deg, #ffffff, #f8fafc)',
                   }}
                 >
                   <div
@@ -859,8 +877,8 @@ const OrganizationHierarchy = ({ user, onClose }) => {
                     onClick={() => setScale(prev => Math.max(0.5, prev - 0.1))}
                     style={{
                       padding: '6px 12px',
-                      borderRadius: 8,
-                      border: '1px solid #d1d5db',
+                      borderRadius: 10,
+                      border: '1px solid #dce4ec',
                       background: 'white',
                       cursor: 'pointer',
                     }}
@@ -876,8 +894,8 @@ const OrganizationHierarchy = ({ user, onClose }) => {
                     onClick={() => setScale(prev => Math.min(2, prev + 0.1))}
                     style={{
                       padding: '6px 12px',
-                      borderRadius: 8,
-                      border: '1px solid #d1d5db',
+                      borderRadius: 10,
+                      border: '1px solid #dce4ec',
                       background: 'white',
                       cursor: 'pointer',
                     }}
@@ -893,8 +911,8 @@ const OrganizationHierarchy = ({ user, onClose }) => {
                   marginTop: 20,
                   padding: 16,
                   background: 'white',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: 8,
+                  border: '1px solid #dce4ec',
+                  borderRadius: 14,
                   display: 'flex',
                   gap: 20,
                   flexWrap: 'wrap',
@@ -906,9 +924,9 @@ const OrganizationHierarchy = ({ user, onClose }) => {
                     style={{
                       width: 20,
                       height: 20,
-                      background: 'linear-gradient(135deg, #667eea, #764ba2)',
+                      background: 'linear-gradient(135deg, #0a6ed1, #35516e)',
                       borderRadius: 4,
-                      border: '2px solid #667eea',
+                      border: '2px solid #0a6ed1',
                     }}
                   />
                   <span style={{ color: '#6b7280' }}>Your Position</span>
@@ -975,14 +993,14 @@ const OrganizationHierarchy = ({ user, onClose }) => {
                     style={{
                       width: 20,
                       height: 20,
-                      background: '#e0e7ff',
+                      background: '#eef3f8',
                       borderRadius: 4,
-                      border: '1px solid #6366f1',
+                      border: '1px solid #91aac4',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       fontSize: 10,
-                      color: '#3730a3',
+                      color: '#35516e',
                     }}
                   >
                     L14

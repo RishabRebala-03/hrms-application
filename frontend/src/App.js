@@ -112,6 +112,7 @@ function App() {
   const [viewEmployeeId, setViewEmployeeId] = useState(null);
   const [profileReturnSection, setProfileReturnSection] = useState("dashboard");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   // Session recovery on app load
   React.useEffect(() => {
@@ -250,6 +251,8 @@ function App() {
             }}
             role="Admin"
             isOpen={isSidebarOpen}
+            isCollapsed={isSidebarCollapsed}
+            onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
           />
         );
 
@@ -264,6 +267,8 @@ function App() {
             role="Manager"
             restricted={["add", "holidays"]}
             isOpen={isSidebarOpen}
+            isCollapsed={isSidebarCollapsed}
+            onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
           />
         );
 
@@ -279,6 +284,8 @@ function App() {
             role="Employee"
             restricted={["add", "employees", "holidays"]}
             isOpen={isSidebarOpen}
+            isCollapsed={isSidebarCollapsed}
+            onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
           />
         );
     }
@@ -396,10 +403,9 @@ function App() {
     <>
       <MobileScrollFix />
       <ForceScroll />
-      <div className="app-root">
+      <div className={`app-root ${isSidebarCollapsed ? "sidebar-collapsed" : ""}`}>
         <div
-          className="sidebar-backdrop"
-          style={{ display: isSidebarOpen ? 'block' : 'none' }}
+          className={`sidebar-backdrop ${isSidebarOpen ? "show" : ""}`}
           onClick={() => setIsSidebarOpen(false)}
         />
         {getFilteredSidebar()}
@@ -409,6 +415,7 @@ function App() {
             onLogout={handleLogout}
             onNavigateToProfile={handleNavigateToProfile}
             onToggleSidebar={() => setIsSidebarOpen(prev => !prev)}
+            isSidebarCollapsed={isSidebarCollapsed}
           />
           <div className="content">{renderSection()}</div>
         </div>
