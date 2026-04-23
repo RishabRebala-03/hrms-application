@@ -1,6 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import { CalendarDays, Cake, ChevronLeft, ChevronRight, RefreshCw, Sparkles } from "lucide-react";
+import {
+  CalendarDays,
+  Cake,
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw,
+  Sparkles,
+} from "lucide-react";
 
 const monthNames = [
   "January",
@@ -19,10 +26,41 @@ const monthNames = [
 
 const weekdayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-const Calendar = ({ user }) => {
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+const toDateKey = (value) => {
+  if (!value) return "";
+  try {
+    return new Date(value).toISOString().slice(0, 10);
+  } catch {
+    return "";
+  }
+};
+
+const formatMonthLabel = (value) => {
+  if (!value) return "";
+
+  try {
+    return new Date(value).toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return value;
+  }
+};
+
+const isDateWithinRange = (dateStr, startDate, endDate) => {
+  if (!dateStr || !startDate || !endDate) return false;
+  return dateStr >= startDate && dateStr <= endDate;
+};
+
+const Calendar = ({ user, setSection, navigationState }) => {
+  const [selectedYear, setSelectedYear] = useState(
+    navigationState?.focusYear || new Date().getFullYear()
+  );
   const [holidays, setHolidays] = useState([]);
   const [birthdays, setBirthdays] = useState([]);
+  const [approvedLeaves, setApprovedLeaves] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showBirthdays, setShowBirthdays] = useState(true);
@@ -30,6 +68,18 @@ const Calendar = ({ user }) => {
 
   const isAdmin = user?.role === "Admin";
   const isManager = user?.role === "Manager";
+  const focusedDate = navigationState?.focusDate ? toDateKey(navigationState.focusDate) : "";
+
+  useEffect(() => {
+    if (navigationState?.focusYear) {
+      setSelectedYear(navigationState.focusYear);
+    } else if (navigationState?.focusDate) {
+      const focusYear = new Date(navigationState.focusDate).getFullYear();
+      if (!Number.isNaN(focusYear)) {
+        setSelectedYear(focusYear);
+      }
+    }
+  }, [navigationState]);
 
   const processBirthdays = useCallback(
     (users) =>
@@ -66,10 +116,22 @@ const Calendar = ({ user }) => {
       const startDate = `${selectedYear}-01-01`;
       const endDate = `${selectedYear}-12-31`;
 
-      const holidaysResponse = await axios.get(
-        `${process.env.REACT_APP_BACKEND_URL}/api/holidays/?start=${startDate}&end=${endDate}`
-      );
+      const [holidaysResponse, leaveHistoryResponse] = await Promise.all([
+        axios.get(`${process.env.REACT_APP_BACKEND_URL}/api/holidays/?start=${startDate}&end=${endDate}`),
+        axios.get(`${process.env.REACT_APP_BACKEND_URL}/api/leaves/history/${user.id}`),
+      ]);
+
       setHolidays(Array.isArray(holidaysResponse.data) ? holidaysResponse.data : []);
+
+      const approvedHistory = Array.isArray(leaveHistoryResponse.data)
+        ? leaveHistoryResponse.data.filter((leave) => {
+            if (leave.status !== "Approved") return false;
+            const rangeStart = toDateKey(leave.approved_start_date || leave.start_date);
+            const rangeEnd = toDateKey(leave.approved_end_date || leave.end_date);
+            return rangeStart && rangeEnd && !(rangeEnd < startDate || rangeStart > endDate);
+          })
+        : [];
+      setApprovedLeaves(approvedHistory);
 
       if (isAdmin) {
         const usersResponse = await axios.get(`${process.env.REACT_APP_BACKEND_URL}/api/users/`);
@@ -125,13 +187,21 @@ const Calendar = ({ user }) => {
     return birthdays.filter((birthday) => birthday.date === dateStr);
   };
 
+  const findApprovedLeaves = useCallback(
+    (dateStr) =>
+      approvedLeaves.filter((leave) =>
+        isDateWithinRange(
+          dateStr,
+          toDateKey(leave.approved_start_date || leave.start_date),
+          toDateKey(leave.approved_end_date || leave.end_date)
+        )
+      ),
+    [approvedLeaves]
+  );
+
   const isToday = (year, month, day) => {
     const today = new Date();
-    return (
-      today.getFullYear() === year &&
-      today.getMonth() === month &&
-      today.getDate() === day
-    );
+    return today.getFullYear() === year && today.getMonth() === month && today.getDate() === day;
   };
 
   const yearOptions = [2024, 2025, 2026, 2027, 2028];
@@ -143,6 +213,14 @@ const Calendar = ({ user }) => {
   const sortedBirthdays = useMemo(() => {
     return [...birthdays].sort((a, b) => new Date(a.date) - new Date(b.date));
   }, [birthdays]);
+
+  const approvedLeaveList = useMemo(() => {
+    return [...approvedLeaves].sort(
+      (first, second) =>
+        new Date(first.approved_start_date || first.start_date) -
+        new Date(second.approved_start_date || second.start_date)
+    );
+  }, [approvedLeaves]);
 
   const publicHolidays = holidays.filter((holiday) => holiday.type === "public");
   const optionalHolidays = holidays.filter(
@@ -156,6 +234,14 @@ const Calendar = ({ user }) => {
     return "Your birthday only";
   };
 
+  const openLeaveDay = (dateStr) => {
+    setSection?.("leaves", {
+      source: "calendar-day",
+      focusDate: dateStr,
+      historyFilterStatus: "approved",
+    });
+  };
+
   const renderMonth = (monthIndex) => {
     const daysInMonth = getDaysInMonth(selectedYear, monthIndex);
     const firstDay = getFirstDayOfMonth(selectedYear, monthIndex);
@@ -166,14 +252,18 @@ const Calendar = ({ user }) => {
     }
 
     for (let day = 1; day <= daysInMonth; day += 1) {
+      const dateStr = `${selectedYear}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
       const holiday = findHoliday(selectedYear, monthIndex, day);
       const birthdayList = findBirthdays(selectedYear, monthIndex, day);
+      const dayLeaves = findApprovedLeaves(dateStr);
       const today = isToday(selectedYear, monthIndex, day);
 
       const classNames = ["enterprise-calendar-day"];
       if (today) classNames.push("is-today");
       if (holiday) classNames.push(`is-holiday-${holiday.type}`);
       if (birthdayList.length > 0) classNames.push("has-birthday");
+      if (dayLeaves.length > 0) classNames.push("has-approved-leave");
+      if (focusedDate === dateStr) classNames.push("is-selected");
 
       const title = [
         holiday ? `Holiday: ${holiday.name}` : null,
@@ -182,15 +272,31 @@ const Calendar = ({ user }) => {
               .map((birthday) => (birthday.isCurrentUser ? `${birthday.name} (You)` : birthday.name))
               .join(", ")}`
           : null,
+        dayLeaves.length > 0
+          ? `Approved leave: ${dayLeaves.map((leave) => leave.leave_type || "Leave").join(", ")}`
+          : null,
       ]
         .filter(Boolean)
         .join("\n");
 
       days.push(
-        <div key={`${monthIndex}-${day}`} className={classNames.join(" ")} title={title}>
-          <span>{day}</span>
-          {birthdayList.length > 0 ? <i>🎂</i> : null}
-        </div>
+        <button
+          key={`${monthIndex}-${day}`}
+          type="button"
+          className={classNames.join(" ")}
+          title={title}
+          onClick={() => {
+            if (dayLeaves.length > 0) {
+              openLeaveDay(dateStr);
+            }
+          }}
+        >
+          <span className="enterprise-calendar-day-number">{day}</span>
+          <div className="enterprise-calendar-day-icons">
+            {dayLeaves.length > 0 ? <b>{dayLeaves.length}L</b> : null}
+            {birthdayList.length > 0 ? <i>🎂</i> : null}
+          </div>
+        </button>
       );
     }
 
@@ -218,7 +324,7 @@ const Calendar = ({ user }) => {
           <CalendarDays size={28} />
           <div>
             <strong>Loading enterprise calendar</strong>
-            <p>Preparing holidays, birthdays, and the yearly view.</p>
+            <p>Preparing holidays, birthdays, approved leaves, and the yearly view.</p>
           </div>
         </div>
       </section>
@@ -232,8 +338,8 @@ const Calendar = ({ user }) => {
           <div className="admin-section-overline">Enterprise Calendar</div>
           <h1>Enterprise Calendar</h1>
           <p>
-            Browse the yearly holiday calendar, review birthday visibility for your role, and keep
-            the workforce aligned on important dates.
+            Browse holidays, birthdays, and your approved leaves in one place. Approved leave days
+            are highlighted in red and open the leave workspace when clicked.
           </p>
         </div>
 
@@ -247,8 +353,8 @@ const Calendar = ({ user }) => {
             <strong>{holidays.length}</strong>
           </div>
           <div className="admin-hero-meta-item">
-            <span>Birthdays</span>
-            <strong>{showBirthdays ? birthdays.length : "Hidden"}</strong>
+            <span>Approved leave days</span>
+            <strong>{approvedLeaves.length}</strong>
           </div>
         </div>
       </header>
@@ -279,6 +385,15 @@ const Calendar = ({ user }) => {
           </div>
           <div className="fiori-stat-value calendar-stat-text">{getBirthdayVisibilityMessage()}</div>
           <div className="fiori-stat-note">Birthdays shown based on your role and reporting scope</div>
+        </article>
+
+        <article className="fiori-stat-card">
+          <div className="fiori-stat-topline">
+            <span className="fiori-stat-label">Approved Leaves</span>
+            <Sparkles size={18} />
+          </div>
+          <div className="fiori-stat-value">{approvedLeaveList.length}</div>
+          <div className="fiori-stat-note">Approved requests highlighted on the calendar in red</div>
         </article>
       </section>
 
@@ -335,6 +450,7 @@ const Calendar = ({ user }) => {
           <span><i className="is-public" /> Public holiday</span>
           <span><i className="is-optional" /> Optional holiday</span>
           <span><i className="is-company" /> Company holiday</span>
+          <span><i className="is-approved-leave" /> Approved leave</span>
           <span><i className="is-today" /> Today</span>
           <span><i className="is-birthday" /> Birthday</span>
         </div>
@@ -345,6 +461,52 @@ const Calendar = ({ user }) => {
       </div>
 
       <section className="enterprise-calendar-details-grid">
+        <section className="fiori-panel">
+          <div className="fiori-panel-header">
+            <div>
+              <h3>Approved leave list</h3>
+              <p>Click any approved leave to open the filtered leave page for that date.</p>
+            </div>
+          </div>
+
+          {approvedLeaveList.length === 0 ? (
+            <div className="admin-empty-state">
+              <CalendarDays size={24} />
+              <div>
+                <strong>No approved leaves for {selectedYear}</strong>
+                <p>Your approved leave requests will appear here after approval.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="calendar-list">
+              {approvedLeaveList.map((leave) => {
+                const rangeStart = leave.approved_start_date || leave.start_date;
+                const rangeEnd = leave.approved_end_date || leave.end_date;
+
+                return (
+                  <button
+                    key={`${leave._id}-${rangeStart}`}
+                    type="button"
+                    className="calendar-list-card calendar-list-card-button"
+                    onClick={() => openLeaveDay(toDateKey(rangeStart))}
+                  >
+                    <div>
+                      <strong>{leave.leave_type || "Leave"}</strong>
+                      <p>
+                        {formatMonthLabel(rangeStart)} {toDateKey(rangeStart)} to {toDateKey(rangeEnd)}
+                      </p>
+                    </div>
+                    <div className="calendar-list-meta">
+                      <span>{leave.days || leave.approved_days || 1} day(s)</span>
+                      <span className="fiori-status-pill is-rejected">Approved leave</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
         <section className="fiori-panel">
           <div className="fiori-panel-header">
             <div>

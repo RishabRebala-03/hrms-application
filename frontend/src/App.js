@@ -109,6 +109,7 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const [section, setSection] = useState("dashboard");
+  const [sectionState, setSectionState] = useState(null);
   const [viewEmployeeId, setViewEmployeeId] = useState(null);
   const [profileReturnSection, setProfileReturnSection] = useState("dashboard");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -147,6 +148,7 @@ function App() {
     setCurrentUser(user);
     setIsAuthenticated(true);
     setSection("dashboard");
+    setSectionState(null);
   };
 
   const handleUserUpdate = (updatedUser) => {
@@ -159,6 +161,7 @@ function App() {
     setCurrentUser(null);
     setIsAuthenticated(false);
     setSection("dashboard");
+    setSectionState(null);
     setViewEmployeeId(null);
     setProfileReturnSection("dashboard");
   };
@@ -218,7 +221,7 @@ function App() {
     setSection("profile");
   };
 
-  const handleSectionChange = (newSection) => {
+  const handleSectionChange = (newSection, nextSectionState = null) => {
     if (
       newSection === "profile" ||
       newSection === "leaves" ||
@@ -230,6 +233,7 @@ function App() {
     if (newSection !== "profile") {
       setProfileReturnSection(newSection);
     }
+    setSectionState(nextSectionState);
     setSection(newSection);
   };
 
@@ -311,7 +315,13 @@ function App() {
             />
           );
         } else {
-          return <EmployeeDashboard user={currentUser} setSection={handleSectionChange} />;
+          return (
+            <EmployeeDashboard
+              user={currentUser}
+              setSection={handleSectionChange}
+              navigationState={sectionState}
+            />
+          );
         }
 
       case "progress":
@@ -355,7 +365,7 @@ function App() {
         } else if (role === "Manager") {
           return <ManagerLeaves user={currentUser} />;
         } else {
-          return <EmployeeLeaves user={currentUser} />;
+          return <EmployeeLeaves user={currentUser} navigationState={sectionState} />;
         }
 
       case "profile":
@@ -373,7 +383,7 @@ function App() {
         );
 
       case "calendar":
-        return <Calendar user={currentUser} />;
+        return <Calendar user={currentUser} setSection={handleSectionChange} navigationState={sectionState} />;
 
       case "tea-coffee":
         return <TeaCoffee user={currentUser} />;
@@ -394,7 +404,13 @@ function App() {
         } else if (role === "Manager") {
           return <ManagerDashboard user={currentUser} onNavigateToProfile={handleNavigateToProfile} />;
         } else {
-          return <EmployeeDashboard user={currentUser} />;
+          return (
+            <EmployeeDashboard
+              user={currentUser}
+              setSection={handleSectionChange}
+              navigationState={sectionState}
+            />
+          );
         }
     }
   };

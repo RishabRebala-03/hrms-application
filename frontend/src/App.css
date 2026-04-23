@@ -1211,6 +1211,17 @@ body {
   background: #085caf;
 }
 
+.fiori-button.employee-apply-button {
+  background: linear-gradient(135deg, #0f9f6e, #0b7a56);
+  border-color: #0b7a56;
+  color: #fff;
+  box-shadow: 0 0.75rem 1.5rem rgba(15, 159, 110, 0.18);
+}
+
+.fiori-button.employee-apply-button:hover {
+  background: linear-gradient(135deg, #0b8d61, #096847);
+}
+
 .fiori-button.secondary {
   background: #fff;
   color: var(--text);
@@ -1678,6 +1689,34 @@ body {
   color: #0a6ed1;
 }
 
+.policy-shortcut-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.policy-shortcut-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid #d6e6f7;
+  background: #f8fbff;
+  color: #35516e;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.policy-shortcut-chip:hover,
+.policy-shortcut-chip.is-active {
+  background: #eaf3fc;
+  border-color: #99c5ef;
+  color: #0a6ed1;
+}
+
 .policy-detail-main {
   display: flex;
   flex-direction: column;
@@ -1704,22 +1743,27 @@ body {
   scroll-margin-top: 120px;
 }
 
+.policy-document-content [id] {
+  scroll-margin-top: 120px;
+}
+
 .policy-document-content h2 {
   margin: 28px 0 14px;
-  font-size: 1.4rem;
+  font-size: 1.55rem;
   font-weight: 400;
   color: var(--text);
 }
 
 .policy-document-content h3 {
   margin: 22px 0 10px;
-  font-size: 1.05rem;
+  font-size: 1.18rem;
   font-weight: 700;
   color: var(--text);
 }
 
 .policy-document-content p {
   margin: 0 0 14px;
+  font-size: 15px;
 }
 
 .policy-document-content ul {
@@ -1729,6 +1773,7 @@ body {
 
 .policy-document-content li {
   margin-bottom: 10px;
+  font-size: 15px;
 }
 
 .policy-document-content strong {
@@ -2296,6 +2341,11 @@ body {
   border: 1px solid #bae6fd;
 }
 
+.calendar-legend .is-approved-leave {
+  background: #fee2e2;
+  border: 1px solid #ef4444;
+}
+
 .calendar-legend .is-today {
   background: #dbeafe;
   border: 2px solid #3b82f6;
@@ -2357,15 +2407,26 @@ body {
 
 .enterprise-calendar-day {
   position: relative;
+  width: 100%;
   min-height: 42px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 2px;
   border-radius: 10px;
   background: #fff;
   border: 1px solid #e5e7eb;
   font-size: 13px;
   color: #35516e;
+  font-family: inherit;
+  cursor: default;
+}
+
+.enterprise-calendar-day-number {
+  font-size: 13px;
+  line-height: 1;
+  font-weight: 400;
 }
 
 .enterprise-calendar-day.empty {
@@ -2377,6 +2438,17 @@ body {
   background: #fce7f3;
   border-color: #fbcfe8;
   color: #831843;
+}
+
+.enterprise-calendar-day.has-approved-leave {
+  background: #fff1f2;
+  border-color: #fda4af;
+  color: #9f1239;
+  cursor: pointer;
+}
+
+.enterprise-calendar-day.has-approved-leave:hover {
+  box-shadow: inset 0 0 0 1px #ef4444;
 }
 
 .enterprise-calendar-day.is-today {
@@ -2408,11 +2480,32 @@ body {
 }
 
 .enterprise-calendar-day i {
-  position: absolute;
-  top: 3px;
-  right: 4px;
   font-style: normal;
   font-size: 10px;
+}
+
+.enterprise-calendar-day.is-selected {
+  box-shadow: inset 0 0 0 2px #0a6ed1;
+}
+
+.enterprise-calendar-day-icons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.enterprise-calendar-day-icons b {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 16px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 9px;
+  line-height: 1;
 }
 
 .calendar-list {
@@ -2430,6 +2523,19 @@ body {
   border-radius: 14px;
   background: #f8fafc;
   border: 1px solid #e5ebf1;
+}
+
+.calendar-list-card-button {
+  width: 100%;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  appearance: none;
+}
+
+.calendar-list-card-button:hover {
+  border-color: #99c5ef;
+  box-shadow: 0 0.5rem 1.5rem rgba(31, 50, 69, 0.12);
 }
 
 .calendar-list-card strong {
@@ -2542,13 +2648,14 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 40px;
-  padding: 0 14px;
+  min-height: 46px;
+  padding: 0 16px;
   border-radius: 999px;
   border: 1px solid #d9dfe6;
   background: #fff;
   color: #35516e;
   font-weight: 700;
+  font-size: 14px;
   cursor: pointer;
   transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
 }
@@ -2585,7 +2692,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 18px;
+  padding: 22px;
   border-radius: 18px;
   border: 1px solid var(--panel-border);
   background: #fff;
@@ -3269,6 +3376,13 @@ body {
   gap: 24px;
 }
 
+.employee-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}
+
 .employee-banner-panel {
   padding: 0;
   overflow: hidden;
@@ -3276,13 +3390,13 @@ body {
 
 .employee-banner-shell {
   position: relative;
-  min-height: 260px;
+  min-height: 210px;
 }
 
 .employee-banner-image {
   width: 100%;
   height: 100%;
-  min-height: 260px;
+  min-height: 210px;
   object-fit: cover;
   display: block;
 }
@@ -3290,7 +3404,7 @@ body {
 .employee-banner-overlay {
   position: absolute;
   inset: 0;
-  padding: 28px 32px;
+  padding: 22px 24px;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
@@ -3302,9 +3416,9 @@ body {
 
 .employee-banner-overlay h3 {
   margin: 0;
-  font-size: 1.9rem;
+  font-size: 1.55rem;
   font-weight: 400;
-  max-width: 560px;
+  max-width: 520px;
 }
 
 .employee-banner-overlay p {
@@ -3319,6 +3433,10 @@ body {
   grid-template-columns: minmax(0, 1fr);
   gap: 20px;
   align-items: start;
+}
+
+.employee-dashboard-layout.employee-dashboard-layout-wide {
+  grid-template-columns: minmax(0, 1.5fr) minmax(320px, 0.95fr);
 }
 
 .employee-dashboard-primary,
@@ -3336,12 +3454,86 @@ body {
   gap: 14px;
 }
 
+.employee-recent-leave-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
 .employee-recent-leave-card,
 .employee-holiday-card {
-  padding: 18px;
+  padding: 14px 16px;
   border-radius: 14px;
   border: 1px solid #e2e9f0;
   background: #fbfcfd;
+}
+
+.employee-recent-leave-card.is-clickable,
+.employee-holiday-card.is-clickable {
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.employee-recent-leave-card.is-clickable:hover,
+.employee-holiday-card.is-clickable:hover {
+  border-color: #99c5ef;
+  box-shadow: 0 0.5rem 1.5rem rgba(31, 50, 69, 0.12);
+  transform: translateY(-2px);
+}
+
+.employee-analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.employee-chart-shell {
+  height: 210px;
+}
+
+.employee-mini-chart {
+  width: 100%;
+  height: 180px;
+}
+
+.employee-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.employee-chart-legend-compact {
+  margin-top: 16px;
+}
+
+.employee-chart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid #dce4ec;
+  background: #fff;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.employee-chart-legend-item i {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.employee-chart-legend-item span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.employee-chart-legend-item strong {
+  font-size: 12px;
 }
 
 .employee-manager-card {
@@ -3630,6 +3822,10 @@ body {
   min-width: 84px;
 }
 
+.employee-history-row-highlight td {
+  background: #fff7ed;
+}
+
 .employee-readonly-field {
   display: flex;
   align-items: center;
@@ -3687,7 +3883,7 @@ body {
 }
 
 .leave-field-label {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -3889,10 +4085,11 @@ body {
 
 .input {
   width: 100%;
-  padding: 10px 12px;
-  border-radius: 8px;
+  padding: 13px 14px;
+  border-radius: 10px;
   border: 1px solid #e6eef9;
   background: #fff;
+  font-size: 15px;
 }
 
 .btn {
@@ -4037,7 +4234,10 @@ body {
   .policy-filter-grid,
   .policy-detail-layout,
   .employee-dashboard-layout,
+  .employee-dashboard-layout.employee-dashboard-layout-wide,
   .employee-leave-layout,
+  .employee-analytics-grid,
+  .employee-recent-leave-grid,
   .projects-summary-grid,
   .apply-behalf-summary,
   .audit-summary-grid,

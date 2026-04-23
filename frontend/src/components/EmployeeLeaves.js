@@ -35,12 +35,27 @@ const formatDate = (dateStr) => {
   }
 };
 
+const toDateKey = (value) => {
+  if (!value) return "";
+
+  try {
+    return new Date(value).toISOString().slice(0, 10);
+  } catch {
+    return "";
+  }
+};
+
+const isDateWithinRange = (dateStr, startDate, endDate) => {
+  if (!dateStr || !startDate || !endDate) return false;
+  return dateStr >= startDate && dateStr <= endDate;
+};
+
 const messageTone = (message) =>
   message.includes("Error") || message.includes("Failed") || message.includes("⚠️")
     ? "is-error"
     : "is-success";
 
-const EmployeeLeaves = ({ user }) => {
+const EmployeeLeaves = ({ user, navigationState }) => {
   const [balance, setBalance] = useState(null);
   const [history, setHistory] = useState([]);
   const [leave, setLeave] = useState({
@@ -68,6 +83,7 @@ const EmployeeLeaves = ({ user }) => {
   const [historyFilterType, setHistoryFilterType] = useState("all");
   const [historySortBy, setHistorySortBy] = useState("newest");
   const [activeTab, setActiveTab] = useState("my-leaves");
+  const [calendarFocusDate, setCalendarFocusDate] = useState("");
 
   const isIntern = user?.employment_type === "Intern";
 
@@ -174,6 +190,31 @@ const EmployeeLeaves = ({ user }) => {
       fetchTeamDecisionHistory();
     }
   }, [activeTab, fetchTeamDecisionHistory, fetchTeamPendingLeaves, hasReportees]);
+
+  useEffect(() => {
+    if (!navigationState) return;
+
+    if (navigationState.historyFilterStatus) {
+      setHistoryFilterStatus(navigationState.historyFilterStatus);
+    }
+
+    if (navigationState.historyFilterType) {
+      setHistoryFilterType(navigationState.historyFilterType);
+    }
+
+    if (navigationState.historySearchTerm !== undefined) {
+      setHistorySearchTerm(navigationState.historySearchTerm);
+    }
+
+    if (navigationState.focusDate) {
+      setCalendarFocusDate(toDateKey(navigationState.focusDate));
+      setHistoryFilterStatus("approved");
+      setActiveTab("my-leaves");
+    } else if (navigationState.source) {
+      setCalendarFocusDate("");
+      setActiveTab("my-leaves");
+    }
+  }, [navigationState]);
 
   const getMinDate = (leaveType) => {
     const type = (leaveType || leave.leave_type).toLowerCase();
@@ -448,6 +489,16 @@ const EmployeeLeaves = ({ user }) => {
         );
       }
 
+      if (calendarFocusDate) {
+        filtered = filtered.filter((item) =>
+          isDateWithinRange(
+            calendarFocusDate,
+            toDateKey(item.approved_start_date || item.start_date),
+            toDateKey(item.approved_end_date || item.end_date)
+          )
+        );
+      }
+
       return [...filtered].sort((first, second) => {
         switch (historySortBy) {
           case "newest":
@@ -465,7 +516,7 @@ const EmployeeLeaves = ({ user }) => {
         }
       });
     },
-    [historyFilterStatus, historyFilterType, historySearchTerm, historySortBy]
+    [calendarFocusDate, historyFilterStatus, historyFilterType, historySearchTerm, historySortBy]
   );
 
   const getFilteredAndSortedTeamLeaves = useCallback(
@@ -751,7 +802,11 @@ const EmployeeLeaves = ({ user }) => {
             </div>
 
             <div className="admin-modal-actions">
-              <button className="fiori-button primary full-width" onClick={applyLeave} disabled={loading}>
+              <button
+                className="fiori-button primary full-width employee-apply-button"
+                onClick={applyLeave}
+                disabled={loading}
+              >
                 {loading ? "Submitting..." : "Apply for Leave"}
               </button>
             </div>
@@ -831,8 +886,21 @@ const EmployeeLeaves = ({ user }) => {
             <div className="leave-results-bar employee-history-toolbar">
               <div className="leave-results-meta">
                 <CalendarCheck2 size={16} />
-                <span>Request history and edit actions stay available here.</span>
+                <span>
+                  {calendarFocusDate
+                    ? `Showing approved leave records for ${formatDate(calendarFocusDate)}.`
+                    : "Request history and edit actions stay available here."}
+                </span>
               </div>
+              {calendarFocusDate ? (
+                <button
+                  type="button"
+                  className="fiori-button secondary"
+                  onClick={() => setCalendarFocusDate("")}
+                >
+                  Clear day filter
+                </button>
+              ) : null}
             </div>
 
             {loading ? (
@@ -866,7 +934,19 @@ const EmployeeLeaves = ({ user }) => {
                   </thead>
                   <tbody>
                     {displayHistory.map((item) => (
-                      <tr key={item._id}>
+                      <tr
+                        key={item._id}
+                        className={
+                          calendarFocusDate &&
+                          isDateWithinRange(
+                            calendarFocusDate,
+                            toDateKey(item.approved_start_date || item.start_date),
+                            toDateKey(item.approved_end_date || item.end_date)
+                          )
+                            ? "employee-history-row-highlight"
+                            : ""
+                        }
+                      >
                         <td className="employee-history-type-cell">
                           <div className="fiori-primary-cell employee-history-primary">
                             <strong>{item.leave_type}</strong>

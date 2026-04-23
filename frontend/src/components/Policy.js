@@ -26,12 +26,13 @@ const policies = [
       { id: "cycle", title: "Leave Cycle" },
       { id: "carryforward", title: "Carry Forward" },
       { id: "application", title: "Leave Application Procedure" },
-      { id: "types", title: "Types of Leave" },
+      { id: "planned", title: "Planned Leave" },
+      { id: "unplanned", title: "Unplanned Leave" },
       { id: "supervisor", title: "Supervisor Authority" },
       { id: "notice", title: "Leave During Notice Period" },
-      { id: "entitlements", title: "Leave Entitlements" },
       { id: "privileged", title: "Privileged Leave (PL)" },
       { id: "casual", title: "Casual Leave (CL) / Sick Leave (SL)" },
+      { id: "lwp", title: "Leave Without Pay (LWP)" },
       { id: "summary", title: "Summary" },
     ],
     content: `
@@ -57,12 +58,12 @@ const policies = [
       </ul>
 
       <h2 id="types">Types of Leave</h2>
-      <h3>1. Planned Leave:</h3>
+      <h3 id="planned">1. Planned Leave</h3>
       <ul>
         <li>Leaves that are communicated and requested in advance via email will be classified as planned leave.</li>
         <li><strong>Example:</strong> For leave on Jan 12, 2024, notification should be given 1 week prior, and the email must be sent on or before Jan 5, 2024.</li>
       </ul>
-      <h3>2. Unplanned Leave:</h3>
+      <h3 id="unplanned">2. Unplanned Leave</h3>
       <ul>
         <li>Leaves requested after the specified date will be considered unplanned.</li>
       </ul>
@@ -78,8 +79,6 @@ const policies = [
         <li>Any absence during the notice period will be treated as Leave Without Pay (LWP) unless otherwise approved by Management under exceptional circumstances.</li>
         <li>Employees serving notice are expected to ensure full knowledge transfer and business continuity.</li>
       </ul>
-
-      <h2 id="entitlements">Leave Entitlements</h2>
 
       <h3 id="privileged">Privileged Leave (PL)</h3>
       <ul>
@@ -98,11 +97,25 @@ const policies = [
         <li>CL/SL cannot be accumulated or encashed and cannot be prefixed or suffixed to PL.</li>
       </ul>
 
+      <h3 id="lwp">Leave Without Pay (LWP)</h3>
+      <ul>
+        <li>Leave Without Pay applies when paid balances are unavailable or leave falls outside the approved policy rules.</li>
+        <li>LWP may also apply during notice period or for unapproved exceptions, subject to management decision.</li>
+      </ul>
+
       <h2 id="summary">Summary</h2>
       <p>This policy aims to provide a structured approach to leave management, ensuring employees receive the necessary time off while maintaining operational efficiency.</p>
       <p>For any questions or clarifications, please contact the HR department.</p>
     `,
   },
+];
+
+const leaveTypeShortcuts = [
+  { id: "planned", label: "Planned Leave" },
+  { id: "unplanned", label: "Unplanned Leave" },
+  { id: "privileged", label: "PL" },
+  { id: "casual", label: "CL / SL" },
+  { id: "lwp", label: "LWP" },
 ];
 
 const categories = ["All", "HR", "Finance", "Operations", "General", "Compliance", "Security"];
@@ -123,7 +136,7 @@ const categoryDescriptions = {
   Security: "Access, data handling, and protection measures",
 };
 
-const getScrollContainer = (element) => {
+const getScrollableAncestor = (element) => {
   let current = element?.parentElement || null;
 
   while (current) {
@@ -140,7 +153,7 @@ const getScrollContainer = (element) => {
     current = current.parentElement;
   }
 
-  return document.scrollingElement || document.documentElement;
+  return window;
 };
 
 const Policy = () => {
@@ -204,15 +217,21 @@ const Policy = () => {
       return undefined;
     }
 
+    const scrollContainer = getScrollableAncestor(contentRootRef.current);
+
     const handleScroll = () => {
-      const scrollPosition = window.scrollY + 180;
+      const containerTop =
+        scrollContainer === window
+          ? 0
+          : scrollContainer?.getBoundingClientRect?.().top || 0;
+      const scrollPosition = containerTop + 170;
       let currentSection = selectedPolicy.sections[0]?.id || null;
 
       selectedPolicy.sections.forEach((section) => {
         const element = contentRefs.current[section.id];
-        const elementTop = element?.getBoundingClientRect().top + window.scrollY;
+        const elementTop = element?.getBoundingClientRect().top;
 
-        if (element && elementTop <= scrollPosition) {
+        if (element && typeof elementTop === "number" && elementTop <= scrollPosition) {
           currentSection = section.id;
         }
       });
@@ -220,10 +239,11 @@ const Policy = () => {
       setActiveSection(currentSection);
     };
 
-    window.addEventListener("scroll", handleScroll);
+    const eventTarget = scrollContainer === window ? window : scrollContainer;
+    eventTarget?.addEventListener("scroll", handleScroll);
     handleScroll();
 
-    return () => window.removeEventListener("scroll", handleScroll);
+    return () => eventTarget?.removeEventListener("scroll", handleScroll);
   }, [selectedPolicy]);
 
   const openPolicy = (policyId) => {
@@ -250,28 +270,7 @@ const Policy = () => {
 
     contentRefs.current[sectionId] = element;
 
-    const scrollContainer = getScrollContainer(element);
-    const topOffset = 110;
-
-    if (
-      scrollContainer === document.body ||
-      scrollContainer === document.documentElement ||
-      scrollContainer === document.scrollingElement
-    ) {
-      const top = element.getBoundingClientRect().top + window.scrollY - topOffset;
-      window.scrollTo({ top, behavior: "smooth" });
-      return;
-    }
-
-    const containerRect = scrollContainer.getBoundingClientRect();
-    const elementRect = element.getBoundingClientRect();
-    const top =
-      elementRect.top - containerRect.top + scrollContainer.scrollTop - topOffset;
-
-    scrollContainer.scrollTo({
-      top,
-      behavior: "smooth",
-    });
+    element.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   if (selectedPolicy) {
@@ -365,6 +364,30 @@ const Policy = () => {
                 </div>
                 <div className="fiori-stat-note">Most recent revision date</div>
               </article>
+            </section>
+
+            <section className="fiori-panel">
+              <div className="fiori-panel-header">
+                <div>
+                  <h3>Leave Type Shortcuts</h3>
+                  <p>Open the exact leave type heading directly inside this document.</p>
+                </div>
+              </div>
+
+              <div className="policy-shortcut-grid">
+                {leaveTypeShortcuts.map((shortcut) => (
+                  <button
+                    key={shortcut.id}
+                    type="button"
+                    className={`policy-shortcut-chip ${
+                      activeSection === shortcut.id ? "is-active" : ""
+                    }`}
+                    onClick={() => scrollToSection(shortcut.id)}
+                  >
+                    {shortcut.label}
+                  </button>
+                ))}
+              </div>
             </section>
 
             <section className="fiori-panel">

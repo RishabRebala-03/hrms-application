@@ -3,15 +3,30 @@ import axios from "axios";
 import {
   ArrowRight,
   CalendarDays,
+  ChartColumn,
   Clock3,
   GitBranch,
+  PieChart as PieChartIcon,
   ShieldCheck,
   UserRound,
   Users,
 } from "lucide-react";
+import {
+  Bar,
+  BarChart,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import OrganizationHierarchy from "./OrganizationHierarchy";
 import LeaveStatusDot from "./LeaveStatusDot";
 import BannerImage from "../assets/banner.jpg";
+
+const CHART_COLORS = ["#0a6ed1", "#188918", "#d97706", "#bb0000", "#7c3aed"];
 
 const getTimeBasedGreeting = () => {
   const hour = new Date().getHours();
@@ -57,12 +72,27 @@ const EmployeeDashboard = ({ user, setSection }) => {
     totalTeamMembers: 0,
   });
   const [leaveBalance, setLeaveBalance] = useState(null);
+  const [leaveHistory, setLeaveHistory] = useState([]);
   const [recentLeaves, setRecentLeaves] = useState([]);
   const [managerInfo, setManagerInfo] = useState(null);
   const [upcomingHolidays, setUpcomingHolidays] = useState([]);
   const [showHierarchy, setShowHierarchy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const openSection = useCallback(
+    (sectionName, payload = null) => {
+      setSection?.(sectionName, payload);
+    },
+    [setSection]
+  );
+
+  const openLeaves = useCallback(
+    (payload = {}) => {
+      openSection("leaves", payload);
+    },
+    [openSection]
+  );
 
   const fetchEmployeeData = useCallback(async () => {
     try {
@@ -106,7 +136,14 @@ const EmployeeDashboard = ({ user, setSection }) => {
           ? historyResult.value.data
           : [];
 
-      setRecentLeaves(leaves.slice(0, 5));
+      const sortedLeaves = [...leaves].sort(
+        (first, second) =>
+          new Date(second.applied_on || second.start_date || 0) -
+          new Date(first.applied_on || first.start_date || 0)
+      );
+
+      setLeaveHistory(sortedLeaves);
+      setRecentLeaves(sortedLeaves.slice(0, 3));
       setStats((previous) => ({
         ...previous,
         totalLeaves: leaves.length,
@@ -149,7 +186,7 @@ const EmployeeDashboard = ({ user, setSection }) => {
         allHolidays
           .filter((holiday) => new Date(holiday.date) >= today)
           .sort((first, second) => new Date(first.date) - new Date(second.date))
-          .slice(0, 4)
+          .slice(0, 3)
       );
 
       const teamCount =
@@ -195,24 +232,133 @@ const EmployeeDashboard = ({ user, setSection }) => {
         label: "Sick balance",
         value: leaveBalance.sick || 0,
         note: `${leaveBalance.sickTotal || 6} allocated`,
+        payload: { source: "dashboard-balance", historyFilterType: "sick" },
       },
       {
         label: "Planned balance",
         value: leaveBalance.planned || 0,
         note: `${leaveBalance.plannedTotal || 12} allocated`,
+        payload: { source: "dashboard-balance", historyFilterType: "planned" },
       },
       {
         label: "Optional balance",
         value: leaveBalance.optional || 0,
         note: `${leaveBalance.optionalTotal || 2} allocated`,
+        payload: { source: "dashboard-balance", historyFilterType: "optional" },
       },
       {
         label: "LOP used",
         value: leaveBalance.lwp || 0,
         note: "Tracks unpaid leave days",
+        payload: { source: "dashboard-balance", historyFilterType: "lop" },
       },
     ];
   }, [leaveBalance]);
+
+  const statusChartData = useMemo(
+    () => [
+      { name: "Pending", value: stats.pendingLeaves, fill: "#d97706", filterStatus: "pending" },
+      { name: "Approved", value: stats.approvedLeaves, fill: "#188918", filterStatus: "approved" },
+      { name: "Rejected", value: stats.rejectedLeaves, fill: "#bb0000", filterStatus: "rejected" },
+    ],
+    [stats.approvedLeaves, stats.pendingLeaves, stats.rejectedLeaves]
+  );
+
+  const leaveTypeData = useMemo(() => {
+    const counts = leaveHistory
+      .concat()
+      .reduce((accumulator, leave) => {
+        const key = leave.leave_type || "Other";
+        accumulator[key] = (accumulator[key] || 0) + 1;
+        return accumulator;
+      }, {});
+
+    return Object.entries(counts)
+      .map(([name, value], index) => ({
+        name,
+        value,
+        fill: CHART_COLORS[index % CHART_COLORS.length],
+      }))
+      .sort((first, second) => second.value - first.value);
+  }, [leaveHistory]);
+
+  const monthlyLeaveData = useMemo(() => {
+    const monthMap = new Map();
+    const today = new Date();
+
+    for (let index = 5; index >= 0; index -= 1) {
+      const date = new Date(today.getFullYear(), today.getMonth() - index, 1);
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+      monthMap.set(key, {
+        key,
+        month: date.toLocaleDateString("en-IN", { month: "short" }),
+        applied: 0,
+        approved: 0,
+      });
+    }
+
+    leaveHistory.forEach((leave) => {
+      const baseDate = leave.start_date || leave.applied_on;
+      const date = new Date(baseDate);
+      if (Number.isNaN(date.getTime())) return;
+
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+      if (!monthMap.has(key)) return;
+
+      const bucket = monthMap.get(key);
+      bucket.applied += Number(leave.days) || 1;
+      if (leave.status === "Approved") {
+        bucket.approved += Number(leave.approved_days || leave.days) || 1;
+      }
+    });
+
+    return Array.from(monthMap.values());
+  }, [leaveHistory]);
+
+  const approvedUpcomingLeaves = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return leaveHistory
+      .filter((leave) => leave.status === "Approved")
+      .filter((leave) => new Date(leave.end_date || leave.start_date) >= today)
+      .sort((first, second) => new Date(first.start_date) - new Date(second.start_date))
+      .slice(0, 3);
+  }, [leaveHistory]);
+
+  const overviewCards = useMemo(
+    () => [
+      {
+        label: "Requests raised",
+        value: stats.totalLeaves,
+        note: "Open complete leave history",
+        icon: CalendarDays,
+        payload: { source: "dashboard-overview" },
+      },
+      {
+        label: "Pending review",
+        value: stats.pendingLeaves,
+        note: "Check requests awaiting approval",
+        icon: Clock3,
+        payload: { source: "dashboard-overview", historyFilterStatus: "pending" },
+      },
+      {
+        label: "Approved",
+        value: stats.approvedLeaves,
+        note: "Review approved leave records",
+        icon: ShieldCheck,
+        payload: { source: "dashboard-overview", historyFilterStatus: "approved" },
+      },
+      {
+        label: "Rejected",
+        value: stats.rejectedLeaves,
+        note: "See requests that need changes",
+        icon: Users,
+        payload: { source: "dashboard-overview", historyFilterStatus: "rejected" },
+      },
+    ],
+    [stats]
+  );
 
   if (loading) {
     return (
@@ -254,9 +400,22 @@ const EmployeeDashboard = ({ user, setSection }) => {
             {getTimeBasedGreeting()}, {user?.name?.split(" ")[0] || "there"}
           </h1>
           <p>
-            Keep tabs on your leave balance, recent requests, reporting line, and the next holidays
-            from one place.
+            Track leave usage, approvals, holidays, and reporting context from one cleaner,
+            faster dashboard.
           </p>
+
+          <div className="employee-hero-actions">
+            <button className="fiori-button primary employee-apply-button" onClick={() => openLeaves()}>
+              Apply for leave
+              <ArrowRight size={16} />
+            </button>
+            <button
+              className="fiori-button secondary"
+              onClick={() => openSection("calendar", { focusYear: new Date().getFullYear() })}
+            >
+              Open calendar
+            </button>
+          </div>
         </div>
 
         <div className="admin-hero-meta">
@@ -283,74 +442,138 @@ const EmployeeDashboard = ({ user, setSection }) => {
         <div className="employee-banner-shell">
           <img src={BannerImage} alt="Employee workspace banner" className="employee-banner-image" />
           <div className="employee-banner-overlay">
-            <div className="admin-section-overline">Highlights</div>
-            <h3>Stay ahead of time away, approvals, and key dates</h3>
+            <div className="admin-section-overline">Leave cockpit</div>
+            <h3>Approvals, balances, and dates in one compact view</h3>
             <p>
-              Use the refreshed employee workspace to monitor leave usage, jump into requests, and
-              keep your reporting context close.
+              Every summary card, chart, and key panel below can take you straight to the
+              matching workspace.
             </p>
-            <button className="fiori-button primary" onClick={() => setSection?.("leaves")}>
-              Open Leave Management
-              <ArrowRight size={16} />
-            </button>
           </div>
         </div>
       </section>
 
       <div className="admin-dashboard-grid admin-dashboard-grid-compact">
-        <article className="fiori-stat-card">
-          <div className="fiori-stat-topline">
-            <span className="fiori-stat-label">Requests raised</span>
-            <CalendarDays size={18} />
-          </div>
-          <div className="fiori-stat-value">{stats.totalLeaves}</div>
-          <div className="fiori-stat-note">Total leave applications in your history</div>
-        </article>
+        {overviewCards.map((card) => {
+          const Icon = card.icon;
 
-        <article className="fiori-stat-card">
-          <div className="fiori-stat-topline">
-            <span className="fiori-stat-label">Pending review</span>
-            <Clock3 size={18} />
-          </div>
-          <div className="fiori-stat-value">{stats.pendingLeaves}</div>
-          <div className="fiori-stat-note">Requests still awaiting a decision</div>
-        </article>
-
-        <article className="fiori-stat-card">
-          <div className="fiori-stat-topline">
-            <span className="fiori-stat-label">Approved</span>
-            <ShieldCheck size={18} />
-          </div>
-          <div className="fiori-stat-value">{stats.approvedLeaves}</div>
-          <div className="fiori-stat-note">Requests already cleared for time away</div>
-        </article>
-
-        <article className="fiori-stat-card">
-          <div className="fiori-stat-topline">
-            <span className="fiori-stat-label">Rejected</span>
-            <Users size={18} />
-          </div>
-          <div className="fiori-stat-value">{stats.rejectedLeaves}</div>
-          <div className="fiori-stat-note">Requests that need an updated resubmission</div>
-        </article>
+          return (
+            <article
+              key={card.label}
+              className="fiori-stat-card is-actionable"
+              onClick={() => openLeaves(card.payload)}
+            >
+              <div className="fiori-stat-topline">
+                <span className="fiori-stat-label">{card.label}</span>
+                <Icon size={18} />
+              </div>
+              <div className="fiori-stat-value">{card.value}</div>
+              <div className="fiori-stat-note">{card.note}</div>
+            </article>
+          );
+        })}
       </div>
 
-      <div className="employee-dashboard-layout">
+      <div className="employee-dashboard-layout employee-dashboard-layout-wide">
         <div className="employee-dashboard-primary">
           <section className="fiori-panel">
             <div className="fiori-panel-header">
               <div>
-                <h3>Leave balance snapshot</h3>
-                <p>Allocated, remaining, and unpaid leave usage in the same card system as admin.</p>
+                <h3>Leave analytics</h3>
+                <p>Use the charts to jump into the exact leave records behind the trend.</p>
               </div>
-              <button className="fiori-button secondary" onClick={() => setSection?.("leaves")}>
-                Review leave workspace
-              </button>
+            </div>
+
+            <div className="employee-analytics-grid">
+              <article
+                className="fiori-stat-card fiori-chart-card"
+                onClick={() => openLeaves({ source: "dashboard-chart" })}
+              >
+                <div className="fiori-stat-topline">
+                  <span className="fiori-stat-label">Monthly leave trend</span>
+                  <ChartColumn size={18} />
+                </div>
+                <div className="fiori-chart-shell employee-chart-shell">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={monthlyLeaveData}>
+                      <XAxis dataKey="month" axisLine={false} tickLine={false} />
+                      <YAxis allowDecimals={false} axisLine={false} tickLine={false} />
+                      <Tooltip />
+                      <Bar dataKey="applied" fill="#0a6ed1" radius={[8, 8, 0, 0]} name="Applied" />
+                      <Bar dataKey="approved" fill="#188918" radius={[8, 8, 0, 0]} name="Approved" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="fiori-card-link">Open leave history</div>
+              </article>
+
+              <article
+                className="fiori-stat-card fiori-chart-card"
+                onClick={() => openLeaves({ source: "dashboard-chart", historyFilterStatus: "approved" })}
+              >
+                <div className="fiori-stat-topline">
+                  <span className="fiori-stat-label">Approval mix</span>
+                  <PieChartIcon size={18} />
+                </div>
+                <div className="fiori-chart-shell employee-chart-shell">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={statusChartData.filter((item) => item.value > 0)}
+                        dataKey="value"
+                        nameKey="name"
+                        innerRadius={52}
+                        outerRadius={84}
+                        paddingAngle={3}
+                      >
+                        {statusChartData
+                          .filter((item) => item.value > 0)
+                          .map((entry) => (
+                            <Cell key={entry.name} fill={entry.fill} />
+                          ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="employee-chart-legend">
+                  {statusChartData.map((item) => (
+                    <button
+                      key={item.name}
+                      type="button"
+                      className="employee-chart-legend-item"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openLeaves({
+                          source: "dashboard-chart",
+                          historyFilterStatus: item.filterStatus,
+                        });
+                      }}
+                    >
+                      <i style={{ backgroundColor: item.fill }} />
+                      <span>{item.name}</span>
+                      <strong>{item.value}</strong>
+                    </button>
+                  ))}
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section className="fiori-panel">
+            <div className="fiori-panel-header">
+              <div>
+                <h3>Leave balance snapshot</h3>
+                <p>Each balance card is clickable and opens the matching filtered leave list.</p>
+              </div>
             </div>
 
             <div className="admin-dashboard-grid admin-dashboard-grid-compact">
               {leaveBalanceCards.map((card) => (
-                <article key={card.label} className="fiori-stat-card">
+                <article
+                  key={card.label}
+                  className="fiori-stat-card is-actionable employee-balance-card"
+                  onClick={() => openLeaves(card.payload)}
+                >
                   <div className="fiori-stat-label">{card.label}</div>
                   <div className="fiori-stat-value">{card.value}</div>
                   <div className="fiori-stat-note">{card.note}</div>
@@ -363,9 +586,11 @@ const EmployeeDashboard = ({ user, setSection }) => {
             <div className="fiori-panel-header">
               <div>
                 <h3>Recent leave activity</h3>
-                <p>Your last five leave requests with status and application notes.</p>
+                <p>Open any request directly in the leave workspace.</p>
               </div>
-              <span className="fiori-status-pill is-neutral">{recentLeaves.length} shown</span>
+              <button className="fiori-button secondary" onClick={() => openLeaves()}>
+                View all
+              </button>
             </div>
 
             {recentLeaves.length === 0 ? (
@@ -377,9 +602,19 @@ const EmployeeDashboard = ({ user, setSection }) => {
                 </div>
               </div>
             ) : (
-              <div className="employee-recent-leave-list">
+              <div className="employee-recent-leave-list employee-recent-leave-grid">
                 {recentLeaves.map((leave) => (
-                  <article key={leave._id} className="employee-recent-leave-card">
+                  <article
+                    key={leave._id}
+                    className="employee-recent-leave-card is-clickable"
+                    onClick={() =>
+                      openLeaves({
+                        source: "dashboard-recent",
+                        focusDate: leave.start_date,
+                        historyFilterStatus: leave.status?.toLowerCase(),
+                      })
+                    }
+                  >
                     <div className="admin-approval-card-header">
                       <div>
                         <h4>{leave.leave_type || "Leave request"}</h4>
@@ -403,12 +638,6 @@ const EmployeeDashboard = ({ user, setSection }) => {
                         <span>Reason</span>
                         <strong>{leave.reason || "No reason shared"}</strong>
                       </div>
-                      {leave.rejection_reason ? (
-                        <div className="is-wide">
-                          <span>Rejection note</span>
-                          <strong>{leave.rejection_reason}</strong>
-                        </div>
-                      ) : null}
                     </div>
                   </article>
                 ))}
@@ -422,7 +651,7 @@ const EmployeeDashboard = ({ user, setSection }) => {
             <div className="fiori-panel-header">
               <div>
                 <h3>Reporting line</h3>
-                <p>Quick access to your current reporting structure and organization hierarchy.</p>
+                <p>Open your organization hierarchy and reporting structure.</p>
               </div>
               <GitBranch size={18} color="#0a6ed1" />
             </div>
@@ -455,8 +684,51 @@ const EmployeeDashboard = ({ user, setSection }) => {
           <section className="fiori-panel">
             <div className="fiori-panel-header">
               <div>
+                <h3>Upcoming approved leave</h3>
+                <p>Jump from upcoming approved dates into the calendar or leave list.</p>
+              </div>
+            </div>
+
+            {approvedUpcomingLeaves.length === 0 ? (
+              <div className="admin-empty-state">
+                <ShieldCheck size={22} />
+                <div>
+                  <strong>No upcoming approved leave</strong>
+                  <p>Approved time away will appear here as soon as it is cleared.</p>
+                </div>
+              </div>
+            ) : (
+              <div className="employee-holiday-list">
+                {approvedUpcomingLeaves.map((leave) => (
+                  <button
+                    key={`approved-${leave._id}`}
+                    type="button"
+                    className="employee-quick-action"
+                    onClick={() =>
+                      openSection("calendar", {
+                        focusYear: new Date(leave.start_date).getFullYear(),
+                        focusDate: leave.start_date,
+                      })
+                    }
+                  >
+                    <div>
+                      <strong>{leave.leave_type}</strong>
+                      <span>
+                        {formatDate(leave.start_date)} to {formatDate(leave.end_date)}
+                      </span>
+                    </div>
+                    <ArrowRight size={16} />
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="fiori-panel">
+            <div className="fiori-panel-header">
+              <div>
                 <h3>Upcoming holidays</h3>
-                <p>Closest company and optional holidays relevant to your leave planning.</p>
+                <p>Closest company and optional holidays relevant to your planning.</p>
               </div>
             </div>
 
@@ -471,7 +743,16 @@ const EmployeeDashboard = ({ user, setSection }) => {
             ) : (
               <div className="employee-holiday-list">
                 {upcomingHolidays.map((holiday) => (
-                  <article key={`${holiday.name}-${holiday.date}`} className="employee-holiday-card">
+                  <article
+                    key={`${holiday.name}-${holiday.date}`}
+                    className="employee-holiday-card is-clickable"
+                    onClick={() =>
+                      openSection("calendar", {
+                        focusYear: new Date(holiday.date).getFullYear(),
+                        focusDate: holiday.date,
+                      })
+                    }
+                  >
                     <div>
                       <strong>{holiday.name || "Holiday"}</strong>
                       <span>{formatDate(holiday.date)}</span>
@@ -487,27 +768,91 @@ const EmployeeDashboard = ({ user, setSection }) => {
             <div className="fiori-panel-header">
               <div>
                 <h3>Quick actions</h3>
-                <p>Common places employees usually need from the home workspace.</p>
+                <p>Navigate straight to the places employees use most.</p>
               </div>
             </div>
 
             <div className="employee-quick-action-list">
-              <button className="employee-quick-action" onClick={() => setSection?.("leaves")}>
+              <button className="employee-quick-action" onClick={() => openLeaves()}>
                 <div>
                   <strong>Submit or manage leave</strong>
-                  <span>Open your leave form, filters, and history.</span>
+                  <span>Open your leave form, history, and approvals.</span>
                 </div>
                 <ArrowRight size={16} />
               </button>
-              <button className="employee-quick-action" onClick={() => setSection?.("calendar")}>
+              <button
+                className="employee-quick-action"
+                onClick={() => openSection("calendar", { focusYear: new Date().getFullYear() })}
+              >
                 <div>
                   <strong>Check calendar</strong>
-                  <span>Review holidays and company dates before planning time off.</span>
+                  <span>Review holidays and approved leave dates in the yearly view.</span>
+                </div>
+                <ArrowRight size={16} />
+              </button>
+              <button
+                className="employee-quick-action"
+                onClick={() => openLeaves({ historyFilterStatus: "approved" })}
+              >
+                <div>
+                  <strong>See approved leaves</strong>
+                  <span>Open the leave page filtered to approved requests.</span>
                 </div>
                 <ArrowRight size={16} />
               </button>
             </div>
           </section>
+
+          {leaveTypeData.length > 0 ? (
+            <section className="fiori-panel">
+              <div className="fiori-panel-header">
+                <div>
+                  <h3>Leave type split</h3>
+                  <p>Breakdown of the leave categories used in your recent requests.</p>
+                </div>
+              </div>
+
+              <div className="employee-mini-chart">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={leaveTypeData}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius={36}
+                      outerRadius={64}
+                      paddingAngle={2}
+                    >
+                      {leaveTypeData.map((entry) => (
+                        <Cell key={entry.name} fill={entry.fill} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="employee-chart-legend employee-chart-legend-compact">
+                {leaveTypeData.map((item) => (
+                  <button
+                    key={item.name}
+                    type="button"
+                    className="employee-chart-legend-item"
+                    onClick={() =>
+                      openLeaves({
+                        source: "dashboard-type",
+                        historyFilterType: item.name.toLowerCase(),
+                      })
+                    }
+                  >
+                    <i style={{ backgroundColor: item.fill }} />
+                    <span>{item.name}</span>
+                    <strong>{item.value}</strong>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ) : null}
         </aside>
       </div>
 
