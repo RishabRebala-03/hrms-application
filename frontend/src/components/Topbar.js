@@ -5,8 +5,17 @@ import Notifications from "./Notifications";
 
 const Topbar = ({ user, onLogout, onNavigateToProfile, onToggleSidebar, isSidebarCollapsed }) => {
   const [showDropdown, setShowDropdown] = useState(false);
+  const [currentTime, setCurrentTime] = useState(() => new Date());
   const containerRef = useRef(null);
   const isMobile = typeof window !== "undefined" && window.innerWidth <= 480;
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     if (!showDropdown) return undefined;
@@ -37,6 +46,13 @@ const Topbar = ({ user, onLogout, onNavigateToProfile, onToggleSidebar, isSideba
       : user?.role === "Manager"
         ? "Manager Workspace"
         : "Employee Workspace";
+
+  const liveTimeLabel = currentTime.toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  });
 
   const dropdownStyle = {
     position: "fixed",
@@ -82,6 +98,10 @@ const Topbar = ({ user, onLogout, onNavigateToProfile, onToggleSidebar, isSideba
 
       <div className="topbar-actions">
         <Notifications currentUser={user} />
+        <div className="topbar-live-time" aria-label={`Current time ${liveTimeLabel}`}>
+          <span className="topbar-live-time-dot" />
+          <span className="topbar-live-time-value">{liveTimeLabel}</span>
+        </div>
 
         <div ref={containerRef} className="profile-dropdown-container" style={{ position: "relative" }}>
           <button

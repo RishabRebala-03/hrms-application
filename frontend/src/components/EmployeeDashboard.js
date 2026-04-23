@@ -393,15 +393,19 @@ const EmployeeDashboard = ({ user, setSection }) => {
 
   return (
     <div className="admin-dashboard employee-workspace">
-      <header className="admin-hero">
-        <div>
-          <div className="admin-section-overline">Employee workspace</div>
+      <header className="admin-hero employee-dashboard-hero">
+        <div className="employee-hero-copy">
+          <div className="employee-hero-kicker-row">
+            <div className="admin-section-overline">Employee workspace</div>
+            <span className="employee-hero-kicker-pill">{todayLabel}</span>
+          </div>
           <h1>
-            {getTimeBasedGreeting()}, {user?.name?.split(" ")[0] || "there"}
+            <span className="employee-hero-greeting">{getTimeBasedGreeting()},</span>
+            <span className="employee-hero-name">{user?.name?.split(" ")[0] || "there"}</span>
           </h1>
           <p>
-            Track leave usage, approvals, holidays, and reporting context from one cleaner,
-            faster dashboard.
+            Your leave overview is now organized into one polished workspace for balances,
+            approvals, holidays, and quick actions.
           </p>
 
           <div className="employee-hero-actions">
@@ -440,14 +444,22 @@ const EmployeeDashboard = ({ user, setSection }) => {
 
       <section className="fiori-panel employee-banner-panel">
         <div className="employee-banner-shell">
-          <img src={BannerImage} alt="Employee workspace banner" className="employee-banner-image" />
+          <img src={BannerImage} alt="Employee workspace welcome banner" className="employee-banner-image" />
           <div className="employee-banner-overlay">
-            <div className="admin-section-overline">Leave cockpit</div>
-            <h3>Approvals, balances, and dates in one compact view</h3>
-            <p>
-              Every summary card, chart, and key panel below can take you straight to the
-              matching workspace.
-            </p>
+            <div className="employee-banner-copy">
+              <div className="admin-section-overline">Employee workspace</div>
+              <h3>Approvals, balances, and dates in one cleaner view</h3>
+              <p>
+                Jump into leave actions, analytics, and calendar details from a workspace that
+                feels lighter, friendlier, and easier to use every day.
+              </p>
+
+              <div className="employee-banner-points">
+                <span>{totalBalance} days available</span>
+                <span>{stats.pendingLeaves} pending requests</span>
+                <span>{upcomingHolidays.length} upcoming holidays</span>
+              </div>
+            </div>
           </div>
         </div>
       </section>

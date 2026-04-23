@@ -3,6 +3,8 @@ import axios from "axios";
 import {
   CalendarDays,
   Cake,
+  ChevronDown,
+  ChevronUp,
   ChevronLeft,
   ChevronRight,
   RefreshCw,
@@ -54,6 +56,40 @@ const isDateWithinRange = (dateStr, startDate, endDate) => {
   return dateStr >= startDate && dateStr <= endDate;
 };
 
+const leaveTypeShortLabels = {
+  sick: "SL",
+  planned: "PL",
+  casual: "CL",
+  lwp: "LWP",
+  lop: "LOP",
+  "early logout": "EL",
+};
+
+const getLeaveTypeShortLabel = (leaveType) => {
+  const normalizedType = String(leaveType || "").trim().toLowerCase();
+  if (!normalizedType) return "LV";
+
+  if (leaveTypeShortLabels[normalizedType]) {
+    return leaveTypeShortLabels[normalizedType];
+  }
+
+  const initials = normalizedType
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part[0]?.toUpperCase() || "")
+    .join("")
+    .slice(0, 3);
+
+  return initials || normalizedType.slice(0, 3).toUpperCase();
+};
+
+const handleCardKeyDown = (event, action) => {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    action();
+  }
+};
+
 const Calendar = ({ user, setSection, navigationState }) => {
   const [selectedYear, setSelectedYear] = useState(
     navigationState?.focusYear || new Date().getFullYear()
@@ -64,6 +100,7 @@ const Calendar = ({ user, setSection, navigationState }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showBirthdays, setShowBirthdays] = useState(true);
+  const [showControls, setShowControls] = useState(true);
   const [hasDirectReports, setHasDirectReports] = useState(false);
 
   const isAdmin = user?.role === "Admin";
@@ -242,6 +279,11 @@ const Calendar = ({ user, setSection, navigationState }) => {
     });
   };
 
+  const scrollToSection = (sectionId) => {
+    const element = document.getElementById(sectionId);
+    element?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   const renderMonth = (monthIndex) => {
     const daysInMonth = getDaysInMonth(selectedYear, monthIndex);
     const firstDay = getFirstDayOfMonth(selectedYear, monthIndex);
@@ -279,6 +321,11 @@ const Calendar = ({ user, setSection, navigationState }) => {
         .filter(Boolean)
         .join("\n");
 
+      const leaveBadgeLabel =
+        dayLeaves.length > 0
+          ? [...new Set(dayLeaves.map((leave) => getLeaveTypeShortLabel(leave.leave_type)))].join("/")
+          : "";
+
       days.push(
         <button
           key={`${monthIndex}-${day}`}
@@ -293,7 +340,7 @@ const Calendar = ({ user, setSection, navigationState }) => {
         >
           <span className="enterprise-calendar-day-number">{day}</span>
           <div className="enterprise-calendar-day-icons">
-            {dayLeaves.length > 0 ? <b>{dayLeaves.length}L</b> : null}
+            {dayLeaves.length > 0 ? <b>{leaveBadgeLabel}</b> : null}
             {birthdayList.length > 0 ? <i>🎂</i> : null}
           </div>
         </button>
@@ -360,7 +407,13 @@ const Calendar = ({ user, setSection, navigationState }) => {
       </header>
 
       <section className="calendar-summary-grid">
-        <article className="fiori-stat-card">
+        <article
+          className="fiori-stat-card is-actionable"
+          onClick={() => scrollToSection("calendar-holiday-list")}
+          onKeyDown={(event) => handleCardKeyDown(event, () => scrollToSection("calendar-holiday-list"))}
+          role="button"
+          tabIndex={0}
+        >
           <div className="fiori-stat-topline">
             <span className="fiori-stat-label">Public Holidays</span>
             <CalendarDays size={18} />
@@ -369,7 +422,13 @@ const Calendar = ({ user, setSection, navigationState }) => {
           <div className="fiori-stat-note">Public holidays configured for the selected year</div>
         </article>
 
-        <article className="fiori-stat-card">
+        <article
+          className="fiori-stat-card is-actionable"
+          onClick={() => scrollToSection("calendar-holiday-list")}
+          onKeyDown={(event) => handleCardKeyDown(event, () => scrollToSection("calendar-holiday-list"))}
+          role="button"
+          tabIndex={0}
+        >
           <div className="fiori-stat-topline">
             <span className="fiori-stat-label">Optional Holidays</span>
             <Sparkles size={18} />
@@ -378,7 +437,13 @@ const Calendar = ({ user, setSection, navigationState }) => {
           <div className="fiori-stat-note">Optional holidays visible in the current calendar scope</div>
         </article>
 
-        <article className="fiori-stat-card">
+        <article
+          className="fiori-stat-card is-actionable"
+          onClick={() => scrollToSection("calendar-birthday-list")}
+          onKeyDown={(event) => handleCardKeyDown(event, () => scrollToSection("calendar-birthday-list"))}
+          role="button"
+          tabIndex={0}
+        >
           <div className="fiori-stat-topline">
             <span className="fiori-stat-label">Birthday Visibility</span>
             <Cake size={18} />
@@ -387,7 +452,17 @@ const Calendar = ({ user, setSection, navigationState }) => {
           <div className="fiori-stat-note">Birthdays shown based on your role and reporting scope</div>
         </article>
 
-        <article className="fiori-stat-card">
+        <article
+          className="fiori-stat-card is-actionable"
+          onClick={() => setSection?.("leaves", { source: "calendar-summary", historyFilterStatus: "approved" })}
+          onKeyDown={(event) =>
+            handleCardKeyDown(event, () =>
+              setSection?.("leaves", { source: "calendar-summary", historyFilterStatus: "approved" })
+            )
+          }
+          role="button"
+          tabIndex={0}
+        >
           <div className="fiori-stat-topline">
             <span className="fiori-stat-label">Approved Leaves</span>
             <Sparkles size={18} />
@@ -403,57 +478,71 @@ const Calendar = ({ user, setSection, navigationState }) => {
             <h3>Calendar Controls</h3>
             <p>Switch years, refresh data, and show or hide birthdays</p>
           </div>
+          <button
+            type="button"
+            className="fiori-button secondary"
+            onClick={() => setShowControls((previous) => !previous)}
+            aria-expanded={showControls}
+            aria-controls="calendar-controls-body"
+          >
+            {showControls ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            <span>{showControls ? "Collapse" : "Expand"}</span>
+          </button>
         </div>
 
-        <div className="calendar-toolbar">
-          <div className="calendar-year-controls">
-            <button className="fiori-button secondary" onClick={() => setSelectedYear(selectedYear - 1)}>
-              <ChevronLeft size={16} />
-              <span>{selectedYear - 1}</span>
-            </button>
-            <select
-              className="input calendar-year-select"
-              value={selectedYear}
-              onChange={(event) => setSelectedYear(Number(event.target.value))}
-            >
-              {yearOptions.map((year) => (
-                <option key={year} value={year}>
-                  {year}
-                </option>
-              ))}
-            </select>
-            <button className="fiori-button secondary" onClick={() => setSelectedYear(selectedYear + 1)}>
-              <span>{selectedYear + 1}</span>
-              <ChevronRight size={16} />
-            </button>
+        {showControls ? (
+          <div id="calendar-controls-body">
+            <div className="calendar-toolbar">
+              <div className="calendar-year-controls">
+                <button className="fiori-button secondary" onClick={() => setSelectedYear(selectedYear - 1)}>
+                  <ChevronLeft size={16} />
+                  <span>{selectedYear - 1}</span>
+                </button>
+                <select
+                  className="input calendar-year-select"
+                  value={selectedYear}
+                  onChange={(event) => setSelectedYear(Number(event.target.value))}
+                >
+                  {yearOptions.map((year) => (
+                    <option key={year} value={year}>
+                      {year}
+                    </option>
+                  ))}
+                </select>
+                <button className="fiori-button secondary" onClick={() => setSelectedYear(selectedYear + 1)}>
+                  <span>{selectedYear + 1}</span>
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+
+              <div className="calendar-toolbar-actions">
+                <label className="calendar-birthday-toggle">
+                  <input
+                    type="checkbox"
+                    checked={showBirthdays}
+                    onChange={(event) => setShowBirthdays(event.target.checked)}
+                  />
+                  <span>Show birthdays</span>
+                </label>
+                <button className="fiori-button secondary" onClick={fetchData}>
+                  <RefreshCw size={16} />
+                  <span>Refresh</span>
+                </button>
+              </div>
+            </div>
+
+            {error && <div className="calendar-inline-error">{error}</div>}
+
+            <div className="calendar-legend">
+              <span><i className="is-public" /> Public holiday</span>
+              <span><i className="is-optional" /> Optional holiday</span>
+              <span><i className="is-company" /> Company holiday</span>
+              <span><i className="is-approved-leave" /> Approved leave</span>
+              <span><i className="is-today" /> Today</span>
+              <span><i className="is-birthday" /> Birthday</span>
+            </div>
           </div>
-
-          <div className="calendar-toolbar-actions">
-            <label className="calendar-birthday-toggle">
-              <input
-                type="checkbox"
-                checked={showBirthdays}
-                onChange={(event) => setShowBirthdays(event.target.checked)}
-              />
-              <span>Show birthdays</span>
-            </label>
-            <button className="fiori-button secondary" onClick={fetchData}>
-              <RefreshCw size={16} />
-              <span>Refresh</span>
-            </button>
-          </div>
-        </div>
-
-        {error && <div className="calendar-inline-error">{error}</div>}
-
-        <div className="calendar-legend">
-          <span><i className="is-public" /> Public holiday</span>
-          <span><i className="is-optional" /> Optional holiday</span>
-          <span><i className="is-company" /> Company holiday</span>
-          <span><i className="is-approved-leave" /> Approved leave</span>
-          <span><i className="is-today" /> Today</span>
-          <span><i className="is-birthday" /> Birthday</span>
-        </div>
+        ) : null}
       </section>
 
       <div className="enterprise-calendar-grid">
@@ -461,7 +550,7 @@ const Calendar = ({ user, setSection, navigationState }) => {
       </div>
 
       <section className="enterprise-calendar-details-grid">
-        <section className="fiori-panel">
+        <section className="fiori-panel" id="calendar-approved-leaves">
           <div className="fiori-panel-header">
             <div>
               <h3>Approved leave list</h3>
@@ -507,7 +596,7 @@ const Calendar = ({ user, setSection, navigationState }) => {
           )}
         </section>
 
-        <section className="fiori-panel">
+        <section className="fiori-panel" id="calendar-holiday-list">
           <div className="fiori-panel-header">
             <div>
               <h3>Holiday List</h3>
@@ -542,7 +631,7 @@ const Calendar = ({ user, setSection, navigationState }) => {
         </section>
 
         {showBirthdays && (
-          <section className="fiori-panel">
+          <section className="fiori-panel" id="calendar-birthday-list">
             <div className="fiori-panel-header">
               <div>
                 <h3>Birthday List</h3>

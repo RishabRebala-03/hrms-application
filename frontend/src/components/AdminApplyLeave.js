@@ -9,6 +9,13 @@ import {
   Users,
 } from "lucide-react";
 
+const handleCardKeyDown = (event, action) => {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    action();
+  }
+};
+
 const AdminApplyLeave = ({ user }) => {
   const [employees, setEmployees] = useState([]);
   const [selectedEmployee, setSelectedEmployee] = useState("");
@@ -132,6 +139,11 @@ const AdminApplyLeave = ({ user }) => {
 
   const selectedEmpData = employees.find((employee) => employee._id === selectedEmployee);
 
+  const scrollToSection = (sectionId) => {
+    const element = document.getElementById(sectionId);
+    element?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   const balanceCards = selectedEmpData && employeeBalance
     ? [
         {
@@ -176,7 +188,15 @@ const AdminApplyLeave = ({ user }) => {
       </header>
 
       <section className="apply-behalf-summary">
-        <article className="fiori-stat-card">
+        <article
+          className="fiori-stat-card is-actionable"
+          onClick={() => scrollToSection("apply-behalf-employee-list")}
+          onKeyDown={(event) =>
+            handleCardKeyDown(event, () => scrollToSection("apply-behalf-employee-list"))
+          }
+          role="button"
+          tabIndex={0}
+        >
           <div className="fiori-stat-topline">
             <span className="fiori-stat-label">Employee Scope</span>
             <Users size={18} />
@@ -185,7 +205,15 @@ const AdminApplyLeave = ({ user }) => {
           <div className="fiori-stat-note">Employees available for admin leave actions</div>
         </article>
 
-        <article className="fiori-stat-card">
+        <article
+          className="fiori-stat-card is-actionable"
+          onClick={() => scrollToSection("apply-behalf-employee-context")}
+          onKeyDown={(event) =>
+            handleCardKeyDown(event, () => scrollToSection("apply-behalf-employee-context"))
+          }
+          role="button"
+          tabIndex={0}
+        >
           <div className="fiori-stat-topline">
             <span className="fiori-stat-label">Selected Employee</span>
             <UserRound size={18} />
@@ -198,7 +226,15 @@ const AdminApplyLeave = ({ user }) => {
           </div>
         </article>
 
-        <article className="fiori-stat-card">
+        <article
+          className="fiori-stat-card is-actionable"
+          onClick={() => scrollToSection("apply-behalf-leave-form")}
+          onKeyDown={(event) =>
+            handleCardKeyDown(event, () => scrollToSection("apply-behalf-leave-form"))
+          }
+          role="button"
+          tabIndex={0}
+        >
           <div className="fiori-stat-topline">
             <span className="fiori-stat-label">Approval Path</span>
             <ShieldCheck size={18} />
@@ -209,7 +245,7 @@ const AdminApplyLeave = ({ user }) => {
       </section>
 
       <div className="apply-behalf-layout">
-        <section className="fiori-panel">
+        <section className="fiori-panel" id="apply-behalf-employee-list">
           <div className="fiori-panel-header">
             <div>
               <h3>Select Employee</h3>
@@ -274,7 +310,7 @@ const AdminApplyLeave = ({ user }) => {
         <div className="apply-behalf-main">
           {selectedEmpData ? (
             <>
-              <section className="fiori-panel">
+              <section className="fiori-panel" id="apply-behalf-employee-context">
                 <div className="fiori-panel-header">
                   <div>
                     <h3>Employee Context</h3>
@@ -305,7 +341,7 @@ const AdminApplyLeave = ({ user }) => {
                 </div>
               </section>
 
-              <section className="fiori-panel">
+              <section className="fiori-panel" id="apply-behalf-leave-form">
                 <div className="fiori-panel-header">
                   <div>
                     <h3>Leave Details</h3>

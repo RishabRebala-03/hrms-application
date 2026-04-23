@@ -127,6 +127,13 @@ const ChartTooltip = ({ active, payload, label }) => {
   );
 };
 
+const handleCardKeyDown = (event, action) => {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    action();
+  }
+};
+
 const AdminLeaves = ({ user }) => {
   const [activeTab, setActiveTab] = useState("pending");
   const [pendingLeaves, setPendingLeaves] = useState([]);
@@ -524,6 +531,23 @@ const AdminLeaves = ({ user }) => {
     });
   };
 
+  const openTab = (tab, options = {}) => {
+    setActiveTab(tab);
+
+    if (Object.prototype.hasOwnProperty.call(options, "statusFilter")) {
+      setStatusFilter(options.statusFilter);
+    }
+    if (Object.prototype.hasOwnProperty.call(options, "typeFilter")) {
+      setTypeFilter(options.typeFilter);
+    }
+    if (Object.prototype.hasOwnProperty.call(options, "departmentFilter")) {
+      setDepartmentFilter(options.departmentFilter);
+    }
+    if (Object.prototype.hasOwnProperty.call(options, "searchTerm")) {
+      setSearchTerm(options.searchTerm);
+    }
+  };
+
   const updateStatus = async ({
     leaveId,
     status,
@@ -651,7 +675,17 @@ const AdminLeaves = ({ user }) => {
       </header>
 
       <div className="admin-dashboard-grid">
-        <article className="fiori-stat-card">
+        <article
+          className="fiori-stat-card is-actionable"
+          onClick={() => openTab("pending", { statusFilter: "all", typeFilter: "all", departmentFilter: "all", searchTerm: "" })}
+          onKeyDown={(event) =>
+            handleCardKeyDown(event, () =>
+              openTab("pending", { statusFilter: "all", typeFilter: "all", departmentFilter: "all", searchTerm: "" })
+            )
+          }
+          role="button"
+          tabIndex={0}
+        >
           <div className="fiori-stat-topline">
             <span className="fiori-stat-label">Admin queue</span>
             <Clock3 size={18} />
@@ -660,7 +694,17 @@ const AdminLeaves = ({ user }) => {
           <div className="fiori-stat-note">Leave requests waiting for administration action</div>
         </article>
 
-        <article className="fiori-stat-card">
+        <article
+          className="fiori-stat-card is-actionable"
+          onClick={() => openTab("records", { statusFilter: "all", typeFilter: "all", departmentFilter: "all", searchTerm: "" })}
+          onKeyDown={(event) =>
+            handleCardKeyDown(event, () =>
+              openTab("records", { statusFilter: "all", typeFilter: "all", departmentFilter: "all", searchTerm: "" })
+            )
+          }
+          role="button"
+          tabIndex={0}
+        >
           <div className="fiori-stat-topline">
             <span className="fiori-stat-label">Total requests</span>
             <CalendarClock size={18} />
@@ -669,7 +713,17 @@ const AdminLeaves = ({ user }) => {
           <div className="fiori-stat-note">All leave records currently maintained in the system</div>
         </article>
 
-        <article className="fiori-stat-card">
+        <article
+          className="fiori-stat-card is-actionable"
+          onClick={() => openTab("records", { statusFilter: "Approved", typeFilter: "all", departmentFilter: "all", searchTerm: "" })}
+          onKeyDown={(event) =>
+            handleCardKeyDown(event, () =>
+              openTab("records", { statusFilter: "Approved", typeFilter: "all", departmentFilter: "all", searchTerm: "" })
+            )
+          }
+          role="button"
+          tabIndex={0}
+        >
           <div className="fiori-stat-topline">
             <span className="fiori-stat-label">Resolved requests</span>
             <CheckCircle2 size={18} />
@@ -678,7 +732,13 @@ const AdminLeaves = ({ user }) => {
           <div className="fiori-stat-note">Approved and rejected requests already closed out</div>
         </article>
 
-        <article className="fiori-stat-card">
+        <article
+          className="fiori-stat-card is-actionable"
+          onClick={() => openTab("escalations")}
+          onKeyDown={(event) => handleCardKeyDown(event, () => openTab("escalations"))}
+          role="button"
+          tabIndex={0}
+        >
           <div className="fiori-stat-topline">
             <span className="fiori-stat-label">Open SLA breaches</span>
             <ShieldAlert size={18} />
@@ -935,7 +995,17 @@ const AdminLeaves = ({ user }) => {
       {activeTab === "analytics" && (
         <>
           <div className="admin-analytics-grid leave-analytics-grid">
-            <article className="fiori-panel fiori-chart-card">
+            <article
+              className="fiori-panel fiori-chart-card is-clickable"
+              onClick={() => openTab("records", { statusFilter: "all", typeFilter: "all", departmentFilter: "all", searchTerm: "" })}
+              onKeyDown={(event) =>
+                handleCardKeyDown(event, () =>
+                  openTab("records", { statusFilter: "all", typeFilter: "all", departmentFilter: "all", searchTerm: "" })
+                )
+              }
+              role="button"
+              tabIndex={0}
+            >
               <div className="fiori-panel-header">
                 <div>
                   <h3>Leave status mix</h3>
@@ -957,7 +1027,17 @@ const AdminLeaves = ({ user }) => {
               </div>
             </article>
 
-            <article className="fiori-panel fiori-chart-card">
+            <article
+              className="fiori-panel fiori-chart-card is-clickable"
+              onClick={() => openTab("records", { statusFilter: "all", typeFilter: "all", departmentFilter: "all", searchTerm: "" })}
+              onKeyDown={(event) =>
+                handleCardKeyDown(event, () =>
+                  openTab("records", { statusFilter: "all", typeFilter: "all", departmentFilter: "all", searchTerm: "" })
+                )
+              }
+              role="button"
+              tabIndex={0}
+            >
               <div className="fiori-panel-header">
                 <div>
                   <h3>Monthly leave trend</h3>
@@ -980,7 +1060,17 @@ const AdminLeaves = ({ user }) => {
               </div>
             </article>
 
-            <article className="fiori-panel fiori-chart-card">
+            <article
+              className="fiori-panel fiori-chart-card is-clickable"
+              onClick={() => openTab("records", { statusFilter: "all", typeFilter: "all", departmentFilter: "all", searchTerm: "" })}
+              onKeyDown={(event) =>
+                handleCardKeyDown(event, () =>
+                  openTab("records", { statusFilter: "all", typeFilter: "all", departmentFilter: "all", searchTerm: "" })
+                )
+              }
+              role="button"
+              tabIndex={0}
+            >
               <div className="fiori-panel-header">
                 <div>
                   <h3>Leave type demand</h3>
@@ -1001,7 +1091,17 @@ const AdminLeaves = ({ user }) => {
               </div>
             </article>
 
-            <article className="fiori-panel fiori-chart-card">
+            <article
+              className="fiori-panel fiori-chart-card is-clickable"
+              onClick={() => openTab("records", { statusFilter: "all", typeFilter: "all", departmentFilter: "all", searchTerm: "" })}
+              onKeyDown={(event) =>
+                handleCardKeyDown(event, () =>
+                  openTab("records", { statusFilter: "all", typeFilter: "all", departmentFilter: "all", searchTerm: "" })
+                )
+              }
+              role="button"
+              tabIndex={0}
+            >
               <div className="fiori-panel-header">
                 <div>
                   <h3>Department leave load</h3>
@@ -1022,7 +1122,13 @@ const AdminLeaves = ({ user }) => {
               </div>
             </article>
 
-            <article className="fiori-panel fiori-chart-card">
+            <article
+              className="fiori-panel fiori-chart-card is-clickable"
+              onClick={() => openTab("escalations")}
+              onKeyDown={(event) => handleCardKeyDown(event, () => openTab("escalations"))}
+              role="button"
+              tabIndex={0}
+            >
               <div className="fiori-panel-header">
                 <div>
                   <h3>Escalation trend</h3>
@@ -1043,7 +1149,17 @@ const AdminLeaves = ({ user }) => {
               </div>
             </article>
 
-            <article className="fiori-panel fiori-chart-card">
+            <article
+              className="fiori-panel fiori-chart-card is-clickable"
+              onClick={() => openTab("records", { statusFilter: "Approved", typeFilter: "all", departmentFilter: "all", searchTerm: "" })}
+              onKeyDown={(event) =>
+                handleCardKeyDown(event, () =>
+                  openTab("records", { statusFilter: "Approved", typeFilter: "all", departmentFilter: "all", searchTerm: "" })
+                )
+              }
+              role="button"
+              tabIndex={0}
+            >
               <div className="fiori-panel-header">
                 <div>
                   <h3>Resolution turnaround</h3>

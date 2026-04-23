@@ -55,6 +55,13 @@ const messageTone = (message) =>
     ? "is-error"
     : "is-success";
 
+const handleCardKeyDown = (event, action) => {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    action();
+  }
+};
+
 const EmployeeLeaves = ({ user, navigationState }) => {
   const [balance, setBalance] = useState(null);
   const [history, setHistory] = useState([]);
@@ -593,6 +600,17 @@ const EmployeeLeaves = ({ user, navigationState }) => {
     return cards;
   }, [balance, isIntern]);
 
+  const scrollToSection = (sectionId) => {
+    const element = document.getElementById(sectionId);
+    element?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const openHistoryForType = (type) => {
+    setActiveTab("my-leaves");
+    setHistoryFilterType(type);
+    scrollToSection("employee-leave-history");
+  };
+
   return (
     <div className="admin-dashboard leave-workspace employee-workspace">
       <header className="admin-hero">
@@ -645,7 +663,30 @@ const EmployeeLeaves = ({ user, navigationState }) => {
 
       <div className="admin-dashboard-grid admin-dashboard-grid-compact">
         {balanceCards.map((card) => (
-          <article key={card.label} className="fiori-stat-card employee-balance-card">
+          <article
+            key={card.label}
+            className="fiori-stat-card is-actionable employee-balance-card"
+            onClick={() => openHistoryForType(card.label.toLowerCase().includes("sick")
+              ? "sick"
+              : card.label.toLowerCase().includes("planned")
+                ? "planned"
+                : card.label.toLowerCase().includes("optional")
+                  ? "optional"
+                  : "lop")}
+            onKeyDown={(event) =>
+              handleCardKeyDown(event, () =>
+                openHistoryForType(card.label.toLowerCase().includes("sick")
+                  ? "sick"
+                  : card.label.toLowerCase().includes("planned")
+                    ? "planned"
+                    : card.label.toLowerCase().includes("optional")
+                      ? "optional"
+                      : "lop")
+              )
+            }
+            role="button"
+            tabIndex={0}
+          >
             <div className="fiori-stat-label">{card.label}</div>
             <div className="fiori-stat-value">{card.value}</div>
             <div className="fiori-stat-note">{card.note}</div>
@@ -655,7 +696,7 @@ const EmployeeLeaves = ({ user, navigationState }) => {
 
       {activeTab === "my-leaves" ? (
         <div className="employee-leave-layout">
-          <section className="fiori-panel">
+          <section className="fiori-panel" id="employee-leave-history">
             <div className="fiori-panel-header">
               <div>
                 <h3>Apply for leave</h3>

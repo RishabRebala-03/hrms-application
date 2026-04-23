@@ -2,6 +2,13 @@ import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { ChevronDown, ChevronUp, ClipboardList, History, ShieldCheck, UserRound } from "lucide-react";
 
+const handleCardKeyDown = (event, action) => {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    action();
+  }
+};
+
 export default function AdminLogs() {
   const [logs, setLogs] = useState([]);
   const [expanded, setExpanded] = useState({});
@@ -90,6 +97,11 @@ export default function AdminLogs() {
       .replace(/_/g, " ")
       .replace(/\b\w/g, (match) => match.toUpperCase());
 
+  const scrollToSection = (sectionId) => {
+    const element = document.getElementById(sectionId);
+    element?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   return (
     <section className="audit-workspace">
       <header className="admin-hero">
@@ -119,7 +131,13 @@ export default function AdminLogs() {
       </header>
 
       <section className="audit-summary-grid">
-        <article className="fiori-stat-card">
+        <article
+          className="fiori-stat-card is-actionable"
+          onClick={() => scrollToSection("audit-log-list")}
+          onKeyDown={(event) => handleCardKeyDown(event, () => scrollToSection("audit-log-list"))}
+          role="button"
+          tabIndex={0}
+        >
           <div className="fiori-stat-topline">
             <span className="fiori-stat-label">Log Events</span>
             <History size={18} />
@@ -128,7 +146,13 @@ export default function AdminLogs() {
           <div className="fiori-stat-note">Detailed change events recorded in the log stream</div>
         </article>
 
-        <article className="fiori-stat-card">
+        <article
+          className="fiori-stat-card is-actionable"
+          onClick={() => scrollToSection("audit-log-list")}
+          onKeyDown={(event) => handleCardKeyDown(event, () => scrollToSection("audit-log-list"))}
+          role="button"
+          tabIndex={0}
+        >
           <div className="fiori-stat-topline">
             <span className="fiori-stat-label">Requests Covered</span>
             <ClipboardList size={18} />
@@ -137,7 +161,13 @@ export default function AdminLogs() {
           <div className="fiori-stat-note">Unique leave requests with recorded audit activity</div>
         </article>
 
-        <article className="fiori-stat-card">
+        <article
+          className="fiori-stat-card is-actionable"
+          onClick={() => scrollToSection("audit-log-list")}
+          onKeyDown={(event) => handleCardKeyDown(event, () => scrollToSection("audit-log-list"))}
+          role="button"
+          tabIndex={0}
+        >
           <div className="fiori-stat-topline">
             <span className="fiori-stat-label">Traceability</span>
             <ShieldCheck size={18} />
@@ -172,7 +202,7 @@ export default function AdminLogs() {
           </div>
         </div>
       ) : (
-        <div className="audit-log-list">
+        <div className="audit-log-list" id="audit-log-list">
           {groupedEntries.map(([leaveId, items]) => {
             const first = items[0];
 

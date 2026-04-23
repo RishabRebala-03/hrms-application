@@ -2,6 +2,13 @@ import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { CalendarDays, MapPin, Plus, Sparkles } from "lucide-react";
 
+const handleCardKeyDown = (event, action) => {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    action();
+  }
+};
+
 const AdminHolidays = () => {
   const [items, setItems] = useState([]);
   const [editing, setEditing] = useState(null);
@@ -116,6 +123,11 @@ const AdminHolidays = () => {
     return { optional, publicCount, companyCount };
   }, [items]);
 
+  const scrollToSection = (sectionId) => {
+    const element = document.getElementById(sectionId);
+    element?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   return (
     <section className="holiday-admin-workspace">
       <header className="admin-hero">
@@ -145,7 +157,13 @@ const AdminHolidays = () => {
       </header>
 
       <section className="holiday-summary-grid">
-        <article className="fiori-stat-card">
+        <article
+          className="fiori-stat-card is-actionable"
+          onClick={() => scrollToSection("holiday-directory")}
+          onKeyDown={(event) => handleCardKeyDown(event, () => scrollToSection("holiday-directory"))}
+          role="button"
+          tabIndex={0}
+        >
           <div className="fiori-stat-topline">
             <span className="fiori-stat-label">Public</span>
             <CalendarDays size={18} />
@@ -154,7 +172,13 @@ const AdminHolidays = () => {
           <div className="fiori-stat-note">Public holidays visible across the calendar</div>
         </article>
 
-        <article className="fiori-stat-card">
+        <article
+          className="fiori-stat-card is-actionable"
+          onClick={() => scrollToSection("holiday-directory")}
+          onKeyDown={(event) => handleCardKeyDown(event, () => scrollToSection("holiday-directory"))}
+          role="button"
+          tabIndex={0}
+        >
           <div className="fiori-stat-topline">
             <span className="fiori-stat-label">Company</span>
             <Sparkles size={18} />
@@ -163,7 +187,13 @@ const AdminHolidays = () => {
           <div className="fiori-stat-note">Company events and org-wide closure days</div>
         </article>
 
-        <article className="fiori-stat-card">
+        <article
+          className="fiori-stat-card is-actionable"
+          onClick={() => scrollToSection("holiday-directory")}
+          onKeyDown={(event) => handleCardKeyDown(event, () => scrollToSection("holiday-directory"))}
+          role="button"
+          tabIndex={0}
+        >
           <div className="fiori-stat-topline">
             <span className="fiori-stat-label">Optional</span>
             <Plus size={18} />
@@ -174,7 +204,7 @@ const AdminHolidays = () => {
       </section>
 
       <section className="holiday-admin-grid">
-        <section className="fiori-panel">
+        <section className="fiori-panel" id="holiday-directory">
           <div className="fiori-panel-header">
             <div>
               <h3>{editing ? "Edit Holiday" : "Add Holiday"}</h3>
