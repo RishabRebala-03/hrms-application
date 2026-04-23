@@ -25,6 +25,7 @@ import {
   YAxis,
 } from "recharts";
 import OrganizationHierarchy from "./OrganizationHierarchy";
+import BannerImage from "../assets/banner.jpg";
 
 const statusToneMap = {
   Approved: "is-approved",
@@ -473,6 +474,22 @@ const AdminDashboard = ({ user, onNavigate }) => {
           </div>
         </div>
       </header>
+
+      <section className="fiori-panel employee-banner-panel" tabIndex={0}>
+        <div className="employee-banner-shell">
+          <img src={BannerImage} alt="Administration workspace banner" className="employee-banner-image" />
+          <div className="employee-banner-overlay">
+            <div className="employee-banner-copy">
+              <div className="admin-section-overline">Administration overview</div>
+              <h3>Operations, approvals, and workforce signals in one clearer view</h3>
+              <p>
+                Hover to reveal a cleaner summary of the core admin actions waiting across leave,
+                employees, and reporting.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <div className="admin-dashboard-grid">
         {summaryCards.map((card) => {

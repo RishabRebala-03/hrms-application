@@ -442,7 +442,7 @@ const EmployeeDashboard = ({ user, setSection }) => {
         </div>
       </header>
 
-      <section className="fiori-panel employee-banner-panel">
+      <section className="fiori-panel employee-banner-panel" tabIndex={0}>
         <div className="employee-banner-shell">
           <img src={BannerImage} alt="Employee workspace welcome banner" className="employee-banner-image" />
           <div className="employee-banner-overlay">

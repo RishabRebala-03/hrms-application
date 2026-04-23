@@ -261,13 +261,15 @@ const ManagerDashboard = ({ user, onNavigateToProfile }) => {
         </div>
       </header>
 
-      <section className="fiori-panel employee-banner-panel">
+      <section className="fiori-panel employee-banner-panel" tabIndex={0}>
         <div className="employee-banner-shell">
           <img src={BannerImage} alt="Manager workspace banner" className="employee-banner-image" />
           <div className="employee-banner-overlay">
-            <div className="admin-section-overline">Team overview</div>
-            <h3>Approvals, availability, and reportees in one compact view</h3>
-            <p>Use the dashboard sections below to keep daily team operations moving.</p>
+            <div className="employee-banner-copy">
+              <div className="admin-section-overline">Team overview</div>
+              <h3>Approvals, availability, and reportees in one compact view</h3>
+              <p>Use the dashboard sections below to keep daily team operations moving.</p>
+            </div>
           </div>
         </div>
       </section>
