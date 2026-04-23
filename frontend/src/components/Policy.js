@@ -110,14 +110,6 @@ const policies = [
   },
 ];
 
-const leaveTypeShortcuts = [
-  { id: "planned", label: "Planned Leave" },
-  { id: "unplanned", label: "Unplanned Leave" },
-  { id: "privileged", label: "PL" },
-  { id: "casual", label: "CL / SL" },
-  { id: "lwp", label: "LWP" },
-];
-
 const categories = ["All", "HR", "Finance", "Operations", "General", "Compliance", "Security"];
 const statuses = ["All", "Active", "Draft", "Review"];
 
@@ -134,26 +126,6 @@ const categoryDescriptions = {
   General: "Company-wide expectations and reference material",
   Compliance: "Regulatory, audit, and legal obligations",
   Security: "Access, data handling, and protection measures",
-};
-
-const getScrollableAncestor = (element) => {
-  let current = element?.parentElement || null;
-
-  while (current) {
-    const styles = window.getComputedStyle(current);
-    const overflowY = styles.overflowY;
-    const isScrollable =
-      (overflowY === "auto" || overflowY === "scroll") &&
-      current.scrollHeight > current.clientHeight;
-
-    if (isScrollable) {
-      return current;
-    }
-
-    current = current.parentElement;
-  }
-
-  return window;
 };
 
 const Policy = () => {
@@ -217,14 +189,8 @@ const Policy = () => {
       return undefined;
     }
 
-    const scrollContainer = getScrollableAncestor(contentRootRef.current);
-
     const handleScroll = () => {
-      const containerTop =
-        scrollContainer === window
-          ? 0
-          : scrollContainer?.getBoundingClientRect?.().top || 0;
-      const scrollPosition = containerTop + 170;
+      const scrollPosition = 170;
       let currentSection = selectedPolicy.sections[0]?.id || null;
 
       selectedPolicy.sections.forEach((section) => {
@@ -239,11 +205,10 @@ const Policy = () => {
       setActiveSection(currentSection);
     };
 
-    const eventTarget = scrollContainer === window ? window : scrollContainer;
-    eventTarget?.addEventListener("scroll", handleScroll);
+    window.addEventListener("scroll", handleScroll, { passive: true });
     handleScroll();
 
-    return () => eventTarget?.removeEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
   }, [selectedPolicy]);
 
   const openPolicy = (policyId) => {
@@ -270,6 +235,9 @@ const Policy = () => {
 
     contentRefs.current[sectionId] = element;
 
+    window.history.replaceState(null, "", `#${sectionId}`);
+    element.setAttribute("tabindex", "-1");
+    element.focus({ preventScroll: true });
     element.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
@@ -314,16 +282,20 @@ const Policy = () => {
 
             <div className="policy-outline-list">
               {selectedPolicy.sections.map((section) => (
-                <button
+                <a
                   key={section.id}
-                  type="button"
+                  href={`#${section.id}`}
                   className={`policy-outline-item ${
                     activeSection === section.id ? "is-active" : ""
                   }`}
-                  onClick={() => scrollToSection(section.id)}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    scrollToSection(section.id);
+                  }}
+                  aria-current={activeSection === section.id ? "location" : undefined}
                 >
                   {section.title}
-                </button>
+                </a>
               ))}
             </div>
           </aside>
@@ -364,30 +336,6 @@ const Policy = () => {
                 </div>
                 <div className="fiori-stat-note">Most recent revision date</div>
               </article>
-            </section>
-
-            <section className="fiori-panel">
-              <div className="fiori-panel-header">
-                <div>
-                  <h3>Leave Type Shortcuts</h3>
-                  <p>Open the exact leave type heading directly inside this document.</p>
-                </div>
-              </div>
-
-              <div className="policy-shortcut-grid">
-                {leaveTypeShortcuts.map((shortcut) => (
-                  <button
-                    key={shortcut.id}
-                    type="button"
-                    className={`policy-shortcut-chip ${
-                      activeSection === shortcut.id ? "is-active" : ""
-                    }`}
-                    onClick={() => scrollToSection(shortcut.id)}
-                  >
-                    {shortcut.label}
-                  </button>
-                ))}
-              </div>
             </section>
 
             <section className="fiori-panel">
