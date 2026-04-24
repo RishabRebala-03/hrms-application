@@ -3,6 +3,7 @@ import axios from "axios";
 import {
   CalendarDays,
   Coffee,
+  Download,
   CupSoda,
   ListChecks,
   Milk,
@@ -13,6 +14,8 @@ import {
   X,
 } from "lucide-react";
 import "../App.css";
+import DataTable from "./DataTable";
+import { downloadFileFromResponse } from "./exportUtils";
 
 const API_BASE = `${process.env.REACT_APP_BACKEND_URL}/api/tea_coffee`;
 const MORNING_CUTOFF = "10:30";
@@ -245,187 +248,64 @@ const YearlyCalendarModal = ({ onClose, blockedDates, onBlockDate, onUnblockDate
   );
 };
 
-const EmployeeListModal = ({ date, orders, onClose }) => {
-  const teaCount = orders.filter((item) => item.morning === "tea" || item.evening === "tea").length;
-  const coffeeCount = orders.filter((item) => item.morning === "coffee" || item.evening === "coffee").length;
-  const milkCount = orders.filter((item) => item.morning === "milk" || item.evening === "milk").length;
-
-  return (
-    <div className="admin-modal-overlay">
-      <div className="admin-modal admin-modal-wide">
-        <div className="admin-modal-header">
-          <div>
-            <h2>Employee Orders</h2>
-            <p>{formatDateLabel(date).full} • {orders.length} orders</p>
-          </div>
-          <button className="fiori-button secondary danger" onClick={onClose}>
-            Close
-          </button>
-        </div>
-
-        <div className="tea-employee-summary">
-          <article className="fiori-stat-card">
-            <div className="fiori-stat-label">Tea</div>
-            <div className="fiori-stat-value">{teaCount}</div>
-          </article>
-          <article className="fiori-stat-card">
-            <div className="fiori-stat-label">Coffee</div>
-            <div className="fiori-stat-value">{coffeeCount}</div>
-          </article>
-          <article className="fiori-stat-card">
-            <div className="fiori-stat-label">Milk</div>
-            <div className="fiori-stat-value">{milkCount}</div>
-          </article>
-        </div>
-
-        {orders.length === 0 ? (
-          <div className="admin-empty-state">
-            <Users size={24} />
-            <div>
-              <strong>No employee orders for this date</strong>
-              <p>Orders will appear here once the team places them.</p>
-            </div>
-          </div>
-        ) : (
-          <div className="fiori-table-shell">
-            <table className="fiori-table">
-              <thead>
-                <tr>
-                  <th>Employee</th>
-                  <th>Morning</th>
-                  <th>Evening</th>
-                </tr>
-              </thead>
-              <tbody>
-                {orders.map((order, index) => (
-                  <tr key={`${order.employee_email}-${index}`}>
-                    <td>
-                      <div className="fiori-primary-cell">
-                        <strong>{order.employee_name}</strong>
-                        <span>{order.employee_email}</span>
-                      </div>
-                    </td>
-                    <td>{order.morning ? <BeveragePill beverage={order.morning} /> : "—"}</td>
-                    <td>{order.evening ? <BeveragePill beverage={order.evening} /> : "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-const AdminView = ({ dates, orders, blockedDates, onBlockDate, onUnblockDate, onRefresh }) => {
+const AdminView = ({ blockedDates, onBlockDate, onUnblockDate, onRefresh, showToast }) => {
   const [showYearlyCalendar, setShowYearlyCalendar] = useState(false);
-  const [selectedDateForList, setSelectedDateForList] = useState(null);
+  const [records, setRecords] = useState([]);
+  const [reportPage, setReportPage] = useState(1);
+  const [reportTotalPages, setReportTotalPages] = useState(1);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [filters, setFilters] = useState({
+    datePreset: "last_month",
+    startDate: "",
+    endDate: "",
+    type: "all",
+    search: "",
+  });
+  const [summary, setSummary] = useState({
+    total_people_taking_coffee: 0,
+    total_people_not_taking_coffee: 0,
+    guest_coffee_count: 0,
+    snacks_consumption: 0,
+  });
 
-  const getStats = useCallback(
-    (date) => {
-      const dayOrders = orders[date] || [];
-
-      return dayOrders.reduce(
-        (accumulator, order) => {
-          if (order.morning === "tea") accumulator.morningTea += 1;
-          if (order.morning === "coffee") accumulator.morningCoffee += 1;
-          if (order.morning === "milk") accumulator.morningMilk += 1;
-          if (order.evening === "tea") accumulator.eveningTea += 1;
-          if (order.evening === "coffee") accumulator.eveningCoffee += 1;
-          if (order.evening === "milk") accumulator.eveningMilk += 1;
-          accumulator.total += 1;
-          return accumulator;
+  const fetchReport = useCallback(async () => {
+    try {
+      setReportLoading(true);
+      const response = await axios.get(`${API_BASE}/admin/report`, {
+        params: {
+          page: reportPage,
+          page_size: 10,
+          date_preset: filters.datePreset || undefined,
+          start_date: filters.datePreset === "custom" ? filters.startDate || undefined : undefined,
+          end_date: filters.datePreset === "custom" ? filters.endDate || undefined : undefined,
+          type: filters.type !== "all" ? filters.type : undefined,
+          search: filters.search || undefined,
         },
-        {
-          morningTea: 0,
-          morningCoffee: 0,
-          morningMilk: 0,
-          eveningTea: 0,
-          eveningCoffee: 0,
-          eveningMilk: 0,
-          total: 0,
-        }
-      );
-    },
-    [orders]
-  );
+      });
+      setRecords(response.data.items || []);
+      setSummary(response.data.summary || {});
+      setReportTotalPages(response.data.total_pages || 1);
+    } catch (error) {
+      showToast(error.response?.data?.error || "Failed to load tea and coffee report");
+      setRecords([]);
+    } finally {
+      setReportLoading(false);
+    }
+  }, [filters, reportPage, showToast]);
 
-  const isBlocked = useCallback(
-    (date) => blockedDates.some((item) => item.date === date),
-    [blockedDates]
-  );
+  useEffect(() => {
+    fetchReport();
+  }, [fetchReport]);
 
-  const getBlockReason = useCallback(
-    (date) => blockedDates.find((item) => item.date === date)?.reason || "",
-    [blockedDates]
-  );
-
-  const summaryStats = useMemo(() => {
-    return dates.reduce(
-      (accumulator, order) => {
-        const stats = getStats(order);
-        accumulator.totalOrders += stats.total;
-        if (isBlocked(order)) accumulator.blockedDays += 1;
-        if (stats.total > 0) accumulator.activeDays += 1;
-        return accumulator;
-      },
-      { totalOrders: 0, blockedDays: 0, activeDays: 0 }
-    );
-  }, [dates, getStats, isBlocked]);
-
-    const DayCard = ({ date, large = false }) => {
-      const stats = getStats(date);
-      const label = formatDateLabel(date);
-      const blocked = isBlocked(date);
-
-      return (
-      <article className={`tea-admin-day-card ${large ? "is-large" : ""} ${blocked ? "is-blocked" : ""}`}>
-        <div className="tea-admin-day-top">
-          <div>
-            <h3>{label.full}</h3>
-            <p>{date}</p>
-          </div>
-          {blocked ? <span className="fiori-status-pill is-rejected">Blocked</span> : null}
-        </div>
-
-        {blocked ? (
-          <div className="tea-admin-block-reason">{getBlockReason(date) || "Unavailable"}</div>
-        ) : (
-          <>
-            <div className="tea-admin-total">
-              <div>
-                <span>Total Orders</span>
-                <strong>{stats.total}</strong>
-              </div>
-              <button className="fiori-button secondary" onClick={() => setSelectedDateForList(date)}>
-                View employee list
-              </button>
-            </div>
-
-            <div className="tea-admin-slot-grid">
-              <div className="tea-admin-slot-card">
-                <strong>Morning</strong>
-                <div className="tea-admin-metric-grid">
-                  <div><span>Tea</span><b>{stats.morningTea}</b></div>
-                  <div><span>Coffee</span><b>{stats.morningCoffee}</b></div>
-                  <div><span>Milk</span><b>{stats.morningMilk}</b></div>
-                </div>
-              </div>
-
-              <div className="tea-admin-slot-card">
-                <strong>Evening</strong>
-                <div className="tea-admin-metric-grid">
-                  <div><span>Tea</span><b>{stats.eveningTea}</b></div>
-                  <div><span>Coffee</span><b>{stats.eveningCoffee}</b></div>
-                  <div><span>Milk</span><b>{stats.eveningMilk}</b></div>
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-      </article>
-    );
+  const handleExport = async (format) => {
+    const params = new URLSearchParams();
+    params.set("format", format);
+    if (filters.datePreset) params.set("date_preset", filters.datePreset);
+    if (filters.datePreset === "custom" && filters.startDate) params.set("start_date", filters.startDate);
+    if (filters.datePreset === "custom" && filters.endDate) params.set("end_date", filters.endDate);
+    if (filters.type !== "all") params.set("type", filters.type);
+    if (filters.search) params.set("search", filters.search);
+    await downloadFileFromResponse(`${API_BASE}/admin/export?${params.toString()}`, `tea_coffee_report.${format === "excel" ? "xls" : "csv"}`);
   };
 
   return (
@@ -434,92 +314,140 @@ const AdminView = ({ dates, orders, blockedDates, onBlockDate, onUnblockDate, on
         <div>
           <div className="admin-section-overline">Hospitality Operations</div>
           <h1>Tea and Coffee</h1>
-          <p>
-            Monitor daily beverage demand, review team orders, and manage blocked service dates
-            from a single admin dashboard.
-          </p>
+          <p>Review beverage activity in a report table, filter by timeframe and order type, and export the current view with filter context.</p>
         </div>
-
-        <div className="admin-hero-meta">
-          <div className="admin-hero-meta-item">
-            <span>Total orders</span>
-            <strong>{summaryStats.totalOrders}</strong>
-          </div>
-          <div className="admin-hero-meta-item">
-            <span>Active days</span>
-            <strong>{summaryStats.activeDays}</strong>
-          </div>
-          <div className="admin-hero-meta-item">
-            <span>Blocked days</span>
-            <strong>{summaryStats.blockedDays}</strong>
-          </div>
+        <div className="employee-directory-hero-actions">
+          <button className="fiori-button secondary" onClick={() => handleExport("csv")}>
+            <Download size={16} />
+            <span>CSV</span>
+          </button>
+          <button className="fiori-button secondary" onClick={() => handleExport("excel")}>
+            <Download size={16} />
+            <span>Excel</span>
+          </button>
+          <button className="fiori-button primary" onClick={() => setShowYearlyCalendar(true)}>
+            <CalendarDays size={16} />
+            <span>Manage blocked dates</span>
+          </button>
         </div>
       </header>
 
       <section className="tea-summary-grid">
         <article className="fiori-stat-card">
           <div className="fiori-stat-topline">
-            <span className="fiori-stat-label">Service Window</span>
-            <ShoppingBag size={18} />
+            <span className="fiori-stat-label">Coffee drinkers</span>
+            <Coffee size={18} />
           </div>
-          <div className="fiori-stat-value tea-stat-text">15 Days</div>
-          <div className="fiori-stat-note">Current rolling view for tea and coffee demand</div>
+          <div className="fiori-stat-value">{summary.total_people_taking_coffee || 0}</div>
+          <div className="fiori-stat-note">Unique employees with coffee orders in the filtered period</div>
         </article>
-
         <article className="fiori-stat-card">
           <div className="fiori-stat-topline">
-            <span className="fiori-stat-label">Blocked Dates</span>
+            <span className="fiori-stat-label">No coffee</span>
+            <Users size={18} />
+          </div>
+          <div className="fiori-stat-value">{summary.total_people_not_taking_coffee || 0}</div>
+          <div className="fiori-stat-note">Employees ordering without coffee in the filtered result set</div>
+        </article>
+        <article className="fiori-stat-card">
+          <div className="fiori-stat-topline">
+            <span className="fiori-stat-label">Guest coffee</span>
+            <ShoppingBag size={18} />
+          </div>
+          <div className="fiori-stat-value">{summary.guest_coffee_count || 0}</div>
+          <div className="fiori-stat-note">Guest beverage count captured in current records</div>
+        </article>
+        <article className="fiori-stat-card">
+          <div className="fiori-stat-topline">
+            <span className="fiori-stat-label">Snacks</span>
             <ShieldBan size={18} />
           </div>
-          <div className="fiori-stat-value">{summaryStats.blockedDays}</div>
-          <div className="fiori-stat-note">Dates currently unavailable for beverage service</div>
-        </article>
-
-        <article className="fiori-stat-card is-actionable" onClick={() => setShowYearlyCalendar(true)}>
-          <div className="fiori-stat-topline">
-            <span className="fiori-stat-label">Manage Availability</span>
-            <CalendarDays size={18} />
-          </div>
-          <div className="fiori-stat-value tea-stat-text">Open</div>
-          <div className="fiori-inline-link">Block or unblock service dates</div>
+          <div className="fiori-stat-value">{summary.snacks_consumption || 0}</div>
+          <div className="fiori-stat-note">Snacks logged in the current filtered result set</div>
         </article>
       </section>
 
       <section className="fiori-panel">
         <div className="fiori-panel-header">
           <div>
-            <h3>Controls</h3>
-            <p>Refresh orders or update the yearly service calendar</p>
+            <h3>Report filters</h3>
+            <p>Choose a time window, order type, and search term for the admin report.</p>
           </div>
           <div className="tea-toolbar">
-            <button className="fiori-button secondary" onClick={onRefresh}>
+            <button className="fiori-button secondary" onClick={() => { onRefresh(); fetchReport(); }}>
               <RefreshCw size={16} />
-              <span>Refresh orders</span>
-            </button>
-            <button className="fiori-button primary" onClick={() => setShowYearlyCalendar(true)}>
-              <CalendarDays size={16} />
-              <span>Manage blocked dates</span>
+              <span>Refresh</span>
             </button>
           </div>
         </div>
+        <div className="employee-directory-filters">
+          <label className="employee-filter-field">
+            <span>Period</span>
+            <select className="input" value={filters.datePreset} onChange={(event) => { setFilters((current) => ({ ...current, datePreset: event.target.value })); setReportPage(1); }}>
+              <option value="last_month">Last 1 month</option>
+              <option value="last_3_months">Last 3 months</option>
+              <option value="last_year">Last 1 year</option>
+              <option value="custom">Custom range</option>
+            </select>
+          </label>
+          <label className="employee-filter-field">
+            <span>Type</span>
+            <select className="input" value={filters.type} onChange={(event) => { setFilters((current) => ({ ...current, type: event.target.value })); setReportPage(1); }}>
+              <option value="all">All</option>
+              <option value="tea">Tea</option>
+              <option value="coffee">Coffee</option>
+              <option value="snacks">Snacks</option>
+              <option value="guest">Guest orders</option>
+            </select>
+          </label>
+          <label className="employee-filter-field employee-filter-search">
+            <span>Search</span>
+            <div className="employee-filter-input-shell">
+              <input className="input" value={filters.search} onChange={(event) => { setFilters((current) => ({ ...current, search: event.target.value })); setReportPage(1); }} placeholder="Employee name or email" />
+            </div>
+          </label>
+          {filters.datePreset === "custom" ? (
+            <>
+              <label className="employee-filter-field">
+                <span>From</span>
+                <input className="input" type="date" value={filters.startDate} onChange={(event) => { setFilters((current) => ({ ...current, startDate: event.target.value })); setReportPage(1); }} />
+              </label>
+              <label className="employee-filter-field">
+                <span>To</span>
+                <input className="input" type="date" value={filters.endDate} onChange={(event) => { setFilters((current) => ({ ...current, endDate: event.target.value })); setReportPage(1); }} />
+              </label>
+            </>
+          ) : null}
+        </div>
       </section>
 
-      <DayCard date={dates[0]} large />
-
-      <section className="fiori-panel">
-        <div className="fiori-panel-header">
-          <div>
-            <h3>Upcoming Days</h3>
-            <p>Daily demand cards for the next 14 service days</p>
-          </div>
-        </div>
-
-        <div className="tea-admin-grid">
-          {dates.slice(1).map((date) => (
-            <DayCard key={date} date={date} />
-          ))}
-        </div>
-      </section>
+      <DataTable
+        columns={[
+          { key: "date", header: "Date" },
+          {
+            key: "employee_name",
+            header: "Employee",
+            render: (row) => (
+              <div className="fiori-primary-cell">
+                <strong>{row.employee_name}</strong>
+                <span>{row.employee_email}</span>
+              </div>
+            ),
+          },
+          { key: "order_type", header: "Type" },
+          { key: "morning", header: "Morning" },
+          { key: "evening", header: "Evening" },
+          { key: "snacks", header: "Snacks" },
+          { key: "guest_count", header: "Guest Count" },
+        ]}
+        rows={records}
+        loading={reportLoading}
+        page={reportPage}
+        totalPages={reportTotalPages}
+        onPageChange={setReportPage}
+        emptyTitle="No beverage records match the current filters"
+        emptyDescription="Try widening the period, type, or search query."
+      />
 
       {showYearlyCalendar ? (
         <YearlyCalendarModal
@@ -527,14 +455,6 @@ const AdminView = ({ dates, orders, blockedDates, onBlockDate, onUnblockDate, on
           blockedDates={blockedDates}
           onBlockDate={onBlockDate}
           onUnblockDate={onUnblockDate}
-        />
-      ) : null}
-
-      {selectedDateForList ? (
-        <EmployeeListModal
-          date={selectedDateForList}
-          orders={orders[selectedDateForList] || []}
-          onClose={() => setSelectedDateForList(null)}
         />
       ) : null}
     </section>
@@ -859,12 +779,11 @@ const TeaCoffee = ({ user }) => {
     return (
       <>
         <AdminView
-          dates={dates}
-          orders={orders}
           blockedDates={blockedDates}
           onBlockDate={handleBlockDate}
           onUnblockDate={handleUnblockDate}
           onRefresh={refreshOrders}
+          showToast={showToast}
         />
         {message ? (
           <div className="admin-toast is-success">{message}</div>

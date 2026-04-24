@@ -4,6 +4,7 @@ from bson import ObjectId
 from datetime import datetime
 from config.db import mongo
 import os
+from utils.report_utils import parse_iso_date, safe_int, serialize_document
 
 def serialize_all(obj):
     if isinstance(obj, list):
@@ -24,6 +25,41 @@ def serialize_all(obj):
         return obj.isoformat()
 
     return obj
+
+
+def enrich_employee_record(emp):
+    emp["is_active"] = emp.get("is_active", True)
+    base = request.host_url.rstrip("/")
+    emp_id_str = str(emp["_id"])
+    photo_url = None
+
+    photo_extensions = ['.png', '.jpg', '.jpeg', '.webp']
+    for ext in photo_extensions:
+        photo_filename = f"{emp_id_str}{ext}"
+        photo_path = os.path.join("static", "profile_photos", photo_filename)
+        if os.path.exists(photo_path):
+            photo_url = f"{base}/static/profile_photos/{photo_filename}"
+            break
+
+    emp["photoUrl"] = photo_url
+
+    if "reportsTo" in emp and isinstance(emp["reportsTo"], ObjectId):
+        manager = mongo.db.users.find_one({"_id": emp["reportsTo"]})
+        if manager:
+            emp["reportsToEmail"] = manager.get("email")
+            emp["reportsToName"] = manager.get("name")
+        emp["reportsTo"] = str(emp["reportsTo"])
+
+    projects = []
+    for project in emp.get("projects", []) or []:
+        project_name = project.get("projectName")
+        if project_name:
+            projects.append(project_name)
+        if isinstance(project.get("projectId"), ObjectId):
+            project["projectId"] = str(project["projectId"])
+    emp["projectNames"] = projects
+    emp["primaryProject"] = projects[0] if projects else ""
+    return emp
 
 user_bp = Blueprint("user_bp", __name__)
 
@@ -254,6 +290,86 @@ def get_all_employees():
 
         return jsonify(serialize_all(employees)), 200
 
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@user_bp.route("/table", methods=["GET"])
+def get_employees_table():
+    try:
+        page = safe_int(request.args.get("page"), 1, 1)
+        page_size = safe_int(request.args.get("page_size"), 10, 1, 100)
+        search = (request.args.get("search") or "").strip()
+        department = (request.args.get("department") or "").strip()
+        project = (request.args.get("project") or "").strip()
+        status = (request.args.get("status") or "").strip()
+        role = (request.args.get("role") or "").strip()
+        manager_email = (request.args.get("manager_email") or "").strip()
+        sort_by = request.args.get("sort_by") or "name"
+        sort_order = -1 if (request.args.get("sort_order") or "asc").lower() == "desc" else 1
+        joining_start = parse_iso_date(request.args.get("joining_start"))
+        joining_end = parse_iso_date(request.args.get("joining_end"), end_of_day=True)
+
+        query = {"role": {"$ne": "Admin"}}
+
+        if manager_email:
+            manager = mongo.db.users.find_one({"email": manager_email})
+            query["reportsTo"] = manager["_id"] if manager else None
+
+        if department and department.lower() != "all":
+            query["department"] = department
+
+        if project and project.lower() != "all":
+            query["projects.projectName"] = project
+
+        if role and role.lower() != "all":
+            query["role"] = role
+
+        if status == "Active":
+            query["is_active"] = {"$ne": False}
+        elif status == "Inactive":
+            query["is_active"] = False
+
+        if joining_start or joining_end:
+            query["dateOfJoining"] = {}
+            if joining_start:
+                query["dateOfJoining"]["$gte"] = joining_start
+            if joining_end:
+                query["dateOfJoining"]["$lte"] = joining_end
+
+        if search:
+            query["$or"] = [
+                {"name": {"$regex": search, "$options": "i"}},
+                {"email": {"$regex": search, "$options": "i"}},
+                {"department": {"$regex": search, "$options": "i"}},
+                {"designation": {"$regex": search, "$options": "i"}},
+                {"projects.projectName": {"$regex": search, "$options": "i"}},
+            ]
+
+        total = mongo.db.users.count_documents(query)
+        employees = list(
+            mongo.db.users.find(query)
+            .sort(sort_by, sort_order)
+            .skip((page - 1) * page_size)
+            .limit(page_size)
+        )
+
+        items = [serialize_all(enrich_employee_record(employee)) for employee in employees]
+
+        return jsonify(
+            {
+                "items": items,
+                "page": page,
+                "page_size": page_size,
+                "total": total,
+                "total_pages": max(1, (total + page_size - 1) // page_size),
+                "filter_options": {
+                    "departments": sorted(filter(None, mongo.db.users.distinct("department", {"role": {"$ne": "Admin"}}))),
+                    "projects": sorted(filter(None, mongo.db.users.distinct("projects.projectName", {"role": {"$ne": "Admin"}}))),
+                    "roles": sorted(filter(None, mongo.db.users.distinct("role", {"role": {"$ne": "Admin"}}))),
+                },
+            }
+        ), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     

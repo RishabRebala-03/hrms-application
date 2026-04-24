@@ -7,8 +7,41 @@ from config_email import email_service
 from utils.log_utils import log_leave_action, trim_leave
 from utils.leave_accrual import accrue_monthly_leaves
 from utils.recalculate_balances import recalculate_all_balances
+from utils.report_utils import parse_iso_date, safe_int, serialize_document
+from services.leave_service import list_leaves
 
 leave_bp = Blueprint("leave_bp", __name__)
+
+
+@leave_bp.route("", methods=["GET"])
+@leave_bp.route("/", methods=["GET"])
+def get_leaves():
+    try:
+        payload = list_leaves(
+            {
+                "filter": request.args.get("filter") or request.args.get("date_preset"),
+                "sort_by": request.args.get("sort_by", "date"),
+                "order": request.args.get("order", request.args.get("sort_order", "desc")),
+                "project_id": request.args.get("project_id"),
+                "page": request.args.get("page", 1),
+                "limit": request.args.get("limit", request.args.get("page_size", 10)),
+                "requester_id": request.args.get("requester_id"),
+                "search": request.args.get("search"),
+                "status": request.args.get("status"),
+                "leave_type": request.args.get("leave_type"),
+                "employee_id": request.args.get("employee_id"),
+                "start_date": request.args.get("start_date"),
+                "end_date": request.args.get("end_date"),
+            }
+        )
+        return jsonify(payload), 200
+    except PermissionError as exc:
+        return jsonify({"error": str(exc)}), 403
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        print(f"❌ Error fetching leaves: {str(exc)}")
+        return jsonify({"error": str(exc)}), 500
 
 
 def remove_tea_coffee_orders_for_leave(employee_id, start_date, end_date):
@@ -75,6 +108,85 @@ def normalize_half_day_period(period):
         "second half": "afternoon",
     }
     return mapping.get(key, "")
+
+
+def serialize_leave_record(leave, employee_lookup=None):
+    employee_lookup = employee_lookup or {}
+    item = serialize_document(leave)
+    employee = employee_lookup.get(str(item.get("employee_id")), {})
+
+    if employee:
+        item["employee_name"] = item.get("employee_name") or employee.get("name", "Unknown Employee")
+        item["employee_email"] = item.get("employee_email") or employee.get("email", "")
+        item["employee_designation"] = item.get("employee_designation") or employee.get("designation", "")
+        item["employee_department"] = item.get("employee_department") or employee.get("department", "")
+        item["employee_projects"] = employee.get("projectNames", [])
+        item["primary_project"] = employee.get("primaryProject", "")
+
+    return item
+
+
+def build_employee_lookup():
+    employees = list(mongo.db.users.find({}, {"name": 1, "email": 1, "designation": 1, "department": 1, "projects": 1}))
+    lookup = {}
+    for employee in employees:
+        project_names = []
+        for project in employee.get("projects", []) or []:
+            if project.get("projectName"):
+                project_names.append(project["projectName"])
+        lookup[str(employee["_id"])] = {
+            "name": employee.get("name"),
+            "email": employee.get("email"),
+            "designation": employee.get("designation"),
+            "department": employee.get("department"),
+            "projectNames": project_names,
+            "primaryProject": project_names[0] if project_names else "",
+        }
+    return lookup
+
+
+def leave_matches_filters(item, search, leave_type, status, employee_id, employee_name, project, start_dt, end_dt):
+    if leave_type and leave_type.lower() != "all" and item.get("leave_type") != leave_type:
+        return False
+    if status and status.lower() != "all" and item.get("status") != status:
+        return False
+    if employee_id and item.get("employee_id") != employee_id:
+        return False
+    if employee_name and employee_name.lower() not in (item.get("employee_name") or "").lower():
+        return False
+    if project and project.lower() != "all":
+        projects = item.get("employee_projects") or []
+        if project not in projects and project != item.get("primary_project"):
+            return False
+
+    if start_dt or end_dt:
+        raw_start = item.get("approved_start_date") or item.get("start_date")
+        raw_end = item.get("approved_end_date") or item.get("end_date")
+        leave_start = datetime.fromisoformat(raw_start.replace("Z", "+00:00")) if isinstance(raw_start, str) else raw_start
+        leave_end = datetime.fromisoformat(raw_end.replace("Z", "+00:00")) if isinstance(raw_end, str) else raw_end
+        if start_dt and leave_end and leave_end < start_dt:
+            return False
+        if end_dt and leave_start and leave_start > end_dt:
+            return False
+
+    if search:
+        haystack = " ".join(
+            str(value)
+            for value in [
+                item.get("employee_name"),
+                item.get("employee_email"),
+                item.get("employee_department"),
+                item.get("leave_type"),
+                item.get("status"),
+                item.get("reason"),
+                item.get("primary_project"),
+            ]
+            if value
+        ).lower()
+        if search.lower() not in haystack:
+            return False
+
+    return True
 
 
 # ========== ⭐ NEW ESCALATION FUNCTION (NO EMAIL) ⭐ ==========
@@ -422,6 +534,159 @@ def get_all_leaves():
         print(f"❌ Error fetching all leaves: {str(e)}")
         import traceback
         traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@leave_bp.route("/admin/table", methods=["GET"])
+def get_admin_leave_table():
+    try:
+        page = safe_int(request.args.get("page"), 1, 1)
+        page_size = safe_int(request.args.get("page_size"), 10, 1, 100)
+        sort_by = request.args.get("sort_by") or "start_date"
+        sort_order = (request.args.get("sort_order") or "desc").lower()
+        date_preset = request.args.get("date_preset")
+        search = (request.args.get("search") or "").strip()
+        leave_type = request.args.get("leave_type")
+        status = request.args.get("status")
+        employee_id = request.args.get("employee_id")
+        employee_name = request.args.get("employee_name")
+        project = request.args.get("project")
+
+        if date_preset == "last_month":
+            start_dt = datetime.utcnow() - timedelta(days=30)
+            end_dt = datetime.utcnow()
+        else:
+            start_dt = parse_iso_date(request.args.get("start_date"))
+            end_dt = parse_iso_date(request.args.get("end_date"), end_of_day=True)
+
+        leaves = list(mongo.db.leaves.find().sort("applied_on", -1))
+        employee_lookup = build_employee_lookup()
+        items = [
+            serialize_leave_record(leave, employee_lookup)
+            for leave in leaves
+        ]
+        items = [
+            item for item in items
+            if leave_matches_filters(item, search, leave_type, status, employee_id, employee_name, project, start_dt, end_dt)
+        ]
+
+        sort_map = {
+            "date": lambda item: item.get("approved_start_date") or item.get("start_date") or "",
+            "employee_name": lambda item: (item.get("employee_name") or "").lower(),
+            "leave_type": lambda item: (item.get("leave_type") or "").lower(),
+            "status": lambda item: (item.get("status") or "").lower(),
+        }
+        sort_key = sort_map.get(sort_by, lambda item: item.get("approved_start_date") or item.get("start_date") or "")
+        items = sorted(items, key=sort_key, reverse=sort_order == "desc")
+
+        total = len(items)
+        paginated = items[(page - 1) * page_size: page * page_size]
+
+        employee_options = sorted(
+            [{"label": value.get("name"), "value": key} for key, value in employee_lookup.items() if value.get("name")],
+            key=lambda item: item["label"].lower(),
+        )
+
+        project_rows = list(mongo.db.projects.find({}, {"title": 1}))
+        project_options = [{"label": row.get("title"), "value": row.get("title")} for row in project_rows if row.get("title")]
+
+        return jsonify(
+            {
+                "items": paginated,
+                "page": page,
+                "page_size": page_size,
+                "total": total,
+                "total_pages": max(1, (total + page_size - 1) // page_size),
+                "filter_options": {
+                    "leave_types": sorted(filter(None, mongo.db.leaves.distinct("leave_type"))),
+                    "statuses": sorted(filter(None, mongo.db.leaves.distinct("status"))),
+                    "employees": employee_options,
+                    "projects": sorted(project_options, key=lambda item: item["label"].lower()),
+                },
+            }
+        ), 200
+    except Exception as e:
+        print(f"❌ Error fetching admin leave table: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+@leave_bp.route("/employee/<employee_id>/table", methods=["GET"])
+def get_employee_leave_table(employee_id):
+    try:
+        page = safe_int(request.args.get("page"), 1, 1)
+        page_size = safe_int(request.args.get("page_size"), 10, 1, 100)
+        sort_by = request.args.get("sort_by") or "date"
+        sort_order = (request.args.get("sort_order") or "desc").lower()
+        search = (request.args.get("search") or "").strip()
+        leave_type = request.args.get("leave_type")
+        status = request.args.get("status")
+        start_dt = parse_iso_date(request.args.get("start_date"))
+        end_dt = parse_iso_date(request.args.get("end_date"), end_of_day=True)
+
+        leaves = list(mongo.db.leaves.find({"employee_id": ObjectId(employee_id)}).sort("applied_on", -1))
+        employee_lookup = build_employee_lookup()
+        items = [serialize_leave_record(leave, employee_lookup) for leave in leaves]
+        items = [
+            item for item in items
+            if leave_matches_filters(item, search, leave_type, status, employee_id, None, None, start_dt, end_dt)
+        ]
+
+        sort_map = {
+            "date": lambda item: item.get("approved_start_date") or item.get("start_date") or "",
+            "leave_type": lambda item: (item.get("leave_type") or "").lower(),
+            "status": lambda item: (item.get("status") or "").lower(),
+        }
+        items = sorted(items, key=sort_map.get(sort_by, sort_map["date"]), reverse=sort_order == "desc")
+        total = len(items)
+        paginated = items[(page - 1) * page_size: page * page_size]
+
+        return jsonify(
+            {
+                "items": paginated,
+                "page": page,
+                "page_size": page_size,
+                "total": total,
+                "total_pages": max(1, (total + page_size - 1) // page_size),
+                "filter_options": {
+                    "leave_types": sorted(filter(None, mongo.db.leaves.distinct("leave_type", {"employee_id": ObjectId(employee_id)}))),
+                    "statuses": sorted(filter(None, mongo.db.leaves.distinct("status", {"employee_id": ObjectId(employee_id)}))),
+                },
+            }
+        ), 200
+    except Exception as e:
+        print(f"❌ Error fetching employee leave table: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+@leave_bp.route("/analytics/project", methods=["GET"])
+def get_project_leave_analytics():
+    try:
+        project = request.args.get("project")
+        if not project:
+            return jsonify({"error": "project is required"}), 400
+
+        employee_docs = list(mongo.db.users.find({"projects.projectName": project}, {"name": 1, "projects": 1}))
+        employee_ids = [employee["_id"] for employee in employee_docs]
+        leaves = list(mongo.db.leaves.find({"employee_id": {"$in": employee_ids}}))
+
+        distribution = {}
+        for leave in leaves:
+            leave_type = leave.get("leave_type", "Unknown")
+            distribution[leave_type] = distribution.get(leave_type, 0) + float(leave.get("approved_days") or leave.get("days") or 0)
+
+        return jsonify(
+            {
+                "project": project,
+                "total_employees": len(employee_ids),
+                "total_leaves_taken": sum(distribution.values()),
+                "leave_distribution": [
+                    {"leave_type": leave_type, "days": days}
+                    for leave_type, days in sorted(distribution.items(), key=lambda item: item[0].lower())
+                ],
+            }
+        ), 200
+    except Exception as e:
+        print(f"❌ Error fetching project analytics: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 

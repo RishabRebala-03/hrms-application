@@ -3,6 +3,7 @@ from bson import ObjectId
 from datetime import datetime, timedelta
 from config.db import mongo
 from flask_cors import CORS, cross_origin
+from utils.report_utils import build_string_date_range_query, csv_response, excel_response, resolve_date_range, safe_int
 
 tea_coffee_bp = Blueprint("tea_coffee_bp", __name__)
 CORS(tea_coffee_bp)
@@ -312,21 +313,222 @@ def get_admin_orders():
     try:
         start_date = request.args.get("start_date")
         end_date = request.args.get("end_date")
+        beverage_type = request.args.get("type")
+        search = (request.args.get("search") or "").strip()
+        page = safe_int(request.args.get("page"), 1, 1)
+        page_size = safe_int(request.args.get("page_size"), 50, 1, 200)
 
         if not start_date or not end_date:
             return jsonify({"error": "start_date and end_date are required"}), 400
 
-        orders = list(mongo.db.tea_coffee_orders.find({
-            "date": {"$gte": start_date, "$lte": end_date}
-        }).sort("date", 1))
+        query = {"date": {"$gte": start_date, "$lte": end_date}}
+        if beverage_type and beverage_type.lower() != "all":
+            if beverage_type == "guest":
+                query["guest_count"] = {"$gt": 0}
+            elif beverage_type == "snacks":
+                query["snacks.0"] = {"$exists": True}
+            else:
+                query["$or"] = [{"morning": beverage_type}, {"evening": beverage_type}]
+        if search:
+            query["$and"] = query.get("$and", [])
+            query["$and"].append(
+                {
+                    "$or": [
+                        {"employee_name": {"$regex": search, "$options": "i"}},
+                        {"employee_email": {"$regex": search, "$options": "i"}},
+                    ]
+                }
+            )
+
+        total = mongo.db.tea_coffee_orders.count_documents(query)
+        orders = list(
+            mongo.db.tea_coffee_orders.find(query)
+            .sort("date", 1)
+            .skip((page - 1) * page_size)
+            .limit(page_size)
+        )
 
         for order in orders:
             order["_id"] = str(order["_id"])
 
-        return jsonify(orders), 200
+        return jsonify(
+            {
+                "items": orders,
+                "page": page,
+                "page_size": page_size,
+                "total": total,
+                "total_pages": max(1, (total + page_size - 1) // page_size),
+            }
+        ), 200
 
     except Exception as e:
         print("❌ Error fetching admin orders:", str(e))
+        return jsonify({"error": str(e)}), 500
+
+
+@tea_coffee_bp.route("/admin/report", methods=["GET"])
+@cross_origin()
+def get_admin_report():
+    try:
+        date_preset = request.args.get("date_preset")
+        start_dt, end_dt = resolve_date_range(date_preset, request.args.get("start_date"), request.args.get("end_date"))
+        order_type = request.args.get("type")
+        search = (request.args.get("search") or "").strip()
+        page = safe_int(request.args.get("page"), 1, 1)
+        page_size = safe_int(request.args.get("page_size"), 20, 1, 200)
+
+        query = build_string_date_range_query("date", start_dt, end_dt)
+        if order_type and order_type.lower() != "all":
+            if order_type == "guest":
+                query["guest_count"] = {"$gt": 0}
+            elif order_type == "snacks":
+                query["snacks.0"] = {"$exists": True}
+            else:
+                query["$or"] = [{"morning": order_type}, {"evening": order_type}]
+
+        if search:
+            query["$and"] = query.get("$and", [])
+            query["$and"].append(
+                {
+                    "$or": [
+                        {"employee_name": {"$regex": search, "$options": "i"}},
+                        {"employee_email": {"$regex": search, "$options": "i"}},
+                    ]
+                }
+            )
+
+        total = mongo.db.tea_coffee_orders.count_documents(query)
+        records = list(
+            mongo.db.tea_coffee_orders.find(query)
+            .sort("date", -1)
+            .skip((page - 1) * page_size)
+            .limit(page_size)
+        )
+
+        coffee_drinkers = mongo.db.tea_coffee_orders.distinct(
+            "employee_id",
+            {**query, "$or": [{"morning": "coffee"}, {"evening": "coffee"}]},
+        )
+        all_people = mongo.db.tea_coffee_orders.distinct("employee_id", query)
+        snacks_consumption = 0
+        guest_coffee_count = 0
+        formatted_records = []
+        for record in records:
+            snacks = record.get("snacks", []) or []
+            snacks_consumption += len(snacks)
+            guest_coffee_count += int(record.get("guest_count") or 0)
+            formatted_records.append(
+                {
+                    "_id": str(record["_id"]),
+                    "date": record.get("date"),
+                    "employee_name": record.get("employee_name"),
+                    "employee_email": record.get("employee_email"),
+                    "morning": record.get("morning"),
+                    "evening": record.get("evening"),
+                    "snacks": ", ".join(snacks),
+                    "guest_count": int(record.get("guest_count") or 0),
+                    "order_type": ", ".join(
+                        [
+                            label
+                            for label, present in {
+                                "Tea": record.get("morning") == "tea" or record.get("evening") == "tea",
+                                "Coffee": record.get("morning") == "coffee" or record.get("evening") == "coffee",
+                                "Snacks": len(snacks) > 0,
+                                "Guest": int(record.get("guest_count") or 0) > 0,
+                            }.items()
+                            if present
+                        ]
+                    ),
+                }
+            )
+
+        return jsonify(
+            {
+                "items": formatted_records,
+                "page": page,
+                "page_size": page_size,
+                "total": total,
+                "total_pages": max(1, (total + page_size - 1) // page_size),
+                "summary": {
+                    "total_people_taking_coffee": len(coffee_drinkers),
+                    "total_people_not_taking_coffee": max(0, len(all_people) - len(coffee_drinkers)),
+                    "guest_coffee_count": guest_coffee_count,
+                    "snacks_consumption": snacks_consumption,
+                },
+                "filter_options": {
+                    "types": ["tea", "coffee", "snacks", "guest"],
+                },
+            }
+        ), 200
+    except Exception as e:
+        print("❌ Error fetching admin report:", str(e))
+        return jsonify({"error": str(e)}), 500
+
+
+@tea_coffee_bp.route("/admin/export", methods=["GET"])
+@cross_origin()
+def export_admin_report():
+    try:
+        export_format = (request.args.get("format") or "csv").lower()
+        date_preset = request.args.get("date_preset")
+        start_dt, end_dt = resolve_date_range(date_preset, request.args.get("start_date"), request.args.get("end_date"))
+        order_type = request.args.get("type")
+        search = (request.args.get("search") or "").strip()
+
+        query = build_string_date_range_query("date", start_dt, end_dt)
+        if order_type and order_type.lower() != "all":
+            if order_type == "guest":
+                query["guest_count"] = {"$gt": 0}
+            elif order_type == "snacks":
+                query["snacks.0"] = {"$exists": True}
+            else:
+                query["$or"] = [{"morning": order_type}, {"evening": order_type}]
+        if search:
+            query["$and"] = query.get("$and", [])
+            query["$and"].append(
+                {
+                    "$or": [
+                        {"employee_name": {"$regex": search, "$options": "i"}},
+                        {"employee_email": {"$regex": search, "$options": "i"}},
+                    ]
+                }
+            )
+
+        records = list(mongo.db.tea_coffee_orders.find(query).sort("date", -1))
+        headers = [
+            "Generated At",
+            "Filter Summary",
+            "Date",
+            "Employee",
+            "Email",
+            "Morning",
+            "Evening",
+            "Snacks",
+            "Guest Count",
+        ]
+        filter_summary = f"type={order_type or 'all'}; search={search or 'none'}; start={request.args.get('start_date') or ''}; end={request.args.get('end_date') or ''}; preset={date_preset or ''}"
+        generated_at = datetime.utcnow().isoformat()
+        rows = [
+            [
+                generated_at,
+                filter_summary,
+                record.get("date"),
+                record.get("employee_name"),
+                record.get("employee_email"),
+                record.get("morning"),
+                record.get("evening"),
+                ", ".join(record.get("snacks", []) or []),
+                int(record.get("guest_count") or 0),
+            ]
+            for record in records
+        ]
+
+        filename_base = f"tea_coffee_report_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+        if export_format == "excel":
+            return excel_response(f"{filename_base}.xls", headers, rows, sheet_name="TeaCoffee")
+        return csv_response(f"{filename_base}.csv", headers, rows)
+    except Exception as e:
+        print("❌ Error exporting admin report:", str(e))
         return jsonify({"error": str(e)}), 500
 
 

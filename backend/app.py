@@ -15,6 +15,8 @@ from routes.notification_routes import notification_bp
 from routes.project_routes import project_bp
 from routes.timesheet_routes import timesheet_bp  # ⭐ NEW
 from routes.charge_code_routes import charge_code_bp  # ⭐ NEW
+from routes.policy_routes import policy_bp
+from routes.employee_routes import employee_bp
 import requests
 
 app = Flask(__name__, static_url_path="/static", static_folder="static")
@@ -76,6 +78,8 @@ app.register_blueprint(notification_bp, url_prefix="/api/notifications")
 app.register_blueprint(project_bp, url_prefix="/api/projects")
 app.register_blueprint(timesheet_bp, url_prefix="/api/timesheets")  # ⭐ NEW
 app.register_blueprint(charge_code_bp, url_prefix="/api/charge_codes")  # ⭐ NEW
+app.register_blueprint(policy_bp, url_prefix="/api/policies")
+app.register_blueprint(employee_bp, url_prefix="/api/employees")
 
 # ✅ UPDATED ESCALATION FUNCTION - USE LOCALHOST
 def check_leave_escalations():

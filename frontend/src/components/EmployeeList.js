@@ -1,200 +1,165 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import {
-  Building2,
-  Download,
-  Filter,
-  Mail,
-  Search,
-  ShieldCheck,
-  UserCheck,
-  UserRound,
-  Users,
-} from "lucide-react";
-import LeaveStatusDot from "./LeaveStatusDot";
+import { Building2, Download, Search, UserCheck, UserRound, Users } from "lucide-react";
+import DataTable from "./DataTable";
+
+const PAGE_SIZE = 10;
+
+const formatDate = (value) => {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+};
 
 const EmployeeList = ({ user, onNavigateToProfile, isAdmin = false }) => {
   const [employees, setEmployees] = useState([]);
-  const [stats, setStats] = useState({ total: 0, active: 0 });
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filterDepartment, setFilterDepartment] = useState("All");
-  const [filterStatus, setFilterStatus] = useState("All");
+  const [filterOptions, setFilterOptions] = useState({ departments: [], projects: [] });
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [projectId, setProjectId] = useState("All");
+  const [sortBy, setSortBy] = useState("name");
+  const [order, setOrder] = useState("asc");
+  const [joiningStart, setJoiningStart] = useState("");
+  const [joiningEnd, setJoiningEnd] = useState("");
   const [actionLoadingId, setActionLoadingId] = useState(null);
 
   const fetchEmployees = useCallback(async () => {
+    if (!isAdmin && user?.role !== "Manager") {
+      setEmployees([]);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
+      const params = {
+        requester_id: user?.id,
+        page,
+        limit: PAGE_SIZE,
+        search: searchTerm || undefined,
+        project_id: projectId !== "All" ? projectId : undefined,
+        joining_from: joiningStart || undefined,
+        joining_to: joiningEnd || undefined,
+        sort_by: sortBy,
+        order,
+      };
 
-      let employeeData = [];
-
-      if (isAdmin) {
-        const response = await axios.get(`${process.env.REACT_APP_BACKEND_URL}/api/users/`);
-        employeeData = response.data;
-      } else if (user.role === "Manager") {
-        const response = await axios.get(
-          `${process.env.REACT_APP_BACKEND_URL}/api/users/get_employees_by_manager/${encodeURIComponent(user.email)}`
-        );
-        employeeData = response.data;
-      } else {
-        employeeData = [];
-        setMessage("Employees cannot view other team members");
-      }
-
-      setEmployees(employeeData);
-      const activeCount = employeeData.filter((employee) => employee.is_active !== false).length;
-      setStats({
-        total: employeeData.length,
-        active: activeCount,
-      });
-      setMessage(employeeData.length === 0 && user.role === "Employee" ? "" : "");
+      const response = await axios.get(`${process.env.REACT_APP_BACKEND_URL}/api/employees`, { params });
+      setEmployees(response.data.items || []);
+      setFilterOptions(response.data.filter_options || { departments: [], projects: [] });
+      setPage(response.data.page || 1);
+      setTotalPages(response.data.total_pages || 1);
+      setTotal(response.data.total || 0);
     } catch (error) {
-      console.error("Error fetching employees:", error);
-      setMessage("Failed to load employees");
+      setMessage(error.response?.data?.error || "Failed to load employees");
+      setEmployees([]);
     } finally {
       setLoading(false);
     }
-  }, [isAdmin, user]);
+  }, [isAdmin, joiningEnd, joiningStart, order, page, projectId, searchTerm, sortBy, user?.id, user?.role]);
 
   useEffect(() => {
-    if (isAdmin || (user?.email && user?.role === "Manager")) {
-      fetchEmployees();
-    } else if (user?.role === "Employee") {
-      setEmployees([]);
-      setStats({ total: 0, active: 0 });
-      setLoading(false);
-    }
-  }, [user, isAdmin, fetchEmployees]);
+    fetchEmployees();
+  }, [fetchEmployees]);
 
-  const handleActiveToggle = async (employeeId, nextStatus) => {
+  const handleActiveToggle = useCallback(async (employeeId, nextStatus) => {
     try {
       setActionLoadingId(employeeId);
-      const response = await axios.put(
-        `${process.env.REACT_APP_BACKEND_URL}/api/users/set_active/${employeeId}`,
-        { is_active: nextStatus }
-      );
-
-      if (response.status === 200) {
-        await fetchEmployees();
-      }
+      await axios.put(`${process.env.REACT_APP_BACKEND_URL}/api/users/set_active/${employeeId}`, { is_active: nextStatus });
+      fetchEmployees();
     } catch (error) {
-      console.error("Error updating active status:", error);
-      setMessage(error.response?.data?.error || "Failed to update active status");
-      setTimeout(() => setMessage(""), 3000);
+      setMessage(error.response?.data?.error || "Failed to update employee status");
     } finally {
       setActionLoadingId(null);
     }
-  };
+  }, [fetchEmployees]);
 
-  const departments = useMemo(
-    () => ["All", ...new Set(employees.map((employee) => employee.department).filter(Boolean))],
-    [employees]
+  const columns = useMemo(
+    () => [
+      {
+        key: "name",
+        header: "Employee",
+        render: (row) => (
+          <div className="fiori-primary-cell">
+            <strong>{row.name || "Unnamed employee"}</strong>
+            <span>{row.email || "No email available"}</span>
+          </div>
+        ),
+      },
+      { key: "department", header: "Department" },
+      { key: "designation", header: "Designation" },
+      { key: "primaryProject", header: "Project" },
+      { key: "dateOfJoining", header: "Joining Date", render: (row) => formatDate(row.dateOfJoining) },
+      { key: "status", header: "Status", render: (row) => (row.is_active === false ? "Inactive" : "Active") },
+      {
+        key: "actions",
+        header: "Actions",
+        render: (row) => (
+          <div className="fiori-table-actions">
+            <button className="fiori-button secondary" onClick={() => onNavigateToProfile(row._id)}>
+              Open
+            </button>
+            {isAdmin ? (
+              <button
+                className={`fiori-button secondary ${row.is_active === false ? "" : "danger"}`}
+                disabled={actionLoadingId === row._id}
+                onClick={() => handleActiveToggle(row._id, row.is_active === false)}
+              >
+                {actionLoadingId === row._id ? "Updating..." : row.is_active === false ? "Mark active" : "Mark inactive"}
+              </button>
+            ) : null}
+          </div>
+        ),
+      },
+    ],
+    [actionLoadingId, handleActiveToggle, isAdmin, onNavigateToProfile]
   );
 
-  const filteredEmployees = useMemo(() => {
-    return employees.filter((employee) => {
-      const matchesSearch =
-        employee.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        employee.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        employee.designation?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        employee.department?.toLowerCase().includes(searchTerm.toLowerCase());
+  const activeCount = employees.filter((employee) => employee.is_active !== false).length;
 
-      const matchesDepartment =
-        filterDepartment === "All" || employee.department === filterDepartment;
-
-      const isActive = employee.is_active !== false;
-      const matchesStatus =
-        filterStatus === "All" ||
-        (filterStatus === "Active" && isActive) ||
-        (filterStatus === "Inactive" && !isActive);
-
-      return matchesSearch && matchesDepartment && matchesStatus;
+  const handleExport = async (format) => {
+    const params = new URLSearchParams({
+      page: "1",
+      limit: String(Math.max(total, PAGE_SIZE)),
+      requester_id: user?.id || "",
+      sort_by: sortBy,
+      order,
     });
-  }, [employees, filterDepartment, filterStatus, searchTerm]);
+    if (searchTerm) params.set("search", searchTerm);
+    if (projectId !== "All") params.set("project_id", projectId);
+    if (joiningStart) params.set("joining_from", joiningStart);
+    if (joiningEnd) params.set("joining_to", joiningEnd);
 
-  const downloadCSV = () => {
-    const formatDateForCSV = (dateValue) => {
-      if (!dateValue) return "";
-
-      try {
-        let date;
-
-        if (typeof dateValue === "string") {
-          date = new Date(dateValue.replace("Z", "").replace(/\.\d{3}/, ""));
-        } else if (dateValue.$date) {
-          date = new Date(dateValue.$date);
-        } else {
-          date = new Date(dateValue);
-        }
-
-        if (Number.isNaN(date.getTime())) {
-          return "";
-        }
-
-        const day = String(date.getDate()).padStart(2, "0");
-        const month = String(date.getMonth() + 1).padStart(2, "0");
-        const year = date.getFullYear();
-
-        return `${day}/${month}/${year}`;
-      } catch (error) {
-        console.error("Date formatting error:", error);
-        return "";
-      }
-    };
-
-    const csvHeaders = [
-      "Employee ID",
-      "Name",
-      "Email",
-      "Designation",
-      "Department",
-      "Role",
-      "Shift Timings",
-      "Date of Joining",
-      "Reports To",
-      "Status",
-    ];
-
-    const csvRows = filteredEmployees.map((employee) => [
-      employee.employeeId || employee._id,
-      employee.name || "",
-      employee.email || "",
-      employee.designation || "",
-      employee.department || "",
-      employee.role || "Employee",
-      employee.shiftTimings || "",
-      formatDateForCSV(employee.dateOfJoining),
-      employee.reportsToEmail || "",
-      employee.is_active !== false ? "Active" : "Inactive",
-    ]);
-
-    const csvContent = [
-      csvHeaders.join(","),
-      ...csvRows.map((row) => row.map((cell) => `"${cell}"`).join(",")),
-    ].join("\n");
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const response = await axios.get(`${process.env.REACT_APP_BACKEND_URL}/api/employees`, { params });
+    const headers = ["Name", "Email", "Department", "Designation", "Project", "Joining Date", "Status"];
+    const rows = (response.data.items || []).map((row) =>
+      [row.name, row.email, row.department, row.designation, row.primaryProject, formatDate(row.dateOfJoining), row.is_active === false ? "Inactive" : "Active"]
+    );
+    const payload = [headers.join(","), ...rows.map((row) => row.map((cell) => `"${cell || ""}"`).join(","))].join("\n");
+    const blob = new Blob([payload], { type: format === "excel" ? "application/vnd.ms-excel" : "text/csv;charset=utf-8;" });
+    const href = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-
-    link.setAttribute("href", url);
-    link.setAttribute("download", `employees_${new Date().toISOString().split("T")[0]}.csv`);
-    link.style.visibility = "hidden";
-
+    link.href = href;
+    link.download = `employees_${new Date().toISOString().split("T")[0]}.${format === "excel" ? "xls" : "csv"}`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(href);
   };
 
-  if (loading) {
+  if (!isAdmin && user?.role !== "Manager") {
     return (
       <section className="employee-directory">
-        <div className="fiori-loading-card">
-          <Users size={28} />
+        <div className="admin-empty-state">
+          <UserRound size={28} />
           <div>
-            <strong>Loading employee directory</strong>
-            <p>Preparing workforce and reporting information.</p>
+            <strong>Employee directory is not available for this role</strong>
+            <p>Managers and admins can access the structured employee listing.</p>
           </div>
         </div>
       </section>
@@ -205,21 +170,18 @@ const EmployeeList = ({ user, onNavigateToProfile, isAdmin = false }) => {
     <section className="employee-directory">
       <header className="employee-directory-hero">
         <div>
-          <div className="admin-section-overline">
-            {isAdmin ? "Enterprise Directory" : "Team Directory"}
-          </div>
+          <div className="admin-section-overline">{isAdmin ? "Enterprise Directory" : "Team Directory"}</div>
           <h1>{isAdmin ? "Employee Directory" : "Team Members"}</h1>
-          <p>
-            {isAdmin
-              ? "Review the full workforce directory, keep employee records visible, and move quickly into individual profiles."
-              : "Review your reporting structure, filter your team by department or status, and open profiles from one place."}
-          </p>
+          <p>Search by name or email, filter by project and joining date, and page through employees without loading unnecessary data.</p>
         </div>
-
         <div className="employee-directory-hero-actions">
-          <button className="fiori-button secondary" onClick={downloadCSV}>
+          <button className="fiori-button secondary" onClick={() => handleExport("csv")}>
             <Download size={16} />
-            <span>Export current view</span>
+            <span>CSV</span>
+          </button>
+          <button className="fiori-button secondary" onClick={() => handleExport("excel")}>
+            <Download size={16} />
+            <span>Excel</span>
           </button>
         </div>
       </header>
@@ -227,40 +189,27 @@ const EmployeeList = ({ user, onNavigateToProfile, isAdmin = false }) => {
       <div className="employee-directory-summary">
         <article className="fiori-stat-card">
           <div className="fiori-stat-topline">
-            <span className="fiori-stat-label">{isAdmin ? "Total Workforce" : "Team Size"}</span>
+            <span className="fiori-stat-label">Employees</span>
             <Users size={18} />
           </div>
-          <div className="fiori-stat-value">{stats.total}</div>
-          <div className="fiori-stat-note">
-            {isAdmin ? "Employees available in the HRMS directory" : "Direct reports in your reporting line"}
-          </div>
+          <div className="fiori-stat-value">{total}</div>
+          <div className="fiori-stat-note">Records matching the current server-side filters</div>
         </article>
-
         <article className="fiori-stat-card">
           <div className="fiori-stat-topline">
-            <span className="fiori-stat-label">Active Members</span>
+            <span className="fiori-stat-label">Active</span>
             <UserCheck size={18} />
           </div>
-          <div className="fiori-stat-value">{stats.active}</div>
-          <div className="fiori-stat-note">Profiles currently marked active</div>
+          <div className="fiori-stat-value">{activeCount}</div>
+          <div className="fiori-stat-note">Employees active on the current page</div>
         </article>
-
         <article className="fiori-stat-card">
           <div className="fiori-stat-topline">
             <span className="fiori-stat-label">Departments</span>
             <Building2 size={18} />
           </div>
-          <div className="fiori-stat-value">{Math.max(departments.length - 1, 0)}</div>
-          <div className="fiori-stat-note">Distinct departments in the current scope</div>
-        </article>
-
-        <article className="fiori-stat-card">
-          <div className="fiori-stat-topline">
-            <span className="fiori-stat-label">Filtered View</span>
-            <Filter size={18} />
-          </div>
-          <div className="fiori-stat-value">{filteredEmployees.length}</div>
-          <div className="fiori-stat-note">Employees matching the active filters</div>
+          <div className="fiori-stat-value">{filterOptions.departments.length}</div>
+          <div className="fiori-stat-note">Distinct departments available in the filter set</div>
         </article>
       </div>
 
@@ -268,7 +217,7 @@ const EmployeeList = ({ user, onNavigateToProfile, isAdmin = false }) => {
         <div className="fiori-panel-header">
           <div>
             <h3>Filters</h3>
-            <p>Search and narrow the directory without leaving the workspace</p>
+            <p>Search by employee name or email, then narrow the results by project and joining date range.</p>
           </div>
         </div>
 
@@ -277,148 +226,62 @@ const EmployeeList = ({ user, onNavigateToProfile, isAdmin = false }) => {
             <span>Search</span>
             <div className="employee-filter-input-shell">
               <Search size={16} />
-              <input
-                className="input"
-                placeholder="Search by name, email, designation, or department"
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-              />
+              <input className="input" value={searchTerm} onChange={(event) => { setSearchTerm(event.target.value); setPage(1); }} placeholder="Search by name or email" />
             </div>
           </label>
 
           <label className="employee-filter-field">
-            <span>Department</span>
-            <select
-              className="input"
-              value={filterDepartment}
-              onChange={(event) => setFilterDepartment(event.target.value)}
-            >
-              {departments.map((department) => (
-                <option key={department} value={department}>
-                  {department}
-                </option>
+            <span>Project</span>
+            <select className="input" value={projectId} onChange={(event) => { setProjectId(event.target.value); setPage(1); }}>
+              <option value="All">All</option>
+              {filterOptions.projects.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
           </label>
 
           <label className="employee-filter-field">
-            <span>Status</span>
-            <select
-              className="input"
-              value={filterStatus}
-              onChange={(event) => setFilterStatus(event.target.value)}
-            >
-              <option value="All">All</option>
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
+            <span>Joining From</span>
+            <input className="input" type="date" value={joiningStart} onChange={(event) => { setJoiningStart(event.target.value); setPage(1); }} />
+          </label>
+
+          <label className="employee-filter-field">
+            <span>Joining To</span>
+            <input className="input" type="date" value={joiningEnd} onChange={(event) => { setJoiningEnd(event.target.value); setPage(1); }} />
+          </label>
+
+          <label className="employee-filter-field">
+            <span>Sort</span>
+            <select className="input" value={`${sortBy}:${order}`} onChange={(event) => {
+              const [nextSortBy, nextOrder] = event.target.value.split(":");
+              setSortBy(nextSortBy);
+              setOrder(nextOrder);
+            }}>
+              <option value="name:asc">Name A-Z</option>
+              <option value="name:desc">Name Z-A</option>
+              <option value="joining_date:desc">Joining date newest</option>
+              <option value="joining_date:asc">Joining date oldest</option>
             </select>
           </label>
         </div>
       </section>
 
-      {filteredEmployees.length === 0 ? (
-        <div className="admin-empty-state">
-          <UserRound size={28} />
-          <div>
-            <strong>
-              {searchTerm || filterDepartment !== "All" || filterStatus !== "All"
-                ? "No employees match the current filters"
-                : "No employees available"}
-            </strong>
-            <p>Adjust the filters or search terms to expand the directory view.</p>
-          </div>
-        </div>
-      ) : (
-        <div className="employee-directory-grid">
-          {filteredEmployees.map((employee) => {
-            const isActive = employee.is_active !== false;
-            return (
-              <article
-                key={employee._id}
-                className="employee-directory-card"
-                onClick={() => onNavigateToProfile(employee._id)}
-              >
-                <div className="employee-card-header">
-                  <div className="employee-card-identity">
-                    <div className="employee-card-avatar-wrap">
-                      {employee.photoUrl ? (
-                        <img
-                          src={employee.photoUrl}
-                          alt={employee.name || "Employee"}
-                          className="employee-card-avatar"
-                        />
-                      ) : (
-                        <div className="employee-card-avatar employee-card-avatar-fallback">
-                          {employee.name?.charAt(0) || "E"}
-                        </div>
-                      )}
-                      <div className="employee-card-leave-status">
-                        <LeaveStatusDot userId={employee._id} size={10} />
-                      </div>
-                    </div>
+      <DataTable
+        columns={columns}
+        rows={employees}
+        loading={loading}
+        page={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        emptyTitle="No employees match the current filters"
+        emptyDescription="Try widening the search, department, project, or joining date range."
+      />
 
-                    <div>
-                      <h4>{employee.name || "Unnamed employee"}</h4>
-                      <p>{employee.designation || "Designation not available"}</p>
-                    </div>
-                  </div>
-
-                  <div className="employee-card-badges">
-                    <span className={`fiori-status-pill ${isActive ? "is-approved" : "is-rejected"}`}>
-                      {isActive ? "Active" : "Inactive"}
-                    </span>
-                    {employee.role === "Admin" && (
-                      <span className="fiori-status-pill is-neutral">Admin</span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="employee-card-details">
-                  <div className="employee-card-detail">
-                    <Mail size={15} />
-                    <span>{employee.email || "No email available"}</span>
-                  </div>
-                  <div className="employee-card-detail">
-                    <Building2 size={15} />
-                    <span>{employee.department || "Unassigned department"}</span>
-                  </div>
-                  <div className="employee-card-detail">
-                    <ShieldCheck size={15} />
-                    <span>{employee.role || "Employee"}</span>
-                  </div>
-                </div>
-
-                <div className="employee-card-footer">
-                  <div className="employee-card-link">Open employee profile</div>
-
-                  {isAdmin && (
-                    <button
-                      className={`fiori-button secondary ${isActive ? "danger" : ""}`}
-                      disabled={actionLoadingId === employee._id}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleActiveToggle(employee._id, !isActive);
-                      }}
-                    >
-                      {actionLoadingId === employee._id
-                        ? "Updating..."
-                        : isActive
-                          ? "Mark inactive"
-                          : "Mark active"}
-                    </button>
-                  )}
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      )}
-
-      {message && (
+      {message ? (
         <div className="admin-toast is-error" style={{ position: "static", maxWidth: "100%" }}>
           {message}
         </div>
-      )}
+      ) : null}
     </section>
   );
 };
