@@ -5,10 +5,11 @@ import {
   CalendarDays,
   FileText,
   Filter,
-  Search,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
+import ValueHelpSelect from "./ValueHelpSelect";
+import ValueHelpSearch from "./ValueHelpSearch";
 
 const policies = [
   {
@@ -112,6 +113,12 @@ const policies = [
 
 const categories = ["All", "HR", "Finance", "Operations", "General", "Compliance", "Security"];
 const statuses = ["All", "Active", "Draft", "Review"];
+const policySearchSuggestions = policies.flatMap((policy) => [
+  { value: policy.id, label: policy.id, description: policy.title },
+  { value: policy.title, label: policy.title, description: policy.category },
+  { value: policy.category, label: policy.category, description: "Category" },
+  { value: policy.status, label: policy.status, description: "Status" },
+]);
 
 const statusToneMap = {
   Active: "is-approved",
@@ -429,46 +436,38 @@ const Policy = () => {
         <div className="policy-filter-grid">
           <label className="employee-filter-field employee-filter-search">
             <span>Search</span>
-            <div className="employee-filter-input-shell">
-              <Search size={16} />
-              <input
-                className="input"
-                type="text"
-                placeholder="Search by ID, title, or description"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-              />
-            </div>
+            <ValueHelpSearch
+              value={searchQuery}
+              onChange={setSearchQuery}
+              suggestions={policySearchSuggestions}
+              placeholder="Search by ID, title, or description"
+            />
           </label>
 
           <label className="employee-filter-field">
             <span>Category</span>
-            <select
-              className="input"
+            <ValueHelpSelect
               value={selectedCategory}
-              onChange={(event) => setSelectedCategory(event.target.value)}
-            >
-              {categories.map((category) => (
-                <option key={category} value={category}>
-                  {category === "All" ? "All categories" : category}
-                </option>
-              ))}
-            </select>
+              onChange={setSelectedCategory}
+              searchPlaceholder="Search categories"
+              options={categories.map((category) => ({
+                value: category,
+                label: category === "All" ? "All categories" : category,
+              }))}
+            />
           </label>
 
           <label className="employee-filter-field">
             <span>Status</span>
-            <select
-              className="input"
+            <ValueHelpSelect
               value={selectedStatus}
-              onChange={(event) => setSelectedStatus(event.target.value)}
-            >
-              {statuses.map((status) => (
-                <option key={status} value={status}>
-                  {status === "All" ? "All statuses" : status}
-                </option>
-              ))}
-            </select>
+              onChange={setSelectedStatus}
+              searchPlaceholder="Search statuses"
+              options={statuses.map((status) => ({
+                value: status,
+                label: status === "All" ? "All statuses" : status,
+              }))}
+            />
           </label>
         </div>
       </section>

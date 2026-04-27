@@ -10,6 +10,7 @@ import {
   RefreshCw,
   Sparkles,
 } from "lucide-react";
+import ValueHelpSelect from "./ValueHelpSelect";
 
 const monthNames = [
   "January",
@@ -498,17 +499,13 @@ const Calendar = ({ user, setSection, navigationState }) => {
                   <ChevronLeft size={16} />
                   <span>{selectedYear - 1}</span>
                 </button>
-                <select
-                  className="input calendar-year-select"
+                <ValueHelpSelect
                   value={selectedYear}
-                  onChange={(event) => setSelectedYear(Number(event.target.value))}
-                >
-                  {yearOptions.map((year) => (
-                    <option key={year} value={year}>
-                      {year}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(value) => setSelectedYear(Number(value))}
+                  searchPlaceholder="Search years"
+                  style={{ width: 128 }}
+                  options={yearOptions.map((year) => ({ value: year, label: year }))}
+                />
                 <button className="fiori-button secondary" onClick={() => setSelectedYear(selectedYear + 1)}>
                   <span>{selectedYear + 1}</span>
                   <ChevronRight size={16} />

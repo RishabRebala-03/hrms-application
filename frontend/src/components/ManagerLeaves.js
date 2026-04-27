@@ -5,18 +5,35 @@ import {
   CalendarClock,
   CheckCircle2,
   ClipboardList,
-  Search,
   Send,
   ShieldAlert,
   Users,
   XCircle,
 } from "lucide-react";
+import ValueHelpSelect from "./ValueHelpSelect";
+import ValueHelpSearch from "./ValueHelpSearch";
 
 const statusToneMap = {
   Approved: "is-approved",
   Rejected: "is-rejected",
   Cancelled: "is-neutral",
   Pending: "is-pending",
+};
+
+const buildSearchSuggestions = (items) => {
+  const seen = new Set();
+  return items.flatMap((item) =>
+    [item.employee_name, item.employee_email, item.employee_designation, item.employee_department]
+      .filter(Boolean)
+      .map((value) => String(value).trim())
+      .filter((value) => {
+        const key = value.toLowerCase();
+        if (!value || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((value) => ({ value, label: value }))
+  );
 };
 
 const ManagerLeaves = ({ user }) => {
@@ -232,6 +249,7 @@ const ManagerLeaves = ({ user }) => {
       }
     });
   }, [pendingLeaves, searchTerm, sortBy]);
+  const searchSuggestions = useMemo(() => buildSearchSuggestions(pendingLeaves), [pendingLeaves]);
 
   const totalMyBalance = myBalance ? (myBalance.sick || 0) + (myBalance.planned || 0) : 0;
   const approvedHistory = myHistory.filter((item) => item.status === "Approved").length;
@@ -342,24 +360,26 @@ const ManagerLeaves = ({ user }) => {
           <div className="leave-filter-grid leave-filter-grid-compact manager-filter-grid">
             <label className="fiori-form-field">
               <span className="leave-field-label">Search</span>
-              <div className="leave-search-field">
-                <Search size={16} />
-                <input
-                  className="input"
-                  placeholder="Search by employee, email, designation, or department"
-                  value={searchTerm}
-                  onChange={(event) => setSearchTerm(event.target.value)}
-                />
-              </div>
+              <ValueHelpSearch
+                value={searchTerm}
+                onChange={setSearchTerm}
+                suggestions={searchSuggestions}
+                placeholder="Search by employee, email, designation, or department"
+              />
             </label>
             <label className="fiori-form-field">
               <span className="leave-field-label">Sort</span>
-              <select className="input" value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
-                <option value="newest">Newest first</option>
-                <option value="oldest">Oldest first</option>
-                <option value="name">Name A-Z</option>
-                <option value="department">Department A-Z</option>
-              </select>
+              <ValueHelpSelect
+                value={sortBy}
+                onChange={setSortBy}
+                searchPlaceholder="Search sort options"
+                options={[
+                  { value: "newest", label: "Newest first" },
+                  { value: "oldest", label: "Oldest first" },
+                  { value: "name", label: "Name A-Z" },
+                  { value: "department", label: "Department A-Z" },
+                ]}
+              />
             </label>
           </div>
 

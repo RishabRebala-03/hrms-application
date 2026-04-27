@@ -312,6 +312,74 @@ def place_order():
         return jsonify({"error": str(e)}), 500
 
 
+@tea_coffee_bp.route("/admin/guest_order", methods=["POST"])
+@cross_origin()
+def place_guest_order():
+    try:
+        data = request.get_json() or {}
+        date = data.get("date")
+        beverage = (data.get("beverage") or "").strip().lower()
+        beverage_quantity = int(data.get("beverage_quantity") or 0)
+        snack_name = (data.get("snack_name") or "").strip()
+        snack_quantity = int(data.get("snack_quantity") or 0)
+        guest_name = (data.get("guest_name") or "Guest").strip() or "Guest"
+        notes = (data.get("notes") or "").strip()
+
+        if not date:
+            return jsonify({"error": "Date is required"}), 400
+
+        valid_choices = ["", "tea", "coffee", "milk"]
+        if beverage not in valid_choices:
+            return jsonify({"error": f"Invalid beverage choice: {beverage}"}), 400
+
+        if not beverage and not snack_name:
+            return jsonify({"error": "Select a beverage or enter a snack name"}), 400
+
+        if beverage and beverage_quantity <= 0:
+            return jsonify({"error": "Beverage quantity must be at least 1"}), 400
+
+        if snack_name and snack_quantity <= 0:
+            return jsonify({"error": "Snack quantity must be at least 1"}), 400
+
+        blocked = mongo.db.tea_coffee_blocked_dates.find_one({"date": date})
+        if blocked:
+            return jsonify({"error": f"Tea/Coffee unavailable on this date: {blocked.get('reason', 'Unavailable')}"}), 400
+
+        order_date = datetime.strptime(date, "%Y-%m-%d").date()
+        today = datetime.now().date()
+        if order_date < today:
+            return jsonify({"error": "Cannot place guest order for past dates"}), 400
+
+        order_data = {
+            "order_type": "guest",
+            "employee_id": f"guest-{datetime.utcnow().timestamp()}",
+            "employee_name": guest_name,
+            "employee_email": "",
+            "employee_department": "Guest",
+            "employee_designation": "Guest order",
+            "employee_role": "Guest",
+            "date": date,
+            "morning": beverage or None,
+            "evening": None,
+            "guest_beverage": beverage or None,
+            "guest_beverage_quantity": beverage_quantity if beverage else 0,
+            "snack_name": snack_name,
+            "snack_quantity": snack_quantity if snack_name else 0,
+            "notes": notes,
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow(),
+        }
+
+        result = mongo.db.tea_coffee_orders.insert_one(order_data)
+        order_data["_id"] = str(result.inserted_id)
+
+        return jsonify({"message": "Guest order placed successfully", "order": order_data}), 201
+
+    except Exception as e:
+        print("❌ Error placing guest order:", str(e))
+        return jsonify({"error": str(e)}), 500
+
+
 
 # ------------------------------------------
 # ADMIN – GET ORDERS IN DATE RANGE WITH EMPLOYEE DETAILS

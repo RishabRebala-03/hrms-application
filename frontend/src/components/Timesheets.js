@@ -1,12 +1,12 @@
 // Timesheets.js — Production-grade, matches the existing codebase architecture
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { Children, useState, useMemo, useEffect, useCallback } from 'react';
 import {
   format, startOfMonth, endOfMonth, eachDayOfInterval,
-  addDays, parseISO, subMonths,
+  parseISO, subMonths,
 } from 'date-fns';
 import {
-  ChevronDown, Plus, Trash2, Coffee, Send, AlertCircle,
-  CheckCircle, CheckCircle2, XCircle, Clock, Eye, Search,
+  Plus, Trash2, Send, AlertCircle,
+  CheckCircle, CheckCircle2, XCircle, Clock, Eye,
   Download, TrendingUp, BarChart3, Building2, UserCheck,
   FileText, Calendar, Users, RefreshCw,
 } from 'lucide-react';
@@ -14,6 +14,8 @@ import {
   BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
+import ValueHelpSelect from './ValueHelpSelect';
+import ValueHelpSearch from './ValueHelpSearch';
 
 const API_BASE = process.env.REACT_APP_BACKEND_URL
   ? `${process.env.REACT_APP_BACKEND_URL}/api`
@@ -203,38 +205,75 @@ function StatusBadge({ status }) {
 }
 
 function SelectWrap({ value, onChange, children, style = {} }) {
+  const options = Children.toArray(children).map((child) => ({
+    value: String(child.props.value ?? ''),
+    label: child.props.children,
+  }));
+
   return (
-    <div style={{ ...S.selectWrap, ...style }}>
-      <select value={value} onChange={onChange} style={S.select}>{children}</select>
-      <ChevronDown size={14} style={S.chevron} />
-    </div>
+    <ValueHelpSelect
+      value={value}
+      onChange={(nextValue) => onChange({ target: { value: nextValue } })}
+      options={options}
+      style={{ minWidth: '180px', ...style }}
+      searchPlaceholder="Search suggestions"
+    />
   );
 }
 
 function ChargeCodeSelector({ chargeCodes, selectedId, onChange, disabled }) {
   return (
-    <div style={S.selectWrap}>
-      <select
-        value={selectedId}
-        onChange={(e) => onChange(e.target.value)}
-        disabled={disabled}
-        style={{
-          ...S.select, width: '100%',
-          opacity: disabled ? 0.5 : 1,
-          cursor:  disabled ? 'not-allowed' : 'pointer',
-        }}
-      >
-        <option value="">Select charge code</option>
-        {chargeCodes.map((cc) => (
-          <option key={cc._id} value={cc.charge_code_id}>
-            {cc.charge_code} – {cc.charge_code_name}
-          </option>
-        ))}
-      </select>
-      <ChevronDown size={14} style={S.chevron} />
-    </div>
+    <ValueHelpSelect
+      value={selectedId}
+      onChange={onChange}
+      disabled={disabled}
+      placeholder="Select charge code"
+      searchPlaceholder="Search charge codes"
+      options={[
+        { value: '', label: 'Select charge code' },
+        ...chargeCodes.map((cc) => ({
+          value: cc.charge_code_id,
+          label: `${cc.charge_code} - ${cc.charge_code_name}`,
+          description: cc.charge_code_id,
+        })),
+      ]}
+    />
   );
 }
+
+const blankDateRange = { start: '', end: '' };
+
+const isTimesheetInRange = (timesheet, dateRange) => {
+  if (!dateRange.start && !dateRange.end) return true;
+  const start = timesheet.period_start?.slice(0, 10);
+  const end = timesheet.period_end?.slice(0, 10) || start;
+  if (!start) return false;
+  if (dateRange.start && end < dateRange.start) return false;
+  if (dateRange.end && start > dateRange.end) return false;
+  return true;
+};
+
+const timesheetHasEntryType = (timesheet, typeFilter) => {
+  if (typeFilter === 'all') return true;
+  return (timesheet.entries || []).some((entry) => (entry.entry_type || 'work') === typeFilter);
+};
+
+const uniqSuggestions = (items, fields) => {
+  const seen = new Set();
+  return items.flatMap((item) =>
+    fields
+      .map((field) => {
+        const value = typeof field === 'function' ? field(item) : item[field];
+        if (!value) return null;
+        const label = String(value).trim();
+        const key = label.toLowerCase();
+        if (!label || seen.has(key)) return null;
+        seen.add(key);
+        return { value: label, label };
+      })
+      .filter(Boolean)
+  );
+};
 
 // ─── TimesheetTabBar ──────────────────────────────────────────────────────────
 function TimesheetTabBar({ activeTab, setActiveTab, user }) {
@@ -1423,6 +1462,8 @@ function TimesheetFullPageView({ timesheet, onClose, onApprove, onReject, user, 
 function Approvals({ user }) {
   const [searchTerm,          setSearchTerm]          = useState('');
   const [statusFilter,        setStatusFilter]        = useState('pending_lead');
+  const [typeFilter,          setTypeFilter]          = useState('all');
+  const [dateRange,           setDateRange]           = useState(blankDateRange);
   const [selectedTimesheets,  setSelectedTimesheets]  = useState([]);
   const [approvals,           setApprovals]           = useState([]);
   const [loading,             setLoading]             = useState(false);
@@ -1479,7 +1520,7 @@ function Approvals({ user }) {
     const q     = searchTerm.toLowerCase();
     const matchSearch = name.includes(q) || email.includes(q);
     const matchStatus = statusFilter === 'all' || a.status === statusFilter;
-    return matchSearch && matchStatus;
+    return matchSearch && matchStatus && timesheetHasEntryType(a, typeFilter) && isTimesheetInRange(a, dateRange);
   });
 
   const pendingCount  = approvals.filter((a) => ['pending_lead', 'pending_manager'].includes(a.status)).length;
@@ -1487,6 +1528,10 @@ function Approvals({ user }) {
   const pendingHours  = approvals
     .filter((a) => ['pending_lead', 'pending_manager'].includes(a.status))
     .reduce((s, a) => s + (a.total_hours || 0), 0);
+  const searchSuggestions = useMemo(
+    () => uniqSuggestions(approvals, ['employee_name', 'employee_email']),
+    [approvals]
+  );
 
   const handleApprove = async (id, status) => {
     if (!window.confirm('Approve this timesheet?')) return;
@@ -1563,15 +1608,13 @@ function Approvals({ user }) {
           <div style={{ ...S.card, ...S.cardPadSm, marginBottom: '20px' }}>
             <div style={S.rowBetween}>
               <div style={S.rowGap4}>
-                <div style={S.searchWrap}>
-                  <Search size={14} style={S.searchIcon} />
-                  <input
-                    placeholder="Search by name or email…"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    style={{ ...S.input, paddingLeft: '32px', width: '220px' }}
-                  />
-                </div>
+                <ValueHelpSearch
+                  value={searchTerm}
+                  onChange={setSearchTerm}
+                  suggestions={searchSuggestions}
+                  placeholder="Search by name or email..."
+                  style={{ width: '260px' }}
+                />
                 <SelectWrap value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                   <option value="all">All Statuses</option>
                   <option value="pending_lead">Pending Approval</option>
@@ -1580,6 +1623,26 @@ function Approvals({ user }) {
                   <option value="rejected_by_lead">Rejected</option>
                   <option value="rejected_by_manager">Rejected by Manager (Legacy)</option>
                 </SelectWrap>
+                <SelectWrap value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+                  <option value="all">All Types</option>
+                  <option value="work">Work</option>
+                  <option value="holiday">Holiday</option>
+                  <option value="leave">Leave</option>
+                </SelectWrap>
+                <input
+                  type="date"
+                  value={dateRange.start}
+                  onChange={(e) => setDateRange((previous) => ({ ...previous, start: e.target.value }))}
+                  style={S.input}
+                  title="Period from"
+                />
+                <input
+                  type="date"
+                  value={dateRange.end}
+                  onChange={(e) => setDateRange((previous) => ({ ...previous, end: e.target.value }))}
+                  style={S.input}
+                  title="Period to"
+                />
                 <button onClick={loadApprovals} style={S.btnSecondary} title="Refresh">
                   <RefreshCw size={14} />
                 </button>
@@ -1797,6 +1860,8 @@ function Approvals({ user }) {
 function History({ user, onNavigate }) {
   const [searchQuery,      setSearchQuery]      = useState('');
   const [statusFilter,     setStatusFilter]     = useState('all');
+  const [typeFilter,       setTypeFilter]       = useState('all');
+  const [dateRange,        setDateRange]        = useState(blankDateRange);
   const [submissions,      setSubmissions]      = useState([]);
   const [loading,          setLoading]          = useState(false);
   const [viewingTimesheet, setViewingTimesheet] = useState(null);
@@ -1829,8 +1894,16 @@ function History({ user, onNavigate }) {
       || (statusFilter === 'pending'  && ['pending_lead', 'pending_manager'].includes(s.status))
       || (statusFilter === 'approved' && s.status === 'approved')
       || (statusFilter === 'rejected' && s.status?.startsWith('rejected'));
-    return matchSearch && matchStatus;
+    return matchSearch && matchStatus && timesheetHasEntryType(s, typeFilter) && isTimesheetInRange(s, dateRange);
   });
+  const searchSuggestions = useMemo(
+    () => uniqSuggestions(submissions, [
+      (item) => item.period_start
+        ? `${format(new Date(item.period_start), 'MMM d')} - ${format(new Date(item.period_end), 'MMM d, yyyy')}`
+        : '',
+    ]),
+    [submissions]
+  );
 
   return (
     <div style={S.page}>
@@ -1861,21 +1934,39 @@ function History({ user, onNavigate }) {
 
           <div style={{ ...S.card, overflow: 'hidden' }}>
             <div style={{ padding: '16px', borderBottom: `1px solid ${C.border}`, display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-              <div style={{ flex: 1, minWidth: '200px', position: 'relative' }}>
-                <Search size={14} style={S.searchIcon} />
-                <input
-                  placeholder="Search by period…"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  style={{ ...S.input, paddingLeft: '32px', width: '100%', boxSizing: 'border-box' }}
-                />
-              </div>
+              <ValueHelpSearch
+                value={searchQuery}
+                onChange={setSearchQuery}
+                suggestions={searchSuggestions}
+                placeholder="Search by period..."
+                style={{ flex: 1, minWidth: '220px' }}
+              />
               <SelectWrap value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                 <option value="all">All Statuses</option>
                 <option value="pending">Pending</option>
                 <option value="approved">Approved</option>
                 <option value="rejected">Rejected</option>
               </SelectWrap>
+              <SelectWrap value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+                <option value="all">All Types</option>
+                <option value="work">Work</option>
+                <option value="holiday">Holiday</option>
+                <option value="leave">Leave</option>
+              </SelectWrap>
+              <input
+                type="date"
+                value={dateRange.start}
+                onChange={(e) => setDateRange((previous) => ({ ...previous, start: e.target.value }))}
+                style={S.input}
+                title="Period from"
+              />
+              <input
+                type="date"
+                value={dateRange.end}
+                onChange={(e) => setDateRange((previous) => ({ ...previous, end: e.target.value }))}
+                style={S.input}
+                title="Period to"
+              />
             </div>
 
             <div style={S.tableScroll}>
@@ -2190,6 +2281,8 @@ function TeamTimesheets({ user }) {
   const [loading,          setLoading]          = useState(false);
   const [searchTerm,       setSearchTerm]       = useState('');
   const [statusFilter,     setStatusFilter]     = useState('all');
+  const [typeFilter,       setTypeFilter]       = useState('all');
+  const [dateRange,        setDateRange]        = useState(blankDateRange);
   const [viewingTimesheet, setViewingTimesheet] = useState(null);
 
   const ccLookup  = useCcLookup();
@@ -2209,7 +2302,9 @@ function TeamTimesheets({ user }) {
     const email = (ts.employee_email || '').toLowerCase();
     const q     = searchTerm.toLowerCase();
     return (name.includes(q) || email.includes(q))
-      && (statusFilter === 'all' || ts.status === statusFilter);
+      && (statusFilter === 'all' || ts.status === statusFilter)
+      && timesheetHasEntryType(ts, typeFilter)
+      && isTimesheetInRange(ts, dateRange);
   });
 
   const stats = {
@@ -2218,6 +2313,10 @@ function TeamTimesheets({ user }) {
     approved: timesheets.filter((t) => t.status === 'approved').length,
     rejected: timesheets.filter((t) => t.status?.startsWith('rejected')).length,
   };
+  const searchSuggestions = useMemo(
+    () => uniqSuggestions(timesheets, ['employee_name', 'employee_email']),
+    [timesheets]
+  );
 
   return (
     <div style={S.page}>
@@ -2245,15 +2344,13 @@ function TeamTimesheets({ user }) {
 
           <div style={{ ...S.card, ...S.cardPadSm, marginBottom: '20px' }}>
             <div style={S.rowGap4}>
-              <div style={{ flex: 1, position: 'relative' }}>
-                <Search size={14} style={S.searchIcon} />
-                <input
-                  placeholder="Search by employee name or email…"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  style={{ ...S.input, paddingLeft: '32px', width: '100%', boxSizing: 'border-box' }}
-                />
-              </div>
+              <ValueHelpSearch
+                value={searchTerm}
+                onChange={setSearchTerm}
+                suggestions={searchSuggestions}
+                placeholder="Search by employee name or email..."
+                style={{ flex: 1, minWidth: '240px' }}
+              />
               <SelectWrap value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                 <option value="all">All Statuses</option>
                 <option value="pending_lead">Pending Approval</option>
@@ -2262,6 +2359,26 @@ function TeamTimesheets({ user }) {
                 <option value="rejected_by_lead">Rejected</option>
                 <option value="rejected_by_manager">Rejected by Manager (Legacy)</option>
               </SelectWrap>
+              <SelectWrap value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+                <option value="all">All Types</option>
+                <option value="work">Work</option>
+                <option value="holiday">Holiday</option>
+                <option value="leave">Leave</option>
+              </SelectWrap>
+              <input
+                type="date"
+                value={dateRange.start}
+                onChange={(e) => setDateRange((previous) => ({ ...previous, start: e.target.value }))}
+                style={S.input}
+                title="Period from"
+              />
+              <input
+                type="date"
+                value={dateRange.end}
+                onChange={(e) => setDateRange((previous) => ({ ...previous, end: e.target.value }))}
+                style={S.input}
+                title="Period to"
+              />
             </div>
           </div>
 
@@ -2347,6 +2464,8 @@ function AdminTimesheets() {
   const [loading,          setLoading]          = useState(false);
   const [searchTerm,       setSearchTerm]       = useState('');
   const [statusFilter,     setStatusFilter]     = useState('all');
+  const [typeFilter,       setTypeFilter]       = useState('all');
+  const [dateRange,        setDateRange]        = useState(blankDateRange);
   const [selectedEmployee, setSelectedEmployee] = useState('all');
   const [viewingTimesheet, setViewingTimesheet] = useState(null);
   const [fullPageView,     setFullPageView]     = useState(false);
@@ -2373,7 +2492,9 @@ function AdminTimesheets() {
     const q     = searchTerm.toLowerCase();
     return (name.includes(q) || email.includes(q))
       && (statusFilter     === 'all' || ts.status      === statusFilter)
-      && (selectedEmployee === 'all' || ts.employee_id === selectedEmployee);
+      && (selectedEmployee === 'all' || ts.employee_id === selectedEmployee)
+      && timesheetHasEntryType(ts, typeFilter)
+      && isTimesheetInRange(ts, dateRange);
   });
 
   const stats = {
@@ -2383,6 +2504,10 @@ function AdminTimesheets() {
     rejected: timesheets.filter((t) => t.status?.startsWith('rejected')).length,
     hours:    timesheets.reduce((s, t) => s + (t.total_hours || 0), 0),
   };
+  const searchSuggestions = useMemo(
+    () => uniqSuggestions(timesheets, ['employee_name', 'employee_email']),
+    [timesheets]
+  );
 
   return (
     <div style={S.page}>
@@ -2411,15 +2536,13 @@ function AdminTimesheets() {
 
           <div style={{ ...S.card, ...S.cardPadSm, marginBottom: '20px' }}>
             <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
-              <div style={{ flex: 1, minWidth: '240px', position: 'relative' }}>
-                <Search size={14} style={S.searchIcon} />
-                <input
-                  placeholder="Search by employee name or email…"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  style={{ ...S.input, paddingLeft: '32px', width: '100%', boxSizing: 'border-box' }}
-                />
-              </div>
+              <ValueHelpSearch
+                value={searchTerm}
+                onChange={setSearchTerm}
+                suggestions={searchSuggestions}
+                placeholder="Search by employee name or email..."
+                style={{ flex: 1, minWidth: '240px' }}
+              />
               <SelectWrap value={selectedEmployee} onChange={(e) => setSelectedEmployee(e.target.value)} style={{ minWidth: '180px' }}>
                 <option value="all">All Employees</option>
                 {employees.map((e) => (
@@ -2434,6 +2557,26 @@ function AdminTimesheets() {
                 <option value="rejected_by_lead">Rejected</option>
                 <option value="rejected_by_manager">Rejected by Manager (Legacy)</option>
               </SelectWrap>
+              <SelectWrap value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+                <option value="all">All Types</option>
+                <option value="work">Work</option>
+                <option value="holiday">Holiday</option>
+                <option value="leave">Leave</option>
+              </SelectWrap>
+              <input
+                type="date"
+                value={dateRange.start}
+                onChange={(e) => setDateRange((previous) => ({ ...previous, start: e.target.value }))}
+                style={S.input}
+                title="Period from"
+              />
+              <input
+                type="date"
+                value={dateRange.end}
+                onChange={(e) => setDateRange((previous) => ({ ...previous, end: e.target.value }))}
+                style={S.input}
+                title="Period to"
+              />
               <button onClick={() => alert('Exporting…')} style={S.btnPrimary}>
                 <Download size={14} /> Export
               </button>
@@ -2772,19 +2915,17 @@ function ChargeCodeAdmin({ user }) {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{ fontSize: '13px', color: C.textMid, fontWeight: '500' }}>Charge Code</label>
-                <div style={S.selectWrap}>
-                  <select
-                    value={selectedCode}
-                    onChange={(e) => setSelectedCode(e.target.value)}
-                    style={{ ...S.select, minWidth: '220px' }}
-                  >
-                    <option value="">Select Charge Code</option>
-                    {codes.map((c) => (
-                      <option key={c._id} value={c._id}>{c.code} – {c.name}</option>
-                    ))}
-                  </select>
-                  <ChevronDown size={14} style={S.chevron} />
-                </div>
+                <ValueHelpSelect
+                  value={selectedCode}
+                  onChange={setSelectedCode}
+                  placeholder="Select charge code"
+                  searchPlaceholder="Search charge codes"
+                  style={{ minWidth: '220px' }}
+                  options={[
+                    { value: '', label: 'Select Charge Code' },
+                    ...codes.map((c) => ({ value: c._id, label: `${c.code} - ${c.name}` })),
+                  ]}
+                />
                 <button
                   onClick={handleAssign}
                   disabled={loading}

@@ -8,18 +8,43 @@ import {
   ListChecks,
   Milk,
   RefreshCw,
-  Search,
+  Sandwich,
   ShieldBan,
   ShoppingBag,
   Users,
   X,
 } from "lucide-react";
+import ValueHelpSelect from "./ValueHelpSelect";
+import ValueHelpSearch from "./ValueHelpSearch";
 import "../App.css";
 
 const API_BASE = `${process.env.REACT_APP_BACKEND_URL}/api/tea_coffee`;
 const MORNING_CUTOFF = "10:30";
 const EVENING_CUTOFF = "14:30";
 const BEVERAGE_OPTIONS = ["tea", "coffee", "milk"];
+const ADMIN_TABS = [
+  { key: "daily", label: "Daily demand" },
+  { key: "guest", label: "Guest orders" },
+  { key: "history", label: "Order history" },
+  { key: "availability", label: "Availability" },
+];
+
+const buildSearchSuggestions = (items, fields) => {
+  const seen = new Set();
+  return items.flatMap((item) =>
+    fields
+      .map((field) => item[field])
+      .filter(Boolean)
+      .map((value) => String(value).trim())
+      .filter((value) => {
+        const key = value.toLowerCase();
+        if (!value || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((value) => ({ value, label: value }))
+  );
+};
 
 const toISODate = (date) => {
   const year = date.getFullYear();
@@ -401,9 +426,20 @@ const AdminView = ({
   historyFilters,
   onHistoryFilterChange,
   onExportHistory,
+  onGuestOrder,
 }) => {
   const [showYearlyCalendar, setShowYearlyCalendar] = useState(false);
   const [selectedDateForList, setSelectedDateForList] = useState(null);
+  const [activeTab, setActiveTab] = useState("daily");
+  const [guestOrder, setGuestOrder] = useState({
+    date: toISODate(new Date()),
+    guest_name: "Guest",
+    beverage: "tea",
+    beverage_quantity: 1,
+    snack_name: "",
+    snack_quantity: 0,
+    notes: "",
+  });
 
   const getStats = useCallback(
     (date) => {
@@ -411,9 +447,10 @@ const AdminView = ({
 
       return dayOrders.reduce(
         (accumulator, order) => {
-          if (order.morning === "tea") accumulator.morningTea += 1;
-          if (order.morning === "coffee") accumulator.morningCoffee += 1;
-          if (order.morning === "milk") accumulator.morningMilk += 1;
+          const beverageCount = order.order_type === "guest" ? Number(order.guest_beverage_quantity || 1) : 1;
+          if (order.morning === "tea") accumulator.morningTea += beverageCount;
+          if (order.morning === "coffee") accumulator.morningCoffee += beverageCount;
+          if (order.morning === "milk") accumulator.morningMilk += beverageCount;
           if (order.evening === "tea") accumulator.eveningTea += 1;
           if (order.evening === "coffee") accumulator.eveningCoffee += 1;
           if (order.evening === "milk") accumulator.eveningMilk += 1;
@@ -457,6 +494,12 @@ const AdminView = ({
     );
   }, [dates, getStats, isBlocked]);
 
+  const guestOrders = useMemo(
+    () => historyOrders.filter((order) => order.order_type === "guest"),
+    [historyOrders]
+  );
+  const snackCount = guestOrders.reduce((sum, order) => sum + Number(order.snack_quantity || 0), 0);
+
   const filteredDates = useMemo(() => {
     return dates.filter((date) => {
       if (filters.dateFrom && date < filters.dateFrom) return false;
@@ -478,6 +521,17 @@ const AdminView = ({
     () => ["all", ...new Set(historyOrders.map((order) => order.employee_department).filter(Boolean))],
     [historyOrders]
   );
+  const historySearchSuggestions = useMemo(
+    () =>
+      buildSearchSuggestions(historyOrders, [
+        "employee_name",
+        "employee_email",
+        "employee_department",
+        "employee_designation",
+        "date",
+      ]),
+    [historyOrders]
+  );
 
   const filteredHistoryOrders = useMemo(() => {
     const search = (historyFilters.search || "").trim().toLowerCase();
@@ -492,7 +546,9 @@ const AdminView = ({
 
       if (historyFilters.beverageType !== "all") {
         const matchesBeverage =
-          order.morning === historyFilters.beverageType || order.evening === historyFilters.beverageType;
+          order.morning === historyFilters.beverageType ||
+          order.evening === historyFilters.beverageType ||
+          order.guest_beverage === historyFilters.beverageType;
         if (!matchesBeverage) return false;
       }
 
@@ -622,10 +678,27 @@ const AdminView = ({
             <span>Blocked days</span>
             <strong>{summaryStats.blockedDays}</strong>
           </div>
+          <div className="admin-hero-meta-item">
+            <span>Guest orders</span>
+            <strong>{guestOrders.length}</strong>
+          </div>
         </div>
       </header>
 
-      <section className="tea-summary-grid">
+      <nav className="page-subtab-strip" aria-label="Tea and coffee admin sections">
+        {ADMIN_TABS.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            className={`page-subtab-button ${activeTab === tab.key ? "is-active" : ""}`}
+            onClick={() => setActiveTab(tab.key)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </nav>
+
+      <section className="tea-summary-grid" style={{ display: activeTab === "daily" ? undefined : "none" }}>
         <article className="fiori-stat-card">
           <div className="fiori-stat-topline">
             <span className="fiori-stat-label">Service Window</span>
@@ -656,7 +729,7 @@ const AdminView = ({
         </article>
       </section>
 
-      <section className="fiori-panel">
+      <section className="fiori-panel" style={{ display: activeTab === "daily" ? undefined : "none" }}>
         <div className="fiori-panel-header">
           <div>
             <h3>Controls</h3>
@@ -701,23 +774,24 @@ const AdminView = ({
 
           <label className="employee-filter-field">
             <span>Beverage Type</span>
-            <select
-              className="input"
+            <ValueHelpSelect
               value={filters.beverageType}
-              onChange={(event) => onFilterChange("beverageType", event.target.value)}
-            >
-              <option value="all">All beverages</option>
-              <option value="tea">Tea</option>
-              <option value="coffee">Coffee</option>
-              <option value="milk">Milk</option>
-            </select>
+              onChange={(value) => onFilterChange("beverageType", value)}
+              searchPlaceholder="Search beverages"
+              options={[
+                { value: "all", label: "All beverages" },
+                { value: "tea", label: "Tea" },
+                { value: "coffee", label: "Coffee" },
+                { value: "milk", label: "Milk" },
+              ]}
+            />
           </label>
         </div>
       </section>
 
-      {filteredDates[0] ? <DayCard date={filteredDates[0]} large /> : null}
+      {activeTab === "daily" && filteredDates[0] ? <DayCard date={filteredDates[0]} large /> : null}
 
-      <section className="fiori-panel">
+      <section className="fiori-panel" style={{ display: activeTab === "daily" ? undefined : "none" }}>
         <div className="fiori-panel-header">
           <div>
             <h3>Upcoming Days</h3>
@@ -732,7 +806,125 @@ const AdminView = ({
         </div>
       </section>
 
-      <section className="fiori-panel">
+      <section className="fiori-panel" style={{ display: activeTab === "guest" ? undefined : "none" }}>
+        <div className="fiori-panel-header">
+          <div>
+            <h3>Guest Orders</h3>
+            <p>Order tea, coffee, milk, and snacks for guests or meeting rooms.</p>
+          </div>
+          <span className="fiori-status-pill is-neutral">{guestOrders.length} guest orders</span>
+        </div>
+
+        <div className="projects-summary-grid">
+          <article className="fiori-stat-card">
+            <div className="fiori-stat-topline">
+              <span className="fiori-stat-label">Guest Orders</span>
+              <Users size={18} />
+            </div>
+            <div className="fiori-stat-value">{guestOrders.length}</div>
+            <div className="fiori-stat-note">Current history window</div>
+          </article>
+          <article className="fiori-stat-card">
+            <div className="fiori-stat-topline">
+              <span className="fiori-stat-label">Snack Portions</span>
+              <Sandwich size={18} />
+            </div>
+            <div className="fiori-stat-value">{snackCount}</div>
+            <div className="fiori-stat-note">Guest snack demand</div>
+          </article>
+        </div>
+
+        <div className="employee-directory-filters employee-directory-filters-extended">
+          <label className="employee-filter-field">
+            <span>Date</span>
+            <input className="input" type="date" value={guestOrder.date} onChange={(event) => setGuestOrder((previous) => ({ ...previous, date: event.target.value }))} />
+          </label>
+          <label className="employee-filter-field">
+            <span>Guest / Meeting</span>
+            <input className="input" value={guestOrder.guest_name} onChange={(event) => setGuestOrder((previous) => ({ ...previous, guest_name: event.target.value }))} placeholder="Guest, visitor name, or meeting" />
+          </label>
+          <label className="employee-filter-field">
+            <span>Beverage</span>
+            <ValueHelpSelect
+              value={guestOrder.beverage}
+              onChange={(value) => setGuestOrder((previous) => ({ ...previous, beverage: value }))}
+              searchPlaceholder="Search beverages"
+              options={[
+                { value: "", label: "No beverage" },
+                { value: "tea", label: "Tea" },
+                { value: "coffee", label: "Coffee" },
+                { value: "milk", label: "Milk" },
+              ]}
+            />
+          </label>
+          <label className="employee-filter-field">
+            <span>Beverage Qty</span>
+            <input className="input" type="number" min="0" value={guestOrder.beverage_quantity} onChange={(event) => setGuestOrder((previous) => ({ ...previous, beverage_quantity: event.target.value }))} />
+          </label>
+          <label className="employee-filter-field">
+            <span>Snack Name</span>
+            <input className="input" value={guestOrder.snack_name} onChange={(event) => setGuestOrder((previous) => ({ ...previous, snack_name: event.target.value }))} placeholder="Samosa, sandwich, biscuits..." />
+          </label>
+          <label className="employee-filter-field">
+            <span>Snack Qty</span>
+            <input className="input" type="number" min="0" value={guestOrder.snack_quantity} onChange={(event) => setGuestOrder((previous) => ({ ...previous, snack_quantity: event.target.value }))} />
+          </label>
+          <label className="employee-filter-field employee-filter-search">
+            <span>Notes</span>
+            <input className="input" value={guestOrder.notes} onChange={(event) => setGuestOrder((previous) => ({ ...previous, notes: event.target.value }))} placeholder="Board room, client visit, event notes" />
+          </label>
+        </div>
+
+        <div className="admin-modal-actions">
+          <button
+            className="fiori-button primary"
+            onClick={() =>
+              onGuestOrder(guestOrder).then(() =>
+                setGuestOrder({
+                  date: toISODate(new Date()),
+                  guest_name: "Guest",
+                  beverage: "tea",
+                  beverage_quantity: 1,
+                  snack_name: "",
+                  snack_quantity: 0,
+                  notes: "",
+                })
+              )
+            }
+          >
+            Place guest order
+          </button>
+        </div>
+
+        <div className="fiori-table-shell">
+          <table className="fiori-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Guest</th>
+                <th>Beverage</th>
+                <th>Snacks</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {guestOrders.length ? guestOrders.map((order) => (
+                <tr key={order._id}>
+                  <td>{order.date}</td>
+                  <td>{order.employee_name || "Guest"}</td>
+                  <td>{order.guest_beverage ? `${getBeverageIcon(order.guest_beverage)} x ${order.guest_beverage_quantity || 1}` : "—"}</td>
+                  <td>{order.snack_name ? `${order.snack_name} x ${order.snack_quantity || 1}` : "—"}</td>
+                  <td>{order.notes || "—"}</td>
+                </tr>
+              )) : (
+                <tr><td colSpan={5}>No guest orders in the current history window</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="fiori-panel" style={{ display: activeTab === "history" ? undefined : "none" }}>
         <div className="fiori-panel-header">
           <div>
             <h3>Past Orders Table</h3>
@@ -747,44 +939,40 @@ const AdminView = ({
         <div className="employee-directory-filters employee-directory-filters-extended">
           <label className="employee-filter-field employee-filter-search">
             <span>Person / Search</span>
-            <div className="employee-filter-input-shell">
-              <Search size={16} />
-              <input
-                className="input"
-                placeholder="Search by person, email, department, designation, or date"
-                value={historyFilters.search}
-                onChange={(event) => onHistoryFilterChange("search", event.target.value)}
-              />
-            </div>
+            <ValueHelpSearch
+              value={historyFilters.search}
+              onChange={(value) => onHistoryFilterChange("search", value)}
+              suggestions={historySearchSuggestions}
+              placeholder="Search by person, email, department, designation, or date"
+            />
           </label>
 
           <label className="employee-filter-field">
             <span>Department</span>
-            <select
-              className="input"
+            <ValueHelpSelect
               value={historyFilters.department}
-              onChange={(event) => onHistoryFilterChange("department", event.target.value)}
-            >
-              {availableDepartments.map((department) => (
-                <option key={department} value={department}>
-                  {department === "all" ? "All departments" : department}
-                </option>
-              ))}
-            </select>
+              onChange={(value) => onHistoryFilterChange("department", value)}
+              searchPlaceholder="Search departments"
+              options={availableDepartments.map((department) => ({
+                value: department,
+                label: department === "all" ? "All departments" : department,
+              }))}
+            />
           </label>
 
           <label className="employee-filter-field">
             <span>Beverage Type</span>
-            <select
-              className="input"
+            <ValueHelpSelect
               value={historyFilters.beverageType}
-              onChange={(event) => onHistoryFilterChange("beverageType", event.target.value)}
-            >
-              <option value="all">All beverages</option>
-              <option value="tea">Tea</option>
-              <option value="coffee">Coffee</option>
-              <option value="milk">Milk</option>
-            </select>
+              onChange={(value) => onHistoryFilterChange("beverageType", value)}
+              searchPlaceholder="Search beverages"
+              options={[
+                { value: "all", label: "All beverages" },
+                { value: "tea", label: "Tea" },
+                { value: "coffee", label: "Coffee" },
+                { value: "milk", label: "Milk" },
+              ]}
+            />
           </label>
 
           <label className="employee-filter-field">
@@ -826,6 +1014,7 @@ const AdminView = ({
                   <th>Department</th>
                   <th>Morning</th>
                   <th>Evening</th>
+                  <th>Snacks</th>
                   <th>Matched Beverage</th>
                 </tr>
               </thead>
@@ -833,7 +1022,9 @@ const AdminView = ({
                 {filteredHistoryOrders.map((order, index) => {
                   const matchesBeverage =
                     historyFilters.beverageType !== "all" &&
-                    (order.morning === historyFilters.beverageType || order.evening === historyFilters.beverageType);
+                    (order.morning === historyFilters.beverageType ||
+                      order.evening === historyFilters.beverageType ||
+                      order.guest_beverage === historyFilters.beverageType);
                   return (
                     <tr key={`${order._id || order.employee_email}-${order.date}-${index}`}>
                       <td>
@@ -852,6 +1043,7 @@ const AdminView = ({
                       <td>{order.employee_department || "Unassigned"}</td>
                       <td>{order.morning ? <BeveragePill beverage={order.morning} /> : "—"}</td>
                       <td>{order.evening ? <BeveragePill beverage={order.evening} /> : "—"}</td>
+                      <td>{order.snack_name ? `${order.snack_name} x ${order.snack_quantity || 1}` : "—"}</td>
                       <td>
                         {historyFilters.beverageType === "all" ? "All beverages" : matchesBeverage ? historyFilters.beverageType : "—"}
                       </td>
@@ -862,6 +1054,41 @@ const AdminView = ({
             </table>
           </div>
         )}
+      </section>
+
+      <section className="fiori-panel" style={{ display: activeTab === "availability" ? undefined : "none" }}>
+        <div className="fiori-panel-header">
+          <div>
+            <h3>Availability</h3>
+            <p>Review blocked dates and open the yearly availability manager.</p>
+          </div>
+          <button className="fiori-button primary" onClick={() => setShowYearlyCalendar(true)}>
+            <CalendarDays size={16} />
+            <span>Manage blocked dates</span>
+          </button>
+        </div>
+        <div className="fiori-table-shell">
+          <table className="fiori-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Reason</th>
+                <th>Source</th>
+              </tr>
+            </thead>
+            <tbody>
+              {blockedDates.length ? blockedDates.map((item) => (
+                <tr key={item.date}>
+                  <td>{item.date}</td>
+                  <td>{item.reason || "Unavailable"}</td>
+                  <td>{item.auto_blocked ? "Holiday sync" : "Manual block"}</td>
+                </tr>
+              )) : (
+                <tr><td colSpan={3}>No blocked dates configured</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       {showYearlyCalendar ? (
@@ -1029,6 +1256,17 @@ const TeaCoffee = ({ user }) => {
       [field]: value,
     }));
   }, []);
+
+  const handleGuestOrder = useCallback(async (guestOrder) => {
+    try {
+      const response = await axios.post(`${API_BASE}/admin/guest_order`, guestOrder);
+      showToast(response.data.message || "Guest order placed successfully");
+      await fetchAdminOrders();
+    } catch (error) {
+      showToast(error.response?.data?.error || "Failed to place guest order");
+      throw error;
+    }
+  }, [fetchAdminOrders]);
 
   const handleEmployeeHistoryFilterChange = useCallback((field, value) => {
     setEmployeeHistoryFilters((current) => ({
@@ -1363,6 +1601,7 @@ const TeaCoffee = ({ user }) => {
           historyFilters={adminHistoryFilters}
           onHistoryFilterChange={handleAdminHistoryFilterChange}
           onExportHistory={exportAdminHistory}
+          onGuestOrder={handleGuestOrder}
         />
         {message ? (
           <div className="admin-toast is-success">{message}</div>
@@ -1574,16 +1813,17 @@ const TeaCoffee = ({ user }) => {
         <div className="employee-directory-filters employee-directory-filters-extended">
           <label className="employee-filter-field">
             <span>Beverage Type</span>
-            <select
-              className="input"
+            <ValueHelpSelect
               value={employeeHistoryFilters.beverageType}
-              onChange={(event) => handleEmployeeHistoryFilterChange("beverageType", event.target.value)}
-            >
-              <option value="all">All beverages</option>
-              <option value="tea">Tea</option>
-              <option value="coffee">Coffee</option>
-              <option value="milk">Milk</option>
-            </select>
+              onChange={(value) => handleEmployeeHistoryFilterChange("beverageType", value)}
+              searchPlaceholder="Search beverages"
+              options={[
+                { value: "all", label: "All beverages" },
+                { value: "tea", label: "Tea" },
+                { value: "coffee", label: "Coffee" },
+                { value: "milk", label: "Milk" },
+              ]}
+            />
           </label>
 
           <label className="employee-filter-field">

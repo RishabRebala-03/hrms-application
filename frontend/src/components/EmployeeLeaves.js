@@ -3,11 +3,12 @@ import axios from "axios";
 import {
   CalendarCheck2,
   Clock3,
-  Search,
   ShieldCheck,
   TriangleAlert,
   Users,
 } from "lucide-react";
+import ValueHelpSelect from "./ValueHelpSelect";
+import ValueHelpSearch from "./ValueHelpSearch";
 
 const statusToneMap = {
   Approved: "is-approved",
@@ -50,6 +51,33 @@ const isDateWithinRange = (dateStr, startDate, endDate) => {
   return dateStr >= startDate && dateStr <= endDate;
 };
 
+const leaveOverlapsRange = (item, dateRange) => {
+  if (!dateRange.start && !dateRange.end) return true;
+  const start = toDateKey(item.approved_start_date || item.start_date);
+  const end = toDateKey(item.approved_end_date || item.end_date) || start;
+  if (!start) return false;
+  if (dateRange.start && end < dateRange.start) return false;
+  if (dateRange.end && start > dateRange.end) return false;
+  return true;
+};
+
+const buildSuggestions = (items, fields) => {
+  const seen = new Set();
+  return items.flatMap((item) =>
+    fields
+      .map((field) => item[field])
+      .filter(Boolean)
+      .map((value) => String(value).trim())
+      .filter((value) => {
+        const key = value.toLowerCase();
+        if (!value || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((value) => ({ value, label: value }))
+  );
+};
+
 const messageTone = (message) =>
   message.includes("Error") || message.includes("Failed") || message.includes("⚠️")
     ? "is-error"
@@ -88,6 +116,7 @@ const EmployeeLeaves = ({ user, navigationState }) => {
   const [historySearchTerm, setHistorySearchTerm] = useState("");
   const [historyFilterStatus, setHistoryFilterStatus] = useState("all");
   const [historyFilterType, setHistoryFilterType] = useState("all");
+  const [historyDateRange, setHistoryDateRange] = useState({ start: "", end: "" });
   const [historySortBy, setHistorySortBy] = useState("newest");
   const [activeTab, setActiveTab] = useState("my-leaves");
   const [calendarFocusDate, setCalendarFocusDate] = useState("");
@@ -496,6 +525,8 @@ const EmployeeLeaves = ({ user, navigationState }) => {
         );
       }
 
+      filtered = filtered.filter((item) => leaveOverlapsRange(item, historyDateRange));
+
       if (calendarFocusDate) {
         filtered = filtered.filter((item) =>
           isDateWithinRange(
@@ -523,7 +554,7 @@ const EmployeeLeaves = ({ user, navigationState }) => {
         }
       });
     },
-    [calendarFocusDate, historyFilterStatus, historyFilterType, historySearchTerm, historySortBy]
+    [calendarFocusDate, historyDateRange, historyFilterStatus, historyFilterType, historySearchTerm, historySortBy]
   );
 
   const getFilteredAndSortedTeamLeaves = useCallback(
@@ -559,6 +590,14 @@ const EmployeeLeaves = ({ user, navigationState }) => {
   );
 
   const displayHistory = useMemo(() => getFilteredAndSortedHistory(history), [getFilteredAndSortedHistory, history]);
+  const historySearchSuggestions = useMemo(
+    () => buildSuggestions(history, ["leave_type", "reason", "status"]),
+    [history]
+  );
+  const teamSearchSuggestions = useMemo(
+    () => buildSuggestions(teamPendingLeaves, ["employee_name", "employee_email", "employee_designation", "employee_department"]),
+    [teamPendingLeaves]
+  );
   const displayTeamLeaves = useMemo(
     () => getFilteredAndSortedTeamLeaves(teamPendingLeaves),
     [getFilteredAndSortedTeamLeaves, teamPendingLeaves]
@@ -865,62 +904,82 @@ const EmployeeLeaves = ({ user, navigationState }) => {
             </div>
 
             <div className="leave-filter-grid">
-              <div className="fiori-form-field leave-search-field employee-history-search">
+              <div className="fiori-form-field employee-history-search">
                 <label className="leave-field-label">Search</label>
-                <Search size={16} />
-                <input
-                  type="text"
-                  className="input"
-                  placeholder="Search by type, reason, or status"
+                <ValueHelpSearch
                   value={historySearchTerm}
-                  onChange={(event) => setHistorySearchTerm(event.target.value)}
+                  onChange={setHistorySearchTerm}
+                  suggestions={historySearchSuggestions}
+                  placeholder="Search by type, reason, or status"
                 />
               </div>
 
               <div className="fiori-form-field">
                 <label className="leave-field-label">Status</label>
-                <select
-                  className="input"
+                <ValueHelpSelect
                   value={historyFilterStatus}
-                  onChange={(event) => setHistoryFilterStatus(event.target.value)}
-                >
-                  <option value="all">All status</option>
-                  <option value="pending">Pending</option>
-                  <option value="approved">Approved</option>
-                  <option value="rejected">Rejected</option>
-                  <option value="cancelled">Cancelled</option>
-                </select>
+                  onChange={setHistoryFilterStatus}
+                  searchPlaceholder="Search statuses"
+                  options={[
+                    { value: "all", label: "All status" },
+                    { value: "pending", label: "Pending" },
+                    { value: "approved", label: "Approved" },
+                    { value: "rejected", label: "Rejected" },
+                    { value: "cancelled", label: "Cancelled" },
+                  ]}
+                />
               </div>
 
               <div className="fiori-form-field">
                 <label className="leave-field-label">Type</label>
-                <select
-                  className="input"
+                <ValueHelpSelect
                   value={historyFilterType}
-                  onChange={(event) => setHistoryFilterType(event.target.value)}
-                >
-                  <option value="all">All types</option>
-                  <option value="sick">Sick</option>
-                  {isIntern ? null : <option value="planned">Planned</option>}
-                  {isIntern ? null : <option value="optional">Optional</option>}
-                  <option value="lop">LOP</option>
-                  <option value="early logout">Early Logout</option>
-                </select>
+                  onChange={setHistoryFilterType}
+                  searchPlaceholder="Search leave types"
+                  options={[
+                    { value: "all", label: "All types" },
+                    { value: "sick", label: "Sick" },
+                    ...(isIntern ? [] : [{ value: "planned", label: "Planned" }, { value: "optional", label: "Optional" }]),
+                    { value: "lop", label: "LOP" },
+                    { value: "early logout", label: "Early Logout" },
+                  ]}
+                />
               </div>
 
               <div className="fiori-form-field">
                 <label className="leave-field-label">Sort by</label>
-                <select
-                  className="input"
+                <ValueHelpSelect
                   value={historySortBy}
-                  onChange={(event) => setHistorySortBy(event.target.value)}
-                >
-                  <option value="newest">Newest first</option>
-                  <option value="oldest">Oldest first</option>
-                  <option value="start_date">Start date</option>
-                  <option value="status">Status</option>
-                  <option value="type">Leave type</option>
-                </select>
+                  onChange={setHistorySortBy}
+                  searchPlaceholder="Search sort options"
+                  options={[
+                    { value: "newest", label: "Newest first" },
+                    { value: "oldest", label: "Oldest first" },
+                    { value: "start_date", label: "Start date" },
+                    { value: "status", label: "Status" },
+                    { value: "type", label: "Leave type" },
+                  ]}
+                />
+              </div>
+
+              <div className="fiori-form-field">
+                <label className="leave-field-label">From</label>
+                <input
+                  className="input"
+                  type="date"
+                  value={historyDateRange.start}
+                  onChange={(event) => setHistoryDateRange((previous) => ({ ...previous, start: event.target.value }))}
+                />
+              </div>
+
+              <div className="fiori-form-field">
+                <label className="leave-field-label">To</label>
+                <input
+                  className="input"
+                  type="date"
+                  value={historyDateRange.end}
+                  onChange={(event) => setHistoryDateRange((previous) => ({ ...previous, end: event.target.value }))}
+                />
               </div>
             </div>
 
@@ -1045,26 +1104,29 @@ const EmployeeLeaves = ({ user, navigationState }) => {
           </div>
 
           <div className="leave-filter-grid leave-filter-grid-compact">
-            <div className="fiori-form-field leave-search-field">
+            <div className="fiori-form-field">
               <label className="leave-field-label">Search employee</label>
-              <Search size={16} />
-              <input
-                type="text"
-                className="input"
-                placeholder="Search by name, email, department, or role"
+              <ValueHelpSearch
                 value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
+                onChange={setSearchTerm}
+                suggestions={teamSearchSuggestions}
+                placeholder="Search by name, email, department, or role"
               />
             </div>
 
             <div className="fiori-form-field">
               <label className="leave-field-label">Sort by</label>
-              <select className="input" value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
-                <option value="newest">Newest first</option>
-                <option value="oldest">Oldest first</option>
-                <option value="name">Employee name</option>
-                <option value="department">Department</option>
-              </select>
+              <ValueHelpSelect
+                value={sortBy}
+                onChange={setSortBy}
+                searchPlaceholder="Search sort options"
+                options={[
+                  { value: "newest", label: "Newest first" },
+                  { value: "oldest", label: "Oldest first" },
+                  { value: "name", label: "Employee name" },
+                  { value: "department", label: "Department" },
+                ]}
+              />
             </div>
           </div>
 

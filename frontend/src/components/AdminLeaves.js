@@ -28,6 +28,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import ValueHelpSelect from "./ValueHelpSelect";
+import ValueHelpSearch from "./ValueHelpSearch";
 
 const chartPalette = ["#0a6ed1", "#5b738b", "#8fb5d9", "#d1e3f8", "#0f2742", "#91c8f6"];
 
@@ -86,6 +88,42 @@ const dayDiff = (start, end) => {
   return Math.max(0, Math.round((second - first) / (1000 * 60 * 60 * 24)));
 };
 
+const toDateKey = (value) => {
+  if (!value) return "";
+  try {
+    return new Date(value).toISOString().slice(0, 10);
+  } catch {
+    return "";
+  }
+};
+
+const leaveOverlapsRange = (leave, dateRange) => {
+  if (!dateRange.start && !dateRange.end) return true;
+  const start = toDateKey(leave.approved_start_date || leave.start_date);
+  const end = toDateKey(leave.approved_end_date || leave.end_date) || start;
+  if (!start) return false;
+  if (dateRange.start && end < dateRange.start) return false;
+  if (dateRange.end && start > dateRange.end) return false;
+  return true;
+};
+
+const buildSuggestions = (items, fields) => {
+  const seen = new Set();
+  return items.flatMap((item) =>
+    fields
+      .map((field) => item[field])
+      .filter(Boolean)
+      .map((value) => String(value).trim())
+      .filter((value) => {
+        const key = value.toLowerCase();
+        if (!value || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((value) => ({ value, label: value }))
+  );
+};
+
 const getLeaveWindow = (leave) => {
   if (leave.is_partial_approval && leave.approved_start_date && leave.approved_end_date) {
     return `${formatDate(leave.approved_start_date)} to ${formatDate(leave.approved_end_date)}`;
@@ -137,6 +175,7 @@ const AdminLeaves = ({ user }) => {
   const [statusFilter, setStatusFilter] = useState("all");
   const [departmentFilter, setDepartmentFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [dateRange, setDateRange] = useState({ start: "", end: "" });
   const [sortBy, setSortBy] = useState("newest");
   const [escalationSearch, setEscalationSearch] = useState("");
   const [selectedEscalationOwner, setSelectedEscalationOwner] = useState(null);
@@ -254,6 +293,7 @@ const AdminLeaves = ({ user }) => {
         if (statusFilter !== "all" && leave.status !== statusFilter) return false;
         if (departmentFilter !== "all" && leave.employee_department !== departmentFilter) return false;
         if (typeFilter !== "all" && leave.leave_type !== typeFilter) return false;
+        if (!leaveOverlapsRange(leave, dateRange)) return false;
 
         return true;
       })
@@ -272,7 +312,20 @@ const AdminLeaves = ({ user }) => {
             return new Date(second.applied_on) - new Date(first.applied_on);
         }
       });
-  }, [activeTab, allLeaves, departmentFilter, pendingLeaves, searchTerm, sortBy, statusFilter, typeFilter]);
+  }, [activeTab, allLeaves, dateRange, departmentFilter, pendingLeaves, searchTerm, sortBy, statusFilter, typeFilter]);
+
+  const searchSuggestions = useMemo(
+    () =>
+      buildSuggestions(activeTab === "pending" ? pendingLeaves : allLeaves, [
+        "employee_name",
+        "employee_email",
+        "employee_designation",
+        "employee_department",
+        "leave_type",
+        "approved_by",
+      ]),
+    [activeTab, allLeaves, pendingLeaves]
+  );
 
   const leaveStatusData = useMemo(() => {
     const orderedStatuses = ["Pending", "Approved", "Rejected", "Cancelled"];
@@ -777,63 +830,90 @@ const AdminLeaves = ({ user }) => {
             <div className="leave-filter-grid">
               <label className="fiori-form-field">
                 <span className="leave-field-label">Search</span>
-                <div className="leave-search-field">
-                  <Search size={16} />
-                  <input
-                    className="input"
-                    placeholder="Search by employee, email, designation, department, or approver"
-                    value={searchTerm}
-                    onChange={(event) => setSearchTerm(event.target.value)}
-                  />
-                </div>
+                <ValueHelpSearch
+                  value={searchTerm}
+                  onChange={setSearchTerm}
+                  suggestions={searchSuggestions}
+                  placeholder="Search by employee, email, designation, department, or approver"
+                />
               </label>
 
               <label className="fiori-form-field">
                 <span className="leave-field-label">Status</span>
-                <select className="input" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-                  <option value="all">All statuses</option>
-                  <option value="Pending">Pending</option>
-                  <option value="Approved">Approved</option>
-                  <option value="Rejected">Rejected</option>
-                  <option value="Cancelled">Cancelled</option>
-                </select>
+                <ValueHelpSelect
+                  value={statusFilter}
+                  onChange={setStatusFilter}
+                  searchPlaceholder="Search statuses"
+                  options={[
+                    { value: "all", label: "All statuses" },
+                    { value: "Pending", label: "Pending" },
+                    { value: "Approved", label: "Approved" },
+                    { value: "Rejected", label: "Rejected" },
+                    { value: "Cancelled", label: "Cancelled" },
+                  ]}
+                />
               </label>
 
               <label className="fiori-form-field">
                 <span className="leave-field-label">Department</span>
-                <select
-                  className="input"
+                <ValueHelpSelect
                   value={departmentFilter}
-                  onChange={(event) => setDepartmentFilter(event.target.value)}
-                >
-                  {availableDepartments.map((department) => (
-                    <option key={department} value={department}>
-                      {department === "all" ? "All departments" : department}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setDepartmentFilter}
+                  searchPlaceholder="Search departments"
+                  options={availableDepartments.map((department) => ({
+                    value: department,
+                    label: department === "all" ? "All departments" : department,
+                  }))}
+                />
               </label>
 
               <label className="fiori-form-field">
                 <span className="leave-field-label">Leave type</span>
-                <select className="input" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
-                  {availableTypes.map((type) => (
-                    <option key={type} value={type}>
-                      {type === "all" ? "All leave types" : type}
-                    </option>
-                  ))}
-                </select>
+                <ValueHelpSelect
+                  value={typeFilter}
+                  onChange={setTypeFilter}
+                  searchPlaceholder="Search leave types"
+                  options={availableTypes.map((type) => ({
+                    value: type,
+                    label: type === "all" ? "All leave types" : type,
+                  }))}
+                />
               </label>
 
               <label className="fiori-form-field">
                 <span className="leave-field-label">Sort by</span>
-                <select className="input" value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
-                  <option value="newest">Newest first</option>
-                  <option value="oldest">Oldest first</option>
-                  <option value="name">Employee name</option>
-                  <option value="department">Department</option>
-                  <option value="status">Status</option>
-                </select>
+                <ValueHelpSelect
+                  value={sortBy}
+                  onChange={setSortBy}
+                  searchPlaceholder="Search sort options"
+                  options={[
+                    { value: "newest", label: "Newest first" },
+                    { value: "oldest", label: "Oldest first" },
+                    { value: "name", label: "Employee name" },
+                    { value: "department", label: "Department" },
+                    { value: "status", label: "Status" },
+                  ]}
+                />
+              </label>
+
+              <label className="fiori-form-field">
+                <span className="leave-field-label">From</span>
+                <input
+                  className="input"
+                  type="date"
+                  value={dateRange.start}
+                  onChange={(event) => setDateRange((previous) => ({ ...previous, start: event.target.value }))}
+                />
+              </label>
+
+              <label className="fiori-form-field">
+                <span className="leave-field-label">To</span>
+                <input
+                  className="input"
+                  type="date"
+                  value={dateRange.end}
+                  onChange={(event) => setDateRange((previous) => ({ ...previous, end: event.target.value }))}
+                />
               </label>
             </div>
 

@@ -5,12 +5,13 @@ import {
   Download,
   Filter,
   Mail,
-  Search,
   UserCheck,
   UserRound,
   Users,
 } from "lucide-react";
 import LeaveStatusDot from "./LeaveStatusDot";
+import ValueHelpSelect from "./ValueHelpSelect";
+import ValueHelpSearch from "./ValueHelpSearch";
 
 const initialFilters = {
   search: "",
@@ -24,6 +25,29 @@ const initialFilters = {
   leaveLastMonth: "All",
   sortBy: "name",
   sortOrder: "asc",
+};
+
+const buildSearchSuggestions = (employees) => {
+  const seen = new Set();
+  return employees.flatMap((employee) =>
+    [
+      employee.name,
+      employee.email,
+      employee.department,
+      employee.manager_name,
+      employee.project,
+      employee.designation,
+    ]
+      .filter(Boolean)
+      .map((value) => String(value).trim())
+      .filter((value) => {
+        const key = value.toLowerCase();
+        if (!value || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((value) => ({ value, label: value }))
+  );
 };
 
 const formatDate = (value) => {
@@ -251,6 +275,7 @@ const EmployeeList = ({ user, onNavigateToProfile, isAdmin = false }) => {
     () => ["All", ...(directoryMeta.available_filters?.projects || [])],
     [directoryMeta.available_filters]
   );
+  const searchSuggestions = useMemo(() => buildSearchSuggestions(employees), [employees]);
 
   if (loading) {
     return (
@@ -344,58 +369,46 @@ const EmployeeList = ({ user, onNavigateToProfile, isAdmin = false }) => {
         <div className="employee-directory-filters employee-directory-filters-extended">
           <label className="employee-filter-field employee-filter-search">
             <span>Search</span>
-            <div className="employee-filter-input-shell">
-              <Search size={16} />
-              <input
-                className="input"
-                placeholder="Search by employee, email, department, manager, or project"
-                value={filters.search}
-                onChange={(event) => handleFilterChange("search", event.target.value)}
-              />
-            </div>
+            <ValueHelpSearch
+              value={filters.search}
+              onChange={(value) => handleFilterChange("search", value)}
+              suggestions={searchSuggestions}
+              placeholder="Search by employee, email, department, manager, or project"
+            />
           </label>
 
           <label className="employee-filter-field">
             <span>Department</span>
-            <select
-              className="input"
+            <ValueHelpSelect
               value={filters.department}
-              onChange={(event) => handleFilterChange("department", event.target.value)}
-            >
-              {departments.map((department) => (
-                <option key={department} value={department}>
-                  {department}
-                </option>
-              ))}
-            </select>
+              onChange={(value) => handleFilterChange("department", value)}
+              searchPlaceholder="Search departments"
+              options={departments.map((department) => ({ value: department, label: department }))}
+            />
           </label>
 
           <label className="employee-filter-field">
             <span>Status</span>
-            <select
-              className="input"
+            <ValueHelpSelect
               value={filters.status}
-              onChange={(event) => handleFilterChange("status", event.target.value)}
-            >
-              <option value="All">All</option>
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
-            </select>
+              onChange={(value) => handleFilterChange("status", value)}
+              searchPlaceholder="Search statuses"
+              options={[
+                { value: "All", label: "All" },
+                { value: "Active", label: "Active" },
+                { value: "Inactive", label: "Inactive" },
+              ]}
+            />
           </label>
 
           <label className="employee-filter-field">
             <span>Project</span>
-            <select
-              className="input"
+            <ValueHelpSelect
               value={filters.project}
-              onChange={(event) => handleFilterChange("project", event.target.value)}
-            >
-              {projects.map((project) => (
-                <option key={project} value={project}>
-                  {project}
-                </option>
-              ))}
-            </select>
+              onChange={(value) => handleFilterChange("project", value)}
+              searchPlaceholder="Search projects"
+              options={projects.map((project) => ({ value: project, label: project }))}
+            />
           </label>
 
           <label className="employee-filter-field">
@@ -440,42 +453,45 @@ const EmployeeList = ({ user, onNavigateToProfile, isAdmin = false }) => {
 
           <label className="employee-filter-field">
             <span>Last Month Leave</span>
-            <select
-              className="input"
+            <ValueHelpSelect
               value={filters.leaveLastMonth}
-              onChange={(event) => handleFilterChange("leaveLastMonth", event.target.value)}
-            >
-              <option value="All">All</option>
-              <option value="With Leave">With Leave</option>
-              <option value="Without Leave">Without Leave</option>
-            </select>
+              onChange={(value) => handleFilterChange("leaveLastMonth", value)}
+              searchPlaceholder="Search leave filters"
+              options={[
+                { value: "All", label: "All" },
+                { value: "With Leave", label: "With Leave" },
+                { value: "Without Leave", label: "Without Leave" },
+              ]}
+            />
           </label>
 
           <label className="employee-filter-field">
             <span>Sort By</span>
-            <select
-              className="input"
+            <ValueHelpSelect
               value={filters.sortBy}
-              onChange={(event) => handleFilterChange("sortBy", event.target.value)}
-            >
-              <option value="name">Name</option>
-              <option value="department">Department</option>
-              <option value="joiningDate">Joining date</option>
-              <option value="lastMonthLeave">Last month leave</option>
-              <option value="status">Status</option>
-            </select>
+              onChange={(value) => handleFilterChange("sortBy", value)}
+              searchPlaceholder="Search sort options"
+              options={[
+                { value: "name", label: "Name" },
+                { value: "department", label: "Department" },
+                { value: "joiningDate", label: "Joining date" },
+                { value: "lastMonthLeave", label: "Last month leave" },
+                { value: "status", label: "Status" },
+              ]}
+            />
           </label>
 
           <label className="employee-filter-field">
             <span>Sort Order</span>
-            <select
-              className="input"
+            <ValueHelpSelect
               value={filters.sortOrder}
-              onChange={(event) => handleFilterChange("sortOrder", event.target.value)}
-            >
-              <option value="asc">Ascending</option>
-              <option value="desc">Descending</option>
-            </select>
+              onChange={(value) => handleFilterChange("sortOrder", value)}
+              searchPlaceholder="Search order"
+              options={[
+                { value: "asc", label: "Ascending" },
+                { value: "desc", label: "Descending" },
+              ]}
+            />
           </label>
         </div>
       </section>
