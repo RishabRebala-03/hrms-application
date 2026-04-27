@@ -854,6 +854,8 @@ const AdminView = ({
           </article>
         </div>
 
+        <br></br>
+
         <div className="employee-directory-filters employee-directory-filters-extended">
           <label className="employee-filter-field">
             <span>Date</span>
@@ -1015,6 +1017,8 @@ const AdminView = ({
             />
           </label>
         </div>
+
+        <br></br>
 
         {filteredHistoryOrders.length === 0 ? (
           <div className="admin-empty-state">

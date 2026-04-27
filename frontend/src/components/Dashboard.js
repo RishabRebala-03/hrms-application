@@ -25,7 +25,6 @@ import {
   YAxis,
 } from "recharts";
 import OrganizationHierarchy from "./OrganizationHierarchy";
-import BannerImage from "../assets/banner.jpg";
 
 const statusToneMap = {
   Approved: "is-approved",
@@ -328,6 +327,11 @@ const AdminDashboard = ({ user, onNavigate }) => {
       .slice(0, 6);
   }, [allEmployees]);
 
+  const topDepartment = useMemo(() => {
+    if (!departmentHeadcountData.length) return null;
+    return departmentHeadcountData[0];
+  }, [departmentHeadcountData]);
+
   const leaveStatusData = useMemo(() => {
     const statusOrder = ["Pending", "Approved", "Rejected", "Cancelled"];
     const counts = allLeaves.reduce((accumulator, leave) => {
@@ -344,6 +348,21 @@ const AdminDashboard = ({ user, onNavigate }) => {
         color: fioriChartPalette[index % fioriChartPalette.length],
       }));
   }, [allLeaves]);
+
+  const approvedLeavesCount = useMemo(
+    () => allLeaves.filter((leave) => leave.status === "Approved").length,
+    [allLeaves]
+  );
+
+  const approvalRate = useMemo(() => {
+    if (!allLeaves.length) return 0;
+    return Math.round((approvedLeavesCount / allLeaves.length) * 100);
+  }, [allLeaves.length, approvedLeavesCount]);
+
+  const departmentCoverage = useMemo(
+    () => new Set(allEmployees.map((employee) => employee.department).filter(Boolean)).size,
+    [allEmployees]
+  );
 
   const monthlyTrendData = useMemo(() => {
     const months = [];
@@ -447,12 +466,61 @@ const AdminDashboard = ({ user, onNavigate }) => {
 
   return (
     <section className="admin-dashboard">
-      <header className="admin-hero">
-        <div>
+      <header className="admin-hero admin-hero-command">
+        <div className="admin-hero-copy">
           <div className="admin-section-overline">Administration Overview</div>
           <h1>
             {getTimeBasedGreeting()}, {user?.name?.split(" ")[0] || "Administrator"}
           </h1>
+          <p>
+            Centralize leave decisions, workforce visibility, and governance signals from one
+            executive-style operations workspace.
+          </p>
+
+          <div className="admin-hero-pill-row">
+            <button className="admin-hero-pill" onClick={() => handleNavigate("leaves")}>
+              <Clock3 size={14} />
+              <span>{stats.pendingLeaves} pending approvals</span>
+            </button>
+            <button className="admin-hero-pill" onClick={() => handleNavigate("employees")}>
+              <ShieldCheck size={14} />
+              <span>{stats.workingToday} working today</span>
+            </button>
+            <button className="admin-hero-pill" onClick={() => setShowOnLeaveModal(true)}>
+              <CalendarRange size={14} />
+              <span>{stats.onLeaveToday} on leave today</span>
+            </button>
+          </div>
+
+          <div className="admin-hero-actions">
+            <button className="fiori-button primary" onClick={() => handleNavigate("leaves")}>
+              Review approvals
+            </button>
+            <button className="fiori-button secondary" onClick={() => handleNavigate("employees")}>
+              Open employee directory
+            </button>
+            <button className="fiori-button secondary" onClick={() => setShowHierarchy(true)}>
+              View organization hierarchy
+            </button>
+          </div>
+
+          <div className="admin-hero-kpi-row">
+            <article className="admin-hero-kpi-card">
+              <span>Total headcount</span>
+              <strong>{stats.totalEmployees}</strong>
+              <small>Registered employee records</small>
+            </article>
+            <article className="admin-hero-kpi-card">
+              <span>Approval rate</span>
+              <strong>{approvalRate}%</strong>
+              <small>{approvedLeavesCount} approved requests on record</small>
+            </article>
+            <article className="admin-hero-kpi-card">
+              <span>Department coverage</span>
+              <strong>{departmentCoverage}</strong>
+              <small>Active departments represented</small>
+            </article>
+          </div>
         </div>
 
         <div className="admin-hero-meta">
@@ -468,20 +536,83 @@ const AdminDashboard = ({ user, onNavigate }) => {
             <span>Date</span>
             <strong>{today}</strong>
           </div>
+          <div className="admin-hero-meta-item">
+            <span>Approved leaves</span>
+            <strong>{approvedLeavesCount}</strong>
+          </div>
         </div>
       </header>
 
-      <section className="fiori-panel employee-banner-panel" tabIndex={0}>
-        <div className="employee-banner-shell">
-          <img src={BannerImage} alt="Administration workspace banner" className="employee-banner-image" />
-          <div className="employee-banner-overlay">
-            <div className="employee-banner-copy">
-              <div className="admin-section-overline">Administration overview</div>
-              <h3>Operations, approvals, and workforce signals in one clearer view</h3>
-              <p>
-                Hover to reveal a cleaner summary of the core admin actions waiting across leave,
-                employees, and reporting.
-              </p>
+      <section className="fiori-panel admin-command-center">
+        <div className="admin-command-center-shell">
+          <div className="admin-command-center-overlay">
+            <div className="admin-command-center-copy">
+              <div className="admin-section-overline">Operational command center</div>
+              <h3>Welcome back. Keep decisions, capacity, and governance in motion.</h3>
+
+              <div className="admin-command-center-points">
+                <span>{stats.totalEmployees} employee records in scope</span>
+                <span>{approvalRate}% overall approval rate</span>
+                <span>{topDepartment ? `${topDepartment.fullName} leads headcount` : "Department mix available"}</span>
+              </div>
+
+              <div className="admin-command-center-actions">
+                <button className="fiori-button primary" onClick={() => handleNavigate("leaves")}>
+                  Review leave queue
+                </button>
+                <button className="fiori-button secondary" onClick={() => handleNavigate("logs")}>
+                  Open audit logs
+                </button>
+              </div>
+            </div>
+
+            <div className="admin-command-center-side">
+              <article className="admin-command-side-card is-primary">
+                <div className="admin-command-side-top">
+                  <span>Today at a glance</span>
+                  <Building2 size={18} />
+                </div>
+                <div className="admin-command-side-value">{stats.workingToday}</div>
+                <p>Employees currently available for active business operations.</p>
+              </article>
+
+              <div className="admin-command-mini-grid">
+                <button className="admin-command-mini-card" onClick={() => handleNavigate("leaves")}>
+                  <div className="admin-command-mini-top">
+                    <span>Approval queue</span>
+                    <Clock3 size={16} />
+                  </div>
+                  <strong>{stats.pendingLeaves}</strong>
+                  <small>Awaiting review</small>
+                </button>
+
+                <button className="admin-command-mini-card" onClick={() => setShowOnLeaveModal(true)}>
+                  <div className="admin-command-mini-top">
+                    <span>Absences</span>
+                    <CalendarRange size={16} />
+                  </div>
+                  <strong>{stats.onLeaveToday}</strong>
+                  <small>On approved leave today</small>
+                </button>
+
+                <button className="admin-command-mini-card" onClick={() => handleNavigate("employees")}>
+                  <div className="admin-command-mini-top">
+                    <span>Headcount</span>
+                    <Users size={16} />
+                  </div>
+                  <strong>{stats.totalEmployees}</strong>
+                  <small>People in HRMS</small>
+                </button>
+
+                <button className="admin-command-mini-card" onClick={() => setShowHierarchy(true)}>
+                  <div className="admin-command-mini-top">
+                    <span>Governance</span>
+                    <GitBranch size={16} />
+                  </div>
+                  <strong>{departmentCoverage}</strong>
+                  <small>Departments covered</small>
+                </button>
+              </div>
             </div>
           </div>
         </div>
