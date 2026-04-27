@@ -4,9 +4,11 @@ import {
   CalendarDays,
   Coffee,
   CupSoda,
+  Download,
   ListChecks,
   Milk,
   RefreshCw,
+  Search,
   ShieldBan,
   ShoppingBag,
   Users,
@@ -18,6 +20,54 @@ const API_BASE = `${process.env.REACT_APP_BACKEND_URL}/api/tea_coffee`;
 const MORNING_CUTOFF = "10:30";
 const EVENING_CUTOFF = "14:30";
 const BEVERAGE_OPTIONS = ["tea", "coffee", "milk"];
+
+const toISODate = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const generateDateRange = (startDate, endDate) => {
+  if (!startDate || !endDate) return [];
+
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return [];
+
+  const normalizedStart = start <= end ? start : end;
+  const normalizedEnd = start <= end ? end : start;
+  const dateList = [];
+  const cursor = new Date(normalizedStart);
+
+  while (cursor <= normalizedEnd) {
+    dateList.push(toISODate(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return dateList;
+};
+
+const downloadCsv = (filename, headers, rows) => {
+  const csvContent = [
+    headers.join(","),
+    ...rows.map((row) =>
+      row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(",")
+    ),
+  ].join("\n");
+
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const link = document.createElement("a");
+  const url = URL.createObjectURL(blob);
+
+  link.setAttribute("href", url);
+  link.setAttribute("download", filename);
+  link.style.visibility = "hidden";
+
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
 
 const getBeverageIcon = (beverage) => {
   switch (beverage) {
@@ -250,6 +300,20 @@ const EmployeeListModal = ({ date, orders, onClose }) => {
   const coffeeCount = orders.filter((item) => item.morning === "coffee" || item.evening === "coffee").length;
   const milkCount = orders.filter((item) => item.morning === "milk" || item.evening === "milk").length;
 
+  const exportOrders = () => {
+    downloadCsv(
+      `tea_coffee_orders_${date}.csv`,
+      ["Date", "Employee Name", "Employee Email", "Morning", "Evening"],
+      orders.map((order) => [
+        date,
+        order.employee_name || "",
+        order.employee_email || "",
+        order.morning || "",
+        order.evening || "",
+      ])
+    );
+  };
+
   return (
     <div className="admin-modal-overlay">
       <div className="admin-modal admin-modal-wide">
@@ -258,9 +322,15 @@ const EmployeeListModal = ({ date, orders, onClose }) => {
             <h2>Employee Orders</h2>
             <p>{formatDateLabel(date).full} • {orders.length} orders</p>
           </div>
-          <button className="fiori-button secondary danger" onClick={onClose}>
-            Close
-          </button>
+          <div className="tea-toolbar">
+            <button className="fiori-button secondary" onClick={exportOrders} disabled={!orders.length}>
+              <Download size={16} />
+              <span>Export CSV</span>
+            </button>
+            <button className="fiori-button secondary danger" onClick={onClose}>
+              Close
+            </button>
+          </div>
         </div>
 
         <div className="tea-employee-summary">
@@ -318,7 +388,20 @@ const EmployeeListModal = ({ date, orders, onClose }) => {
   );
 };
 
-const AdminView = ({ dates, orders, blockedDates, onBlockDate, onUnblockDate, onRefresh }) => {
+const AdminView = ({
+  dates,
+  orders,
+  historyOrders,
+  blockedDates,
+  onBlockDate,
+  onUnblockDate,
+  onRefresh,
+  filters,
+  onFilterChange,
+  historyFilters,
+  onHistoryFilterChange,
+  onExportHistory,
+}) => {
   const [showYearlyCalendar, setShowYearlyCalendar] = useState(false);
   const [selectedDateForList, setSelectedDateForList] = useState(null);
 
@@ -374,12 +457,98 @@ const AdminView = ({ dates, orders, blockedDates, onBlockDate, onUnblockDate, on
     );
   }, [dates, getStats, isBlocked]);
 
-    const DayCard = ({ date, large = false }) => {
-      const stats = getStats(date);
-      const label = formatDateLabel(date);
-      const blocked = isBlocked(date);
+  const filteredDates = useMemo(() => {
+    return dates.filter((date) => {
+      if (filters.dateFrom && date < filters.dateFrom) return false;
+      if (filters.dateTo && date > filters.dateTo) return false;
 
-      return (
+      if (!filters.beverageType || filters.beverageType === "all") {
+        return true;
+      }
+
+      const dayOrders = orders[date] || [];
+      return dayOrders.some(
+        (order) =>
+          order.morning === filters.beverageType || order.evening === filters.beverageType
+      );
+    });
+  }, [dates, filters.beverageType, filters.dateFrom, filters.dateTo, orders]);
+
+  const availableDepartments = useMemo(
+    () => ["all", ...new Set(historyOrders.map((order) => order.employee_department).filter(Boolean))],
+    [historyOrders]
+  );
+
+  const filteredHistoryOrders = useMemo(() => {
+    const search = (historyFilters.search || "").trim().toLowerCase();
+
+    return historyOrders.filter((order) => {
+      if (historyFilters.dateFrom && order.date < historyFilters.dateFrom) return false;
+      if (historyFilters.dateTo && order.date > historyFilters.dateTo) return false;
+
+      if (historyFilters.department !== "all" && order.employee_department !== historyFilters.department) {
+        return false;
+      }
+
+      if (historyFilters.beverageType !== "all") {
+        const matchesBeverage =
+          order.morning === historyFilters.beverageType || order.evening === historyFilters.beverageType;
+        if (!matchesBeverage) return false;
+      }
+
+      if (!search) return true;
+
+      return [
+        order.employee_name,
+        order.employee_email,
+        order.employee_department,
+        order.employee_designation,
+        order.date,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(search));
+    });
+  }, [historyFilters, historyOrders]);
+
+  const exportSummary = () => {
+    downloadCsv(
+      `tea_coffee_summary_${filters.dateFrom || "start"}_${filters.dateTo || "end"}.csv`,
+      [
+        "Date",
+        "Blocked",
+        "Reason",
+        "Total Orders",
+        "Morning Tea",
+        "Morning Coffee",
+        "Morning Milk",
+        "Evening Tea",
+        "Evening Coffee",
+        "Evening Milk",
+      ],
+      filteredDates.map((date) => {
+        const stats = getStats(date);
+        return [
+          date,
+          isBlocked(date) ? "Yes" : "No",
+          getBlockReason(date),
+          stats.total,
+          stats.morningTea,
+          stats.morningCoffee,
+          stats.morningMilk,
+          stats.eveningTea,
+          stats.eveningCoffee,
+          stats.eveningMilk,
+        ];
+      })
+    );
+  };
+
+  const DayCard = ({ date, large = false }) => {
+    const stats = getStats(date);
+    const label = formatDateLabel(date);
+    const blocked = isBlocked(date);
+
+    return (
       <article className={`tea-admin-day-card ${large ? "is-large" : ""} ${blocked ? "is-blocked" : ""}`}>
         <div className="tea-admin-day-top">
           <div>
@@ -462,8 +631,10 @@ const AdminView = ({ dates, orders, blockedDates, onBlockDate, onUnblockDate, on
             <span className="fiori-stat-label">Service Window</span>
             <ShoppingBag size={18} />
           </div>
-          <div className="fiori-stat-value tea-stat-text">15 Days</div>
-          <div className="fiori-stat-note">Current rolling view for tea and coffee demand</div>
+          <div className="fiori-stat-value tea-stat-text">{filteredDates.length} Days</div>
+          <div className="fiori-stat-note">
+            {filters.dateFrom} to {filters.dateTo}
+          </div>
         </article>
 
         <article className="fiori-stat-card">
@@ -489,12 +660,16 @@ const AdminView = ({ dates, orders, blockedDates, onBlockDate, onUnblockDate, on
         <div className="fiori-panel-header">
           <div>
             <h3>Controls</h3>
-            <p>Refresh orders or update the yearly service calendar</p>
+            <p>Filter the admin view by beverage and date range, then export the current table.</p>
           </div>
           <div className="tea-toolbar">
             <button className="fiori-button secondary" onClick={onRefresh}>
               <RefreshCw size={16} />
               <span>Refresh orders</span>
+            </button>
+            <button className="fiori-button secondary" onClick={exportSummary} disabled={!filteredDates.length}>
+              <Download size={16} />
+              <span>Export CSV</span>
             </button>
             <button className="fiori-button primary" onClick={() => setShowYearlyCalendar(true)}>
               <CalendarDays size={16} />
@@ -502,23 +677,191 @@ const AdminView = ({ dates, orders, blockedDates, onBlockDate, onUnblockDate, on
             </button>
           </div>
         </div>
+
+        <div className="employee-directory-filters employee-directory-filters-extended">
+          <label className="employee-filter-field">
+            <span>Date From</span>
+            <input
+              className="input"
+              type="date"
+              value={filters.dateFrom}
+              onChange={(event) => onFilterChange("dateFrom", event.target.value)}
+            />
+          </label>
+
+          <label className="employee-filter-field">
+            <span>Date To</span>
+            <input
+              className="input"
+              type="date"
+              value={filters.dateTo}
+              onChange={(event) => onFilterChange("dateTo", event.target.value)}
+            />
+          </label>
+
+          <label className="employee-filter-field">
+            <span>Beverage Type</span>
+            <select
+              className="input"
+              value={filters.beverageType}
+              onChange={(event) => onFilterChange("beverageType", event.target.value)}
+            >
+              <option value="all">All beverages</option>
+              <option value="tea">Tea</option>
+              <option value="coffee">Coffee</option>
+              <option value="milk">Milk</option>
+            </select>
+          </label>
+        </div>
       </section>
 
-      <DayCard date={dates[0]} large />
+      {filteredDates[0] ? <DayCard date={filteredDates[0]} large /> : null}
 
       <section className="fiori-panel">
         <div className="fiori-panel-header">
           <div>
             <h3>Upcoming Days</h3>
-            <p>Daily demand cards for the next 14 service days</p>
+            <p>Daily demand cards for the current filtered service window</p>
           </div>
         </div>
 
         <div className="tea-admin-grid">
-          {dates.slice(1).map((date) => (
+          {filteredDates.slice(1).map((date) => (
             <DayCard key={date} date={date} />
           ))}
         </div>
+      </section>
+
+      <section className="fiori-panel">
+        <div className="fiori-panel-header">
+          <div>
+            <h3>Past Orders Table</h3>
+            <p>Historical tea and coffee orders already placed by employees.</p>
+          </div>
+          <button className="fiori-button secondary" onClick={onExportHistory} disabled={!historyOrders.length}>
+            <Download size={16} />
+            <span>Export CSV</span>
+          </button>
+        </div>
+
+        <div className="employee-directory-filters employee-directory-filters-extended">
+          <label className="employee-filter-field employee-filter-search">
+            <span>Person / Search</span>
+            <div className="employee-filter-input-shell">
+              <Search size={16} />
+              <input
+                className="input"
+                placeholder="Search by person, email, department, designation, or date"
+                value={historyFilters.search}
+                onChange={(event) => onHistoryFilterChange("search", event.target.value)}
+              />
+            </div>
+          </label>
+
+          <label className="employee-filter-field">
+            <span>Department</span>
+            <select
+              className="input"
+              value={historyFilters.department}
+              onChange={(event) => onHistoryFilterChange("department", event.target.value)}
+            >
+              {availableDepartments.map((department) => (
+                <option key={department} value={department}>
+                  {department === "all" ? "All departments" : department}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="employee-filter-field">
+            <span>Beverage Type</span>
+            <select
+              className="input"
+              value={historyFilters.beverageType}
+              onChange={(event) => onHistoryFilterChange("beverageType", event.target.value)}
+            >
+              <option value="all">All beverages</option>
+              <option value="tea">Tea</option>
+              <option value="coffee">Coffee</option>
+              <option value="milk">Milk</option>
+            </select>
+          </label>
+
+          <label className="employee-filter-field">
+            <span>History From</span>
+            <input
+              className="input"
+              type="date"
+              value={historyFilters.dateFrom}
+              onChange={(event) => onHistoryFilterChange("dateFrom", event.target.value)}
+            />
+          </label>
+
+          <label className="employee-filter-field">
+            <span>History To</span>
+            <input
+              className="input"
+              type="date"
+              value={historyFilters.dateTo}
+              onChange={(event) => onHistoryFilterChange("dateTo", event.target.value)}
+            />
+          </label>
+        </div>
+
+        {filteredHistoryOrders.length === 0 ? (
+          <div className="admin-empty-state">
+            <Users size={24} />
+            <div>
+              <strong>No past tea/coffee orders match the current filters</strong>
+              <p>Adjust person, beverage, department, or date filters to review more historical orders.</p>
+            </div>
+          </div>
+        ) : (
+          <div className="fiori-table-shell">
+            <table className="fiori-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Employee</th>
+                  <th>Department</th>
+                  <th>Morning</th>
+                  <th>Evening</th>
+                  <th>Matched Beverage</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredHistoryOrders.map((order, index) => {
+                  const matchesBeverage =
+                    historyFilters.beverageType !== "all" &&
+                    (order.morning === historyFilters.beverageType || order.evening === historyFilters.beverageType);
+                  return (
+                    <tr key={`${order._id || order.employee_email}-${order.date}-${index}`}>
+                      <td>
+                        <div className="fiori-primary-cell">
+                          <strong>{formatDateLabel(order.date).full}</strong>
+                          <span>{order.date}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="fiori-primary-cell">
+                          <strong>{order.employee_name || "Unknown employee"}</strong>
+                          <span>{order.employee_email || "No email available"}</span>
+                          <span>{order.employee_designation || "Designation unavailable"}</span>
+                        </div>
+                      </td>
+                      <td>{order.employee_department || "Unassigned"}</td>
+                      <td>{order.morning ? <BeveragePill beverage={order.morning} /> : "—"}</td>
+                      <td>{order.evening ? <BeveragePill beverage={order.evening} /> : "—"}</td>
+                      <td>
+                        {historyFilters.beverageType === "all" ? "All beverages" : matchesBeverage ? historyFilters.beverageType : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       {showYearlyCalendar ? (
@@ -543,6 +886,8 @@ const AdminView = ({ dates, orders, blockedDates, onBlockDate, onUnblockDate, on
 
 const TeaCoffee = ({ user }) => {
   const [orders, setOrders] = useState({});
+  const [historyOrders, setHistoryOrders] = useState([]);
+  const [adminHistoryOrders, setAdminHistoryOrders] = useState([]);
   const [dates, setDates] = useState([]);
   const [loading, setLoading] = useState(false);
   const fetchedOnce = useRef(false);
@@ -553,6 +898,34 @@ const TeaCoffee = ({ user }) => {
   const [selectedDate, setSelectedDate] = useState(null);
   const [tempSelection, setTempSelection] = useState({ morning: null, evening: null });
   const [message, setMessage] = useState("");
+  const [adminFilters, setAdminFilters] = useState(() => {
+    const start = new Date();
+    const end = new Date();
+    end.setDate(end.getDate() + 14);
+    return {
+      dateFrom: toISODate(start),
+      dateTo: toISODate(end),
+      beverageType: "all",
+    };
+  });
+  const [adminHistoryFilters, setAdminHistoryFilters] = useState(() => {
+    const today = toISODate(new Date());
+    return {
+      search: "",
+      department: "all",
+      beverageType: "all",
+      dateFrom: "",
+      dateTo: today,
+    };
+  });
+  const [employeeHistoryFilters, setEmployeeHistoryFilters] = useState(() => {
+    const today = toISODate(new Date());
+    return {
+      beverageType: "all",
+      dateFrom: "",
+      dateTo: today,
+    };
+  });
 
   const isAdmin = ["Admin", "admin", "System Administrator", "Administrator", "system-admin"].includes(
     (user?.role || "").trim()
@@ -564,15 +937,8 @@ const TeaCoffee = ({ user }) => {
     window.setTimeout(() => setMessage(""), 3000);
   };
 
-  const generateDates = useCallback(() => {
-    const dateList = [];
-    const today = new Date();
-    for (let index = 0; index < 15; index += 1) {
-      const date = new Date(today);
-      date.setDate(today.getDate() + index);
-      dateList.push(date.toISOString().split("T")[0]);
-    }
-    setDates(dateList);
+  const generateDates = useCallback((startDate, endDate) => {
+    setDates(generateDateRange(startDate, endDate));
   }, []);
 
   const fetchBlockedDates = useCallback(async () => {
@@ -589,12 +955,21 @@ const TeaCoffee = ({ user }) => {
 
     setLoading(true);
     try {
-      const response = await axios.get(`${API_BASE}/my_orders/${userId}`);
+      const [upcomingResponse, historyResponse] = await Promise.all([
+        axios.get(`${API_BASE}/my_orders/${userId}`),
+        axios.get(`${API_BASE}/my_orders/${userId}`, {
+          params: {
+            include_past: true,
+            end_date: toISODate(new Date()),
+          },
+        }),
+      ]);
       const orderMap = {};
-      response.data.forEach((order) => {
+      upcomingResponse.data.forEach((order) => {
         orderMap[order.date] = order;
       });
       setOrders(orderMap);
+      setHistoryOrders(Array.isArray(historyResponse.data) ? historyResponse.data : []);
     } catch (error) {
       console.error("Error fetching orders:", error);
       showToast(error.response?.data?.error || "Failed to load orders");
@@ -606,11 +981,13 @@ const TeaCoffee = ({ user }) => {
   const fetchAdminOrders = useCallback(async () => {
     setLoading(true);
     try {
-      const start = new Date().toISOString().split("T")[0];
-      const endDate = new Date();
-      endDate.setDate(endDate.getDate() + 14);
-      const end = endDate.toISOString().split("T")[0];
-      const response = await axios.get(`${API_BASE}/admin/orders?start_date=${start}&end_date=${end}`);
+      const response = await axios.get(`${API_BASE}/admin/orders`, {
+        params: {
+          start_date: adminFilters.dateFrom,
+          end_date: adminFilters.dateTo,
+          beverage_type: adminFilters.beverageType,
+        },
+      });
 
       const orderMap = {};
       response.data.forEach((order) => {
@@ -620,12 +997,44 @@ const TeaCoffee = ({ user }) => {
         orderMap[order.date].push(order);
       });
       setOrders(orderMap);
+      generateDates(adminFilters.dateFrom, adminFilters.dateTo);
+
+      const today = toISODate(new Date());
+      const historyResponse = await axios.get(`${API_BASE}/admin/orders`, {
+        params: {
+          start_date: "2020-01-01",
+          end_date: today,
+          beverage_type: adminFilters.beverageType,
+        },
+      });
+      setAdminHistoryOrders(Array.isArray(historyResponse.data) ? historyResponse.data : []);
     } catch (error) {
       console.error("Error fetching admin orders:", error);
       showToast(error.response?.data?.error || "Failed to load orders");
     } finally {
       setLoading(false);
     }
+  }, [adminFilters.beverageType, adminFilters.dateFrom, adminFilters.dateTo, generateDates]);
+
+  const handleAdminFilterChange = useCallback((field, value) => {
+    setAdminFilters((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }, []);
+
+  const handleAdminHistoryFilterChange = useCallback((field, value) => {
+    setAdminHistoryFilters((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }, []);
+
+  const handleEmployeeHistoryFilterChange = useCallback((field, value) => {
+    setEmployeeHistoryFilters((current) => ({
+      ...current,
+      [field]: value,
+    }));
   }, []);
 
   const refreshOrders = useCallback(() => {
@@ -663,17 +1072,25 @@ const TeaCoffee = ({ user }) => {
     if (fetchedOnce.current) return;
     fetchedOnce.current = true;
 
-    generateDates();
     fetchBlockedDates();
 
     if (isAdmin) {
       fetchAdminOrders();
     } else if (userId) {
+      const start = new Date();
+      const end = new Date();
+      end.setDate(end.getDate() + 14);
+      generateDates(toISODate(start), toISODate(end));
       fetchMyOrders();
     } else {
       showToast("User information is not available");
     }
   }, [isAdmin, userId, generateDates, fetchBlockedDates, fetchAdminOrders, fetchMyOrders]);
+
+  useEffect(() => {
+    if (!fetchedOnce.current || !isAdmin) return;
+    fetchAdminOrders();
+  }, [fetchAdminOrders, isAdmin]);
 
   const isDateBlocked = (date) => blockedDates.some((item) => item.date === date);
 
@@ -841,6 +1258,81 @@ const TeaCoffee = ({ user }) => {
     );
   }, [dates, orders]);
 
+  const filteredEmployeeHistoryOrders = useMemo(() => {
+    return historyOrders.filter((order) => {
+      if (employeeHistoryFilters.dateFrom && order.date < employeeHistoryFilters.dateFrom) return false;
+      if (employeeHistoryFilters.dateTo && order.date > employeeHistoryFilters.dateTo) return false;
+
+      if (employeeHistoryFilters.beverageType !== "all") {
+        const matchesBeverage =
+          order.morning === employeeHistoryFilters.beverageType ||
+          order.evening === employeeHistoryFilters.beverageType;
+        if (!matchesBeverage) return false;
+      }
+
+      return true;
+    });
+  }, [employeeHistoryFilters, historyOrders]);
+
+  const filteredAdminHistoryOrders = useMemo(() => {
+    const search = (adminHistoryFilters.search || "").trim().toLowerCase();
+
+    return adminHistoryOrders.filter((order) => {
+      if (adminHistoryFilters.dateFrom && order.date < adminHistoryFilters.dateFrom) return false;
+      if (adminHistoryFilters.dateTo && order.date > adminHistoryFilters.dateTo) return false;
+
+      if (
+        adminHistoryFilters.department !== "all" &&
+        order.employee_department !== adminHistoryFilters.department
+      ) {
+        return false;
+      }
+
+      if (adminHistoryFilters.beverageType !== "all") {
+        const matchesBeverage =
+          order.morning === adminHistoryFilters.beverageType ||
+          order.evening === adminHistoryFilters.beverageType;
+        if (!matchesBeverage) return false;
+      }
+
+      if (!search) return true;
+
+      return [
+        order.employee_name,
+        order.employee_email,
+        order.employee_department,
+        order.employee_designation,
+        order.date,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(search));
+    });
+  }, [adminHistoryFilters, adminHistoryOrders]);
+
+  const exportEmployeeHistory = () => {
+    downloadCsv(
+      `my_tea_coffee_history_${toISODate(new Date())}.csv`,
+      ["Date", "Morning", "Evening"],
+      filteredEmployeeHistoryOrders.map((order) => [order.date || "", order.morning || "", order.evening || ""])
+    );
+  };
+
+  const exportAdminHistory = () => {
+    downloadCsv(
+      `tea_coffee_admin_history_${toISODate(new Date())}.csv`,
+      ["Date", "Employee Name", "Employee Email", "Department", "Designation", "Morning", "Evening"],
+      filteredAdminHistoryOrders.map((order) => [
+        order.date || "",
+        order.employee_name || "",
+        order.employee_email || "",
+        order.employee_department || "",
+        order.employee_designation || "",
+        order.morning || "",
+        order.evening || "",
+      ])
+    );
+  };
+
   if (loading) {
     return (
       <section className="tea-workspace">
@@ -861,10 +1353,16 @@ const TeaCoffee = ({ user }) => {
         <AdminView
           dates={dates}
           orders={orders}
+          historyOrders={adminHistoryOrders}
           blockedDates={blockedDates}
           onBlockDate={handleBlockDate}
           onUnblockDate={handleUnblockDate}
           onRefresh={refreshOrders}
+          filters={adminFilters}
+          onFilterChange={handleAdminFilterChange}
+          historyFilters={adminHistoryFilters}
+          onHistoryFilterChange={handleAdminHistoryFilterChange}
+          onExportHistory={exportAdminHistory}
         />
         {message ? (
           <div className="admin-toast is-success">{message}</div>
@@ -1059,6 +1557,86 @@ const TeaCoffee = ({ user }) => {
             );
           })}
         </div>
+      </section>
+
+      <section className="fiori-panel">
+        <div className="fiori-panel-header">
+          <div>
+            <h3>My Past Orders</h3>
+            <p>Historical beverage orders you have already placed.</p>
+          </div>
+          <button className="fiori-button secondary" onClick={exportEmployeeHistory} disabled={!historyOrders.length}>
+            <Download size={16} />
+            <span>Export CSV</span>
+          </button>
+        </div>
+
+        <div className="employee-directory-filters employee-directory-filters-extended">
+          <label className="employee-filter-field">
+            <span>Beverage Type</span>
+            <select
+              className="input"
+              value={employeeHistoryFilters.beverageType}
+              onChange={(event) => handleEmployeeHistoryFilterChange("beverageType", event.target.value)}
+            >
+              <option value="all">All beverages</option>
+              <option value="tea">Tea</option>
+              <option value="coffee">Coffee</option>
+              <option value="milk">Milk</option>
+            </select>
+          </label>
+
+          <label className="employee-filter-field">
+            <span>History From</span>
+            <input
+              className="input"
+              type="date"
+              value={employeeHistoryFilters.dateFrom}
+              onChange={(event) => handleEmployeeHistoryFilterChange("dateFrom", event.target.value)}
+            />
+          </label>
+
+          <label className="employee-filter-field">
+            <span>History To</span>
+            <input
+              className="input"
+              type="date"
+              value={employeeHistoryFilters.dateTo}
+              onChange={(event) => handleEmployeeHistoryFilterChange("dateTo", event.target.value)}
+            />
+          </label>
+        </div>
+
+        {filteredEmployeeHistoryOrders.length === 0 ? (
+          <div className="admin-empty-state">
+            <ListChecks size={24} />
+            <div>
+              <strong>No past beverage orders found</strong>
+              <p>Adjust beverage type or date range to review your order history.</p>
+            </div>
+          </div>
+        ) : (
+          <div className="fiori-table-shell">
+            <table className="fiori-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Morning</th>
+                  <th>Evening</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredEmployeeHistoryOrders.map((order) => (
+                  <tr key={`${order.date}-${order._id || "history"}`}>
+                    <td>{formatDateLabel(order.date).full}</td>
+                    <td>{order.morning ? <BeveragePill beverage={order.morning} /> : "—"}</td>
+                    <td>{order.evening ? <BeveragePill beverage={order.evening} /> : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       {selectedDate ? (

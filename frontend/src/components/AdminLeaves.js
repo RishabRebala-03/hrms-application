@@ -5,7 +5,6 @@ import {
   BarChart3,
   CalendarClock,
   CheckCircle2,
-  ChevronRight,
   Clock3,
   Filter,
   GitBranch,
@@ -104,13 +103,6 @@ const getDaysLabel = (leave) => {
   return `${days} day${days === 1 ? "" : "s"}`;
 };
 
-const getApproverLabel = (approverId, userMap, fallbackLabel) => {
-  if (fallbackLabel) return fallbackLabel;
-  if (approverId && userMap[approverId]?.name) return userMap[approverId].name;
-  if (approverId && userMap[approverId]?.email) return userMap[approverId].email;
-  return "Unknown approver";
-};
-
 const ChartTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
 
@@ -139,7 +131,6 @@ const AdminLeaves = ({ user }) => {
   const [pendingLeaves, setPendingLeaves] = useState([]);
   const [allLeaves, setAllLeaves] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
-  const [expandedLeave, setExpandedLeave] = useState(null);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -859,7 +850,7 @@ const AdminLeaves = ({ user }) => {
             </div>
           </section>
 
-          <section className="leave-record-list">
+          <section className="fiori-panel">
             {filteredLeaves.length === 0 ? (
               <div className="admin-empty-state">
                 <CheckCircle2 size={28} />
@@ -869,124 +860,89 @@ const AdminLeaves = ({ user }) => {
                 </div>
               </div>
             ) : (
-              filteredLeaves.map((leave) => {
-                const isExpanded = expandedLeave === leave._id;
-                const isPending = leave.status === "Pending";
-                const toneClass = statusToneMap[leave.status] || "is-neutral";
-                const escalationCount = Array.isArray(leave.escalation_history)
-                  ? leave.escalation_history.length
-                  : 0;
+              <div className="fiori-table-shell">
+                <table className="fiori-table">
+                  <thead>
+                    <tr>
+                      <th>Employee</th>
+                      <th>Leave</th>
+                      <th>Period</th>
+                      <th>Status</th>
+                      <th>Approver</th>
+                      <th>Notes</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredLeaves.map((leave) => {
+                      const isPending = leave.status === "Pending";
+                      const toneClass = statusToneMap[leave.status] || "is-neutral";
+                      const escalationCount = Array.isArray(leave.escalation_history)
+                        ? leave.escalation_history.length
+                        : 0;
 
-                return (
-                  <article key={leave._id} className="admin-approval-card">
-                    <div className="admin-approval-card-header">
-                      <div>
-                        <h4>{leave.employee_name || "Unknown employee"}</h4>
-                        <p>
-                          {leave.employee_designation || "Designation unavailable"} •{" "}
-                          {leave.employee_department || "Department unavailable"}
-                        </p>
-                      </div>
-
-                      <div className={`fiori-status-pill ${toneClass}`}>{leave.status || "Pending"}</div>
-                    </div>
-
-                    <div className="admin-approval-metadata">
-                      <span>{leave.leave_type || "Leave"}</span>
-                      <span>{getDaysLabel(leave)}</span>
-                      <span>{getLeaveWindow(leave)}</span>
-                      <span>Applied {formatDate(leave.applied_on)}</span>
-                      {escalationCount > 0 ? <span>{escalationCount} escalation event(s)</span> : null}
-                    </div>
-
-                    <div className="leave-record-toolbar">
-                      <div className="leave-results-meta">
-                        <Users size={15} />
-                        <span>{leave.employee_email || "No email on record"}</span>
-                      </div>
-
-                      <button
-                        className="fiori-inline-button"
-                        onClick={() => setExpandedLeave(isExpanded ? null : leave._id)}
-                      >
-                        <span>{isExpanded ? "Hide details" : "Show details"}</span>
-                        <ChevronRight size={14} />
-                      </button>
-                    </div>
-
-                    {isExpanded && (
-                      <div className="admin-approval-details">
-                        <div>
-                          <span>Requested period</span>
-                          <strong>{`${formatDate(leave.start_date)} to ${formatDate(leave.end_date)}`}</strong>
-                        </div>
-                        <div>
-                          <span>Current approver</span>
-                          <strong>{userMap[leave.current_approver_id]?.name || "Administration queue"}</strong>
-                        </div>
-                        <div>
-                          <span>Approved by</span>
-                          <strong>{leave.approved_by || "Not resolved yet"}</strong>
-                        </div>
-                        <div>
-                          <span>Resolved on</span>
-                          <strong>{formatDate(leave.approved_on || leave.rejected_on)}</strong>
-                        </div>
-                        {leave.reason ? (
-                          <div className="is-wide">
-                            <span>Employee reason</span>
-                            <strong>{leave.reason}</strong>
-                          </div>
-                        ) : null}
-                        {leave.rejection_reason ? (
-                          <div className="is-wide">
-                            <span>Rejection reason</span>
-                            <strong>{leave.rejection_reason}</strong>
-                          </div>
-                        ) : null}
-                        {escalationCount > 0 ? (
-                          <div className="is-wide leave-escalation-history-block">
-                            <span>Escalation history</span>
-                            <div className="leave-escalation-history-compact">
-                              {leave.escalation_history.map((entry, index) => {
-                                const fromApprover =
-                                  getApproverLabel(entry.from_approver, userMap) ||
-                                  (index === 0
-                                    ? getApproverLabel(userMap[leave.employee_id]?.reportsTo, userMap)
-                                    : "Previous approver");
-                                const toApprover = getApproverLabel(
-                                  entry.to_approver || entry.approver_id,
-                                  userMap,
-                                  entry.to_approver_name || entry.approver_name
-                                );
-
-                                return (
-                                  <div key={`${leave._id}-history-${index}`} className="leave-escalation-compact-row">
-                                    <strong>{fromApprover}</strong>
-                                    <span>to</span>
-                                    <strong>{toApprover}</strong>
-                                  </div>
-                                );
-                              })}
+                      return (
+                        <tr key={leave._id}>
+                          <td>
+                            <div className="fiori-primary-cell">
+                              <strong>{leave.employee_name || "Unknown employee"}</strong>
+                              <span>
+                                {leave.employee_designation || "Designation unavailable"} •{" "}
+                                {leave.employee_department || "Department unavailable"}
+                              </span>
+                              <span>{leave.employee_email || "No email on record"}</span>
                             </div>
-                          </div>
-                        ) : null}
-                      </div>
-                    )}
-
-                    {isPending ? (
-                      <div className="admin-approval-actions">
-                        <button className="fiori-button secondary danger" onClick={() => setRejectModal({ show: true, leaveId: leave._id, reason: "" })}>
-                          Reject
-                        </button>
-                        <button className="fiori-button primary" onClick={() => openApproveModal(leave)}>
-                          Approve
-                        </button>
-                      </div>
-                    ) : null}
-                  </article>
-                );
-              })
+                          </td>
+                          <td>
+                            <div className="fiori-primary-cell">
+                              <strong>{leave.leave_type || "Leave"}</strong>
+                              <span>{getDaysLabel(leave)}</span>
+                              {escalationCount > 0 ? <span>{escalationCount} escalation event(s)</span> : null}
+                            </div>
+                          </td>
+                          <td>
+                            <div className="fiori-primary-cell">
+                              <span>{getLeaveWindow(leave)}</span>
+                              <span>Applied {formatDate(leave.applied_on)}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <span className={`fiori-status-pill ${toneClass}`}>{leave.status || "Pending"}</span>
+                          </td>
+                          <td>
+                            <div className="fiori-primary-cell">
+                              <span>{userMap[leave.current_approver_id]?.name || "Administration queue"}</span>
+                              <span>{leave.approved_by || "Not resolved yet"}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <div className="fiori-primary-cell">
+                              <span>{leave.reason || "No employee reason"}</span>
+                              <span>{leave.rejection_reason || "No rejection reason"}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <div className="employee-table-actions">
+                              {isPending ? (
+                                <>
+                                  <button className="fiori-button secondary danger" onClick={() => setRejectModal({ show: true, leaveId: leave._id, reason: "" })}>
+                                    Reject
+                                  </button>
+                                  <button className="fiori-button primary" onClick={() => openApproveModal(leave)}>
+                                    Approve
+                                  </button>
+                                </>
+                              ) : (
+                                <span>{formatDate(leave.approved_on || leave.rejected_on)}</span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             )}
           </section>
         </>

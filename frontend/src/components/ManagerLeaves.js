@@ -4,13 +4,10 @@ import axios from "axios";
 import {
   CalendarClock,
   CheckCircle2,
-  ChevronDown,
-  ChevronUp,
   ClipboardList,
   Search,
   Send,
   ShieldAlert,
-  UserRoundCheck,
   Users,
   XCircle,
 } from "lucide-react";
@@ -28,7 +25,6 @@ const ManagerLeaves = ({ user }) => {
   const [myBalance, setMyBalance] = useState(null);
   const [myHistory, setMyHistory] = useState([]);
   const [teamMembers, setTeamMembers] = useState([]);
-  const [expandedLeave, setExpandedLeave] = useState(null);
   const [rejectModal, setRejectModal] = useState({ show: false, leaveId: null, reason: "" });
   const [leave, setLeave] = useState({
     leave_type: "Casual",
@@ -376,76 +372,66 @@ const ManagerLeaves = ({ user }) => {
               </div>
             </div>
           ) : (
-            <div className="manager-request-list">
-              {displayLeaves.map((leaveRecord) => {
-                const isExpanded = expandedLeave === leaveRecord._id;
-
-                return (
-                  <article key={leaveRecord._id} className="admin-approval-card manager-approval-card">
-                    <div className="admin-approval-card-header">
-                      <div>
-                        <div className="manager-employee-title">
-                          <h4>{leaveRecord.employee_name || "Unknown employee"}</h4>
-                          {isBirthdayLeave(leaveRecord) ? <span className="fiori-status-pill is-neutral">Birthday leave</span> : null}
+            <div className="fiori-table-shell">
+              <table className="fiori-table">
+                <thead>
+                  <tr>
+                    <th>Employee</th>
+                    <th>Leave</th>
+                    <th>Dates</th>
+                    <th>Applied</th>
+                    <th>Reason</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayLeaves.map((leaveRecord) => (
+                    <tr key={leaveRecord._id}>
+                      <td>
+                        <div className="fiori-primary-cell">
+                          <strong>{leaveRecord.employee_name || "Unknown employee"}</strong>
+                          <span>
+                            {leaveRecord.employee_designation || "Designation unavailable"} ·{" "}
+                            {leaveRecord.employee_department || "Department unavailable"}
+                          </span>
+                          <span>{leaveRecord.employee_email || "Email unavailable"}</span>
                         </div>
-                        <p>
-                          {leaveRecord.employee_designation || "Designation unavailable"} ·{" "}
-                          {leaveRecord.employee_department || "Department unavailable"}
-                        </p>
-                        <small>{leaveRecord.employee_email || "Email unavailable"}</small>
-                      </div>
-                      <button className="fiori-button secondary" onClick={() => setExpandedLeave(isExpanded ? null : leaveRecord._id)}>
-                        {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                        Details
-                      </button>
-                    </div>
-
-                    <div className="admin-approval-metadata">
-                      <span>{leaveRecord.leave_type} leave</span>
-                      <span>
-                        {leaveRecord.days || 0} {leaveRecord.days === 1 ? "day" : "days"}
-                      </span>
-                      <span>{formatDate(leaveRecord.start_date)} to {formatDate(leaveRecord.end_date)}</span>
-                    </div>
-
-                    {isExpanded ? (
-                      <div className="admin-approval-details">
-                        <div>
-                          <span>Start date</span>
-                          <strong>{formatDate(leaveRecord.start_date)}</strong>
+                      </td>
+                      <td>
+                        <div className="fiori-primary-cell">
+                          <strong>{leaveRecord.leave_type} leave</strong>
+                          <span>
+                            {leaveRecord.days || 0} {leaveRecord.days === 1 ? "day" : "days"}
+                          </span>
+                          {isBirthdayLeave(leaveRecord) ? (
+                            <span className="fiori-status-pill is-neutral">Birthday leave</span>
+                          ) : null}
                         </div>
-                        <div>
-                          <span>End date</span>
-                          <strong>{formatDate(leaveRecord.end_date)}</strong>
+                      </td>
+                      <td>{formatDate(leaveRecord.start_date)} to {formatDate(leaveRecord.end_date)}</td>
+                      <td>
+                        <div className="fiori-primary-cell">
+                          <span>{formatDate(leaveRecord.applied_on)}</span>
+                          <span>{leaveRecord.logout_time || "No logout time"}</span>
                         </div>
-                        <div>
-                          <span>Applied on</span>
-                          <strong>{formatDate(leaveRecord.applied_on)}</strong>
+                      </td>
+                      <td>{leaveRecord.reason || "No reason provided"}</td>
+                      <td>
+                        <div className="employee-table-actions">
+                          <button className="fiori-button primary" onClick={() => updateStatus(leaveRecord._id, "Approved")}>
+                            <CheckCircle2 size={16} />
+                            Approve
+                          </button>
+                          <button className="fiori-button secondary danger" onClick={() => handleReject(leaveRecord._id)}>
+                            <XCircle size={16} />
+                            Reject
+                          </button>
                         </div>
-                        <div>
-                          <span>Logout time</span>
-                          <strong>{leaveRecord.logout_time || "Not applicable"}</strong>
-                        </div>
-                        <div className="is-wide">
-                          <span>Reason</span>
-                          <strong>{leaveRecord.reason || "No reason provided"}</strong>
-                        </div>
-                      </div>
-                    ) : null}
-
-                    <div className="admin-approval-actions">
-                      <button className="fiori-button primary" onClick={() => updateStatus(leaveRecord._id, "Approved")}>
-                        <CheckCircle2 size={16} />
-                        Approve
-                      </button>
-                      <button className="fiori-button secondary danger" onClick={() => handleReject(leaveRecord._id)}>
-                        <XCircle size={16} />
-                        Reject
-                      </button>
-                    </div>
-                  </article>
-                );
-              })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </section>
@@ -621,43 +607,47 @@ const ManagerLeaves = ({ user }) => {
               </div>
             </div>
           ) : (
-            <div className="manager-team-balance-grid">
-              {teamMembers.map((member) => (
-                <article key={member._id} className="fiori-stat-card manager-member-card">
-                  <div className="manager-member-header">
-                    <div className="manager-member-avatar">{member.name?.charAt(0) || "E"}</div>
-                    <div className="fiori-primary-cell">
-                      <strong>{member.name || "Unknown employee"}</strong>
-                      <span>{member.designation || "Designation unavailable"}</span>
-                    </div>
-                  </div>
-
-                  {member.leaveBalance ? (
-                    <div className="manager-balance-mini-grid">
-                      {[
-                        { label: "Sick", value: member.leaveBalance.sick || 0, total: member.leaveBalance.sickTotal || 6 },
-                        { label: "Planned", value: member.leaveBalance.planned || 0, total: member.leaveBalance.plannedTotal || 12 },
-                        { label: "Optional", value: member.leaveBalance.optional || 0, total: member.leaveBalance.optionalTotal || 2 },
-                        { label: "LOP", value: member.leaveBalance.lwp || 0, total: "Open" },
-                      ].map((item) => (
-                        <div key={item.label} className="manager-balance-mini-card">
-                          <span>{item.label}</span>
-                          <strong>{item.value}</strong>
-                          <small>Total: {item.total}</small>
+            <div className="fiori-table-shell">
+              <table className="fiori-table">
+                <thead>
+                  <tr>
+                    <th>Employee</th>
+                    <th>Sick</th>
+                    <th>Planned</th>
+                    <th>Optional</th>
+                    <th>LOP</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {teamMembers.map((member) => (
+                    <tr key={member._id}>
+                      <td>
+                        <div className="fiori-primary-cell">
+                          <strong>{member.name || "Unknown employee"}</strong>
+                          <span>{member.designation || "Designation unavailable"}</span>
+                          <span>{member.email || "Email unavailable"}</span>
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="admin-empty-state manager-compact-empty">
-                      <UserRoundCheck size={20} />
-                      <div>
-                        <strong>Balance unavailable</strong>
-                        <p>No balance data found.</p>
-                      </div>
-                    </div>
-                  )}
-                </article>
-              ))}
+                      </td>
+                      <td>
+                        {member.leaveBalance
+                          ? `${member.leaveBalance.sick || 0} / ${member.leaveBalance.sickTotal || 6}`
+                          : "Unavailable"}
+                      </td>
+                      <td>
+                        {member.leaveBalance
+                          ? `${member.leaveBalance.planned || 0} / ${member.leaveBalance.plannedTotal || 12}`
+                          : "Unavailable"}
+                      </td>
+                      <td>
+                        {member.leaveBalance
+                          ? `${member.leaveBalance.optional || 0} / ${member.leaveBalance.optionalTotal || 2}`
+                          : "Unavailable"}
+                      </td>
+                      <td>{member.leaveBalance ? member.leaveBalance.lwp || 0 : "Unavailable"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </section>

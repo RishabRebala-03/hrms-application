@@ -1,7 +1,7 @@
 #user_routes.py
 from flask import Blueprint, request, jsonify
 from bson import ObjectId
-from datetime import datetime
+from datetime import datetime, timedelta
 from config.db import mongo
 import os
 
@@ -26,6 +26,272 @@ def serialize_all(obj):
     return obj
 
 user_bp = Blueprint("user_bp", __name__)
+
+
+def _build_photo_url(user_id, base_url):
+    photo_extensions = [".png", ".jpg", ".jpeg", ".webp"]
+
+    for ext in photo_extensions:
+        photo_filename = f"{user_id}{ext}"
+        photo_path = os.path.join("static", "profile_photos", photo_filename)
+        if os.path.exists(photo_path):
+            return f"{base_url}/static/profile_photos/{photo_filename}"
+
+    return None
+
+
+def _parse_date_value(value):
+    if value in (None, "", "null"):
+        return None
+
+    if isinstance(value, datetime):
+        return value.date()
+
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+
+        try:
+            if len(raw) == 10 and raw.count("-") == 2:
+                return datetime.strptime(raw, "%Y-%m-%d").date()
+            return datetime.fromisoformat(raw.replace("Z", "+00:00")).date()
+        except Exception:
+            return None
+
+    return None
+
+
+def _get_last_month_window():
+    today = datetime.utcnow().date()
+    current_month_start = today.replace(day=1)
+    last_month_end = current_month_start - timedelta(days=1)
+    last_month_start = last_month_end.replace(day=1)
+    return last_month_start, last_month_end
+
+
+def _resolve_period_window(period_start_raw=None, period_end_raw=None):
+    default_start, default_end = _get_last_month_window()
+    period_start = _parse_date_value(period_start_raw) or default_start
+    period_end = _parse_date_value(period_end_raw) or default_end
+
+    if period_start > period_end:
+        period_start, period_end = period_end, period_start
+
+    return period_start, period_end
+
+
+def _normalize_project_assignment(assignment):
+    if not isinstance(assignment, dict):
+        return None
+
+    project_id = assignment.get("projectId")
+    if isinstance(project_id, ObjectId):
+        project_id = str(project_id)
+
+    start_date = assignment.get("startDate")
+    end_date = assignment.get("endDate")
+
+    return {
+        "_id": str(assignment.get("_id")) if assignment.get("_id") else None,
+        "projectId": project_id,
+        "projectName": assignment.get("projectName") or assignment.get("name") or "",
+        "startDate": start_date.isoformat() if isinstance(start_date, datetime) else start_date,
+        "endDate": end_date.isoformat() if isinstance(end_date, datetime) else end_date,
+        "assignedAt": assignment.get("assignedAt").isoformat() if isinstance(assignment.get("assignedAt"), datetime) else assignment.get("assignedAt"),
+    }
+
+
+def _get_leave_summaries_for_period(employee_ids, period_start=None, period_end=None):
+    period_start, period_end = _resolve_period_window(period_start, period_end)
+    summaries = {
+        str(employee_id): {
+            "records": 0,
+            "days": 0,
+            "approved_days": 0,
+            "pending_records": 0,
+        }
+        for employee_id in employee_ids
+    }
+
+    if not employee_ids:
+        return summaries, period_start, period_end
+
+    leaves = mongo.db.leaves.find(
+        {"employee_id": {"$in": employee_ids}},
+        {
+            "employee_id": 1,
+            "start_date": 1,
+            "end_date": 1,
+            "status": 1,
+            "is_half_day": 1,
+        },
+    )
+
+    for leave in leaves:
+        employee_id = str(leave.get("employee_id"))
+        if employee_id not in summaries:
+            continue
+
+        leave_start = _parse_date_value(leave.get("start_date"))
+        leave_end = _parse_date_value(leave.get("end_date")) or leave_start
+
+        if not leave_start or not leave_end:
+            continue
+
+        overlap_start = max(leave_start, period_start)
+        overlap_end = min(leave_end, period_end)
+        if overlap_start > overlap_end:
+            continue
+
+        overlap_days = (overlap_end - overlap_start).days + 1
+        if leave.get("is_half_day") and overlap_days > 0:
+            overlap_days = 0.5
+
+        summaries[employee_id]["records"] += 1
+        summaries[employee_id]["days"] += overlap_days
+
+        if leave.get("status") == "Approved":
+            summaries[employee_id]["approved_days"] += overlap_days
+
+        if leave.get("status") == "Pending":
+            summaries[employee_id]["pending_records"] += 1
+
+    return summaries, period_start, period_end
+
+
+def _serialize_directory_employee(user, base_url, leave_summary, period_start, period_end):
+    manager_email = ""
+    reports_to = user.get("reportsTo")
+    if reports_to:
+        manager = None
+        if isinstance(reports_to, ObjectId):
+            manager = mongo.db.users.find_one({"_id": reports_to}, {"email": 1})
+            reports_to = str(reports_to)
+        elif isinstance(reports_to, str):
+            try:
+                manager = mongo.db.users.find_one({"_id": ObjectId(reports_to)}, {"email": 1})
+            except Exception:
+                manager = None
+
+        if manager:
+            manager_email = manager.get("email", "")
+
+    projects = []
+    for assignment in user.get("projects", []) or []:
+        normalized = _normalize_project_assignment(assignment)
+        if normalized:
+            projects.append(normalized)
+
+    project_names = [project["projectName"] for project in projects if project.get("projectName")]
+    joining_date = user.get("dateOfJoining")
+
+    return {
+        "_id": str(user["_id"]),
+        "employeeId": user.get("employeeId", ""),
+        "name": user.get("name", ""),
+        "email": user.get("email", ""),
+        "designation": user.get("designation", ""),
+        "department": user.get("department", ""),
+        "role": user.get("role", "Employee"),
+        "shiftTimings": user.get("shiftTimings", ""),
+        "employment_type": user.get("employment_type", "Employee"),
+        "is_active": user.get("is_active", True),
+        "dateOfJoining": joining_date.isoformat() if isinstance(joining_date, datetime) else joining_date,
+        "reportsTo": reports_to,
+        "reportsToEmail": user.get("reportsToEmail") or manager_email,
+        "photoUrl": _build_photo_url(str(user["_id"]), base_url),
+        "projects": projects,
+        "projectNames": project_names,
+        "leaveSummary": {
+            "periodStart": period_start.isoformat(),
+            "periodEnd": period_end.isoformat(),
+            "records": leave_summary.get("records", 0),
+            "days": leave_summary.get("days", 0),
+            "approvedDays": leave_summary.get("approved_days", 0),
+            "pendingRecords": leave_summary.get("pending_records", 0),
+        },
+        "lastMonthLeave": {
+            "periodStart": period_start.isoformat(),
+            "periodEnd": period_end.isoformat(),
+            "records": leave_summary.get("records", 0),
+            "days": leave_summary.get("days", 0),
+            "approvedDays": leave_summary.get("approved_days", 0),
+            "pendingRecords": leave_summary.get("pending_records", 0),
+        },
+    }
+
+
+def _employee_matches_filters(employee, search_term, department, status_filter, project_filter, joined_from, joined_to, leave_filter):
+    searchable_values = [
+        employee.get("name", ""),
+        employee.get("email", ""),
+        employee.get("designation", ""),
+        employee.get("department", ""),
+        employee.get("reportsToEmail", ""),
+        " ".join(employee.get("projectNames", [])),
+    ]
+    normalized_search = search_term.lower()
+
+    matches_search = not normalized_search or any(
+        normalized_search in str(value).lower() for value in searchable_values if value
+    )
+
+    matches_department = not department or employee.get("department") == department
+
+    is_active = employee.get("is_active") is not False
+    matches_status = (
+        not status_filter
+        or status_filter == "all"
+        or (status_filter == "active" and is_active)
+        or (status_filter == "inactive" and not is_active)
+    )
+
+    matches_project = (
+        not project_filter
+        or project_filter == "all"
+        or project_filter in employee.get("projectNames", [])
+    )
+
+    joining_date = _parse_date_value(employee.get("dateOfJoining"))
+    matches_joined_from = not joined_from or (joining_date and joining_date >= joined_from)
+    matches_joined_to = not joined_to or (joining_date and joining_date <= joined_to)
+
+    leave_days = employee.get("leaveSummary", {}).get("days", 0)
+    matches_leave = (
+        not leave_filter
+        or leave_filter == "all"
+        or (leave_filter == "with_leave" and leave_days > 0)
+        or (leave_filter == "without_leave" and leave_days == 0)
+    )
+
+    return all(
+        [
+            matches_search,
+            matches_department,
+            matches_status,
+            matches_project,
+            matches_joined_from,
+            matches_joined_to,
+            matches_leave,
+        ]
+    )
+
+
+def _employee_sort_value(employee, sort_by):
+    if sort_by == "joining_date":
+        return _parse_date_value(employee.get("dateOfJoining")) or datetime.min.date()
+
+    if sort_by == "department":
+        return (employee.get("department") or "").lower()
+
+    if sort_by == "status":
+        return 0 if employee.get("is_active") is not False else 1
+
+    if sort_by == "last_month_leave":
+        return employee.get("leaveSummary", {}).get("days", 0)
+
+    return (employee.get("name") or "").lower()
 
 @user_bp.route("/add_user", methods=["POST"])
 def add_user():
@@ -254,6 +520,159 @@ def get_all_employees():
 
         return jsonify(serialize_all(employees)), 200
 
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@user_bp.route("/directory", methods=["GET"])
+def get_employee_directory():
+    """Directory API contract for employee and leave-aware listing."""
+    try:
+        scope = (request.args.get("scope") or "all").strip().lower()
+        manager_email = (request.args.get("manager_email") or "").strip()
+        include_admins = (request.args.get("include_admins") or "false").strip().lower() == "true"
+        search_term = (request.args.get("search") or "").strip()
+        department = (request.args.get("department") or "").strip()
+        status_filter = (request.args.get("status") or "all").strip().lower()
+        project_filter = (request.args.get("project") or "").strip()
+        leave_filter = (request.args.get("leave_last_month") or "all").strip().lower()
+        joined_from = _parse_date_value(request.args.get("joined_from"))
+        joined_to = _parse_date_value(request.args.get("joined_to"))
+        period_start_raw = request.args.get("period_start")
+        period_end_raw = request.args.get("period_end")
+        sort_by = (request.args.get("sort_by") or "name").strip().lower()
+        sort_order = (request.args.get("sort_order") or "asc").strip().lower()
+
+        query = {}
+        if not include_admins:
+            query["role"] = {"$ne": "Admin"}
+
+        if scope == "manager":
+            if not manager_email:
+                return jsonify({"error": "manager_email is required for manager scope"}), 400
+
+            manager = mongo.db.users.find_one({"email": manager_email})
+            if not manager:
+                return jsonify(
+                    {
+                        "items": [],
+                        "meta": {
+                            "scope": scope,
+                            "scope_records": 0,
+                            "filtered_records": 0,
+                            "active_filtered_records": 0,
+                            "available_filters": {
+                                "departments": [],
+                                "projects": [],
+                            },
+                            "applied_filters": {
+                                "search": search_term,
+                                "department": department or "all",
+                                "status": status_filter,
+                                "project": project_filter or "all",
+                                "joined_from": request.args.get("joined_from") or "",
+                                "joined_to": request.args.get("joined_to") or "",
+                                "leave_last_month": leave_filter,
+                                "period_start": _resolve_period_window(period_start_raw, period_end_raw)[0].isoformat(),
+                                "period_end": _resolve_period_window(period_start_raw, period_end_raw)[1].isoformat(),
+                                "sort_by": sort_by,
+                                "sort_order": sort_order,
+                            },
+                        },
+                    }
+                ), 200
+
+            query["reportsTo"] = manager["_id"]
+
+        employees = list(mongo.db.users.find(query))
+        base_url = request.host_url.rstrip("/")
+        leave_summaries, period_start, period_end = _get_leave_summaries_for_period(
+            [employee["_id"] for employee in employees],
+            period_start_raw,
+            period_end_raw,
+        )
+
+        scope_items = [
+            _serialize_directory_employee(
+                employee,
+                base_url,
+                leave_summaries.get(str(employee["_id"]), {}),
+                period_start,
+                period_end,
+            )
+            for employee in employees
+        ]
+
+        available_departments = sorted(
+            {item["department"] for item in scope_items if item.get("department")}
+        )
+        available_projects = sorted(
+            {
+                project_name
+                for item in scope_items
+                for project_name in item.get("projectNames", [])
+                if project_name
+            }
+        )
+
+        filtered_items = [
+            item
+            for item in scope_items
+            if _employee_matches_filters(
+                item,
+                search_term,
+                department,
+                status_filter,
+                project_filter,
+                joined_from,
+                joined_to,
+                leave_filter,
+            )
+        ]
+
+        reverse = sort_order == "desc"
+        filtered_items.sort(key=lambda item: _employee_sort_value(item, sort_by), reverse=reverse)
+
+        active_filtered_records = sum(
+            1 for item in filtered_items if item.get("is_active") is not False
+        )
+
+        return jsonify(
+            {
+                "items": filtered_items,
+                "meta": {
+                    "scope": scope,
+                    "scope_records": len(scope_items),
+                    "filtered_records": len(filtered_items),
+                    "active_filtered_records": active_filtered_records,
+                    "available_filters": {
+                        "departments": available_departments,
+                        "projects": available_projects,
+                    },
+                    "last_month_window": {
+                        "start": period_start.isoformat(),
+                        "end": period_end.isoformat(),
+                    },
+                    "period_window": {
+                        "start": period_start.isoformat(),
+                        "end": period_end.isoformat(),
+                    },
+                    "applied_filters": {
+                        "search": search_term,
+                        "department": department or "all",
+                        "status": status_filter,
+                        "project": project_filter or "all",
+                        "joined_from": request.args.get("joined_from") or "",
+                        "joined_to": request.args.get("joined_to") or "",
+                        "leave_last_month": leave_filter,
+                        "period_start": period_start.isoformat(),
+                        "period_end": period_end.isoformat(),
+                        "sort_by": sort_by,
+                        "sort_order": sort_order,
+                    },
+                },
+            }
+        ), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     

@@ -158,18 +158,28 @@ def unblock_date():
 def get_my_orders(user_id):
     try:
         print(f"📥 Fetching orders for employee: {user_id}")
+        include_past = (request.args.get("include_past") or "false").strip().lower() == "true"
+        start_date = request.args.get("start_date")
+        end_date = request.args.get("end_date")
 
-        today = datetime.now().date()
-        end_date = today + timedelta(days=14)
+        query = {"employee_id": user_id}
 
-        # Fetch orders using string employee_id
-        orders = list(mongo.db.tea_coffee_orders.find({
-            "employee_id": user_id,
-            "date": {
+        if start_date or end_date:
+            date_query = {}
+            if start_date:
+                date_query["$gte"] = start_date
+            if end_date:
+                date_query["$lte"] = end_date
+            query["date"] = date_query
+        elif not include_past:
+            today = datetime.now().date()
+            future_end_date = today + timedelta(days=14)
+            query["date"] = {
                 "$gte": today.isoformat(),
-                "$lte": end_date.isoformat()
+                "$lte": future_end_date.isoformat()
             }
-        }))
+
+        orders = list(mongo.db.tea_coffee_orders.find(query).sort("date", -1 if include_past else 1))
 
         print(f"✅ Found {len(orders)} orders")
 
@@ -312,16 +322,45 @@ def get_admin_orders():
     try:
         start_date = request.args.get("start_date")
         end_date = request.args.get("end_date")
+        beverage_type = (request.args.get("beverage_type") or "all").strip().lower()
 
         if not start_date or not end_date:
             return jsonify({"error": "start_date and end_date are required"}), 400
 
-        orders = list(mongo.db.tea_coffee_orders.find({
+        query = {
             "date": {"$gte": start_date, "$lte": end_date}
-        }).sort("date", 1))
+        }
+
+        if beverage_type and beverage_type != "all":
+            query["$or"] = [
+                {"morning": beverage_type},
+                {"evening": beverage_type},
+            ]
+
+        orders = list(mongo.db.tea_coffee_orders.find(query).sort("date", 1))
 
         for order in orders:
             order["_id"] = str(order["_id"])
+            user_record = None
+
+            employee_id = order.get("employee_id")
+            if employee_id:
+                try:
+                    user_record = mongo.db.users.find_one({"_id": ObjectId(employee_id)})
+                except Exception:
+                    user_record = None
+
+            if not user_record and order.get("employee_email"):
+                user_record = mongo.db.users.find_one({"email": order.get("employee_email")})
+
+            if user_record:
+                order["employee_department"] = user_record.get("department", "")
+                order["employee_designation"] = user_record.get("designation", "")
+                order["employee_role"] = user_record.get("role", "")
+            else:
+                order["employee_department"] = order.get("employee_department", "")
+                order["employee_designation"] = order.get("employee_designation", "")
+                order["employee_role"] = order.get("employee_role", "")
 
         return jsonify(orders), 200
 

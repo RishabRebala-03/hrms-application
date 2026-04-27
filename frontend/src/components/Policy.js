@@ -482,35 +482,55 @@ const Policy = () => {
           </div>
         </div>
       ) : (
-        <div className="policy-card-grid">
-          {filteredPolicies.map((policy) => (
-            <article
-              key={policy.id}
-              className="policy-library-card"
-              onClick={() => openPolicy(policy.id)}
-            >
-              <div className="policy-library-card-top">
-                <div>
-                  <div className="policy-library-id">{policy.id}</div>
-                  <h3>{policy.title}</h3>
-                </div>
-                <span className={`fiori-status-pill ${statusToneMap[policy.status] || "is-neutral"}`}>
-                  {policy.status}
-                </span>
-              </div>
+        <section className="fiori-panel">
+          <div className="fiori-panel-header">
+            <div>
+              <h3>Policy Table</h3>
+              <p>Published policies displayed in a structured SAP-style list.</p>
+            </div>
+          </div>
 
-              <p>{policy.description}</p>
-
-              <div className="policy-library-meta">
-                <span>{policy.category}</span>
-                <span>{policy.sections.length} sections</span>
-                <span>Updated {policy.updated}</span>
-              </div>
-
-              <div className="fiori-card-link">Open policy document</div>
-            </article>
-          ))}
-        </div>
+          <div className="fiori-table-shell">
+            <table className="fiori-table">
+              <thead>
+                <tr>
+                  <th>Policy</th>
+                  <th>Category</th>
+                  <th>Status</th>
+                  <th>Sections</th>
+                  <th>Updated</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredPolicies.map((policy) => (
+                  <tr key={policy.id}>
+                    <td>
+                      <div className="fiori-primary-cell">
+                        <strong>{policy.title}</strong>
+                        <span>{policy.id}</span>
+                        <span>{policy.description}</span>
+                      </div>
+                    </td>
+                    <td>{policy.category}</td>
+                    <td>
+                      <span className={`fiori-status-pill ${statusToneMap[policy.status] || "is-neutral"}`}>
+                        {policy.status}
+                      </span>
+                    </td>
+                    <td>{policy.sections.length}</td>
+                    <td>{policy.updated}</td>
+                    <td>
+                      <button className="fiori-button secondary" onClick={() => openPolicy(policy.id)}>
+                        Open policy
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       )}
     </section>
   );

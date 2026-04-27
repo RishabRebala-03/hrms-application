@@ -705,47 +705,63 @@ const Profile = ({ user, role, viewEmployeeId = null, onUserUpdate, onBack }) =>
                 </div>
 
                 {profileProjects.length > 0 ? (
-                  <div className="profile-project-list">
-                    {profileProjects.map((project) => {
-                      const startDate = new Date(project.startDate);
-                      const endDate = project.endDate ? new Date(project.endDate) : new Date();
-                      let duration = "Not available";
+                  <div className="fiori-table-shell">
+                    <table className="fiori-table">
+                      <thead>
+                        <tr>
+                          <th>Project</th>
+                          <th>Start</th>
+                          <th>End</th>
+                          <th>Duration</th>
+                          {role === "Admin" ? <th>Actions</th> : null}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {profileProjects.map((project) => {
+                          const startDate = new Date(project.startDate);
+                          const endDate = project.endDate ? new Date(project.endDate) : new Date();
+                          let duration = "Not available";
 
-                      if (!Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime())) {
-                        const totalDays = Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24));
-                        const months = Math.floor(totalDays / 30);
-                        const days = totalDays % 30;
-                        duration = project.endDate
-                          ? `${months} months ${days} days`
-                          : `Ongoing • ${months} months ${days} days`;
-                      }
+                          if (!Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime())) {
+                            const totalDays = Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24));
+                            const months = Math.floor(totalDays / 30);
+                            const days = totalDays % 30;
+                            duration = project.endDate
+                              ? `${months} months ${days} days`
+                              : `Ongoing • ${months} months ${days} days`;
+                          }
 
-                      return (
-                        <div key={project._id} className="profile-project-card">
-                          <div>
-                            <strong>{project.projectName || project.name}</strong>
-                            <div className="profile-project-meta">
-                              {formatProjectDate(project.startDate)} to {formatProjectDate(project.endDate)}
-                            </div>
-                            <div className="profile-project-duration">{duration}</div>
-                          </div>
-
-                          {role === "Admin" && (
-                            <div className="profile-project-actions">
-                              <button className="fiori-button secondary" onClick={() => handleEditProject(project)}>
-                                Edit
-                              </button>
-                              <button
-                                className="fiori-button secondary danger"
-                                onClick={() => deleteProject(project._id)}
-                              >
-                                Remove
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                          return (
+                            <tr key={project._id}>
+                              <td>
+                                <div className="fiori-primary-cell">
+                                  <strong>{project.projectName || project.name}</strong>
+                                  <span>{project.projectId || "Assigned project"}</span>
+                                </div>
+                              </td>
+                              <td>{formatProjectDate(project.startDate)}</td>
+                              <td>{formatProjectDate(project.endDate)}</td>
+                              <td>{duration}</td>
+                              {role === "Admin" ? (
+                                <td>
+                                  <div className="employee-table-actions">
+                                    <button className="fiori-button secondary" onClick={() => handleEditProject(project)}>
+                                      Edit
+                                    </button>
+                                    <button
+                                      className="fiori-button secondary danger"
+                                      onClick={() => deleteProject(project._id)}
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                </td>
+                              ) : null}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 ) : (
                   <div className="admin-empty-state">

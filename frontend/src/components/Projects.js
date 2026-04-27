@@ -374,44 +374,54 @@ const Projects = () => {
           </div>
         </div>
       ) : (
-        <div className="projects-card-grid">
-          {filteredProjects.map((project) => (
-            <article
-              key={project._id}
-              className="projects-card"
-              onClick={() => setSelectedProjectId(project._id)}
-            >
-              <div className="projects-card-top">
-                <div>
-                  <div className="projects-card-id">{project.projectId}</div>
-                  <h3>{project.title}</h3>
-                </div>
-                <span
-                  className={`fiori-status-pill ${
-                    statusToneMap[project.status] || "is-neutral"
-                  }`}
-                >
-                  {project.status}
-                </span>
-              </div>
+        <section className="fiori-panel">
+          <div className="fiori-panel-header">
+            <div>
+              <h3>Project Table</h3>
+              <p>Portfolio records displayed in a dense operational table.</p>
+            </div>
+          </div>
 
-              <div className="projects-card-dates">
-                <div>
-                  <span>Start</span>
-                  <strong>{formatDate(project.startDate)}</strong>
-                </div>
-                <div>
-                  <span>End</span>
-                  <strong>{formatDate(project.endDate)}</strong>
-                </div>
-              </div>
-
-              <p>{project.description || "No project description available."}</p>
-
-              <div className="fiori-card-link">Open project details</div>
-            </article>
-          ))}
-        </div>
+          <div className="fiori-table-shell">
+            <table className="fiori-table">
+              <thead>
+                <tr>
+                  <th>Project</th>
+                  <th>Status</th>
+                  <th>Start</th>
+                  <th>End</th>
+                  <th>Description</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredProjects.map((project) => (
+                  <tr key={project._id}>
+                    <td>
+                      <div className="fiori-primary-cell">
+                        <strong>{project.title || "Untitled project"}</strong>
+                        <span>{project.projectId || "No project ID"}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <span className={`fiori-status-pill ${statusToneMap[project.status] || "is-neutral"}`}>
+                        {project.status || "Unknown"}
+                      </span>
+                    </td>
+                    <td>{formatDate(project.startDate)}</td>
+                    <td>{formatDate(project.endDate)}</td>
+                    <td>{project.description || "No project description available."}</td>
+                    <td>
+                      <button className="fiori-button secondary" onClick={() => setSelectedProjectId(project._id)}>
+                        Open details
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       )}
 
       {showNewProjectModal && (

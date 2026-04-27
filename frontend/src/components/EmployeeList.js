@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import {
   Building2,
@@ -6,66 +6,159 @@ import {
   Filter,
   Mail,
   Search,
-  ShieldCheck,
   UserCheck,
   UserRound,
   Users,
 } from "lucide-react";
 import LeaveStatusDot from "./LeaveStatusDot";
 
+const initialFilters = {
+  search: "",
+  department: "All",
+  status: "All",
+  project: "All",
+  joiningFrom: "",
+  joiningTo: "",
+  periodStart: "",
+  periodEnd: "",
+  leaveLastMonth: "All",
+  sortBy: "name",
+  sortOrder: "asc",
+};
+
+const formatDate = (value) => {
+  if (!value) return "Not available";
+
+  try {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "Not available";
+
+    return date.toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return "Not available";
+  }
+};
+
+const formatLeaveWindow = (window) => {
+  if (!window?.start || !window?.end) return "last month";
+  return `${formatDate(window.start)} to ${formatDate(window.end)}`;
+};
+
+const formatProjectNames = (projectNames = []) => {
+  if (!projectNames.length) return "No project assigned";
+  return projectNames.join(", ");
+};
+
 const EmployeeList = ({ user, onNavigateToProfile, isAdmin = false }) => {
   const [employees, setEmployees] = useState([]);
-  const [stats, setStats] = useState({ total: 0, active: 0 });
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filterDepartment, setFilterDepartment] = useState("All");
-  const [filterStatus, setFilterStatus] = useState("All");
+  const [directoryMeta, setDirectoryMeta] = useState({
+    scope_records: 0,
+    filtered_records: 0,
+    active_filtered_records: 0,
+    available_filters: { departments: [], projects: [] },
+    last_month_window: null,
+  });
+  const [filters, setFilters] = useState(initialFilters);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [actionLoadingId, setActionLoadingId] = useState(null);
 
+  const deferredSearch = useDeferredValue(filters.search);
+  const canViewDirectory = isAdmin || user?.role === "Manager";
+
   const fetchEmployees = useCallback(async () => {
+    if (!canViewDirectory) {
+      setEmployees([]);
+      setDirectoryMeta({
+        scope_records: 0,
+        filtered_records: 0,
+        active_filtered_records: 0,
+        available_filters: { departments: [], projects: [] },
+        last_month_window: null,
+      });
+      setLoading(false);
+      setMessage(user?.role === "Employee" ? "Employees cannot view other team members" : "");
+      return;
+    }
+
     try {
       setLoading(true);
+      setMessage("");
 
-      let employeeData = [];
+      const params = {
+        scope: isAdmin ? "all" : "manager",
+        search: deferredSearch || undefined,
+        department: filters.department !== "All" ? filters.department : undefined,
+        status: filters.status !== "All" ? filters.status.toLowerCase() : undefined,
+        project: filters.project !== "All" ? filters.project : undefined,
+        joined_from: filters.joiningFrom || undefined,
+        joined_to: filters.joiningTo || undefined,
+        period_start: filters.periodStart || undefined,
+        period_end: filters.periodEnd || undefined,
+        leave_last_month:
+          filters.leaveLastMonth === "All"
+            ? undefined
+            : filters.leaveLastMonth === "With Leave"
+              ? "with_leave"
+              : "without_leave",
+        sort_by:
+          filters.sortBy === "joiningDate"
+            ? "joining_date"
+            : filters.sortBy === "lastMonthLeave"
+              ? "last_month_leave"
+              : filters.sortBy,
+        sort_order: filters.sortOrder,
+      };
 
-      if (isAdmin) {
-        const response = await axios.get(`${process.env.REACT_APP_BACKEND_URL}/api/users/`);
-        employeeData = response.data;
-      } else if (user.role === "Manager") {
-        const response = await axios.get(
-          `${process.env.REACT_APP_BACKEND_URL}/api/users/get_employees_by_manager/${encodeURIComponent(user.email)}`
-        );
-        employeeData = response.data;
-      } else {
-        employeeData = [];
-        setMessage("Employees cannot view other team members");
+      if (!isAdmin && user?.email) {
+        params.manager_email = user.email;
       }
 
-      setEmployees(employeeData);
-      const activeCount = employeeData.filter((employee) => employee.is_active !== false).length;
-      setStats({
-        total: employeeData.length,
-        active: activeCount,
-      });
-      setMessage(employeeData.length === 0 && user.role === "Employee" ? "" : "");
+      const response = await axios.get(
+        `${process.env.REACT_APP_BACKEND_URL}/api/users/directory`,
+        { params }
+      );
+
+      setEmployees(Array.isArray(response.data?.items) ? response.data.items : []);
+      setDirectoryMeta(
+        response.data?.meta || {
+          scope_records: 0,
+          filtered_records: 0,
+          active_filtered_records: 0,
+          available_filters: { departments: [], projects: [] },
+          last_month_window: null,
+        }
+      );
     } catch (error) {
       console.error("Error fetching employees:", error);
-      setMessage("Failed to load employees");
+      setEmployees([]);
+      setDirectoryMeta({
+        scope_records: 0,
+        filtered_records: 0,
+        active_filtered_records: 0,
+        available_filters: { departments: [], projects: [] },
+        last_month_window: null,
+      });
+      setMessage(error.response?.data?.error || "Failed to load employees");
     } finally {
       setLoading(false);
     }
-  }, [isAdmin, user]);
+  }, [canViewDirectory, deferredSearch, filters, isAdmin, user?.email, user?.role]);
 
   useEffect(() => {
-    if (isAdmin || (user?.email && user?.role === "Manager")) {
-      fetchEmployees();
-    } else if (user?.role === "Employee") {
-      setEmployees([]);
-      setStats({ total: 0, active: 0 });
-      setLoading(false);
-    }
-  }, [user, isAdmin, fetchEmployees]);
+    fetchEmployees();
+  }, [fetchEmployees]);
+
+  const handleFilterChange = (field, value) => {
+    setFilters((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  };
 
   const handleActiveToggle = async (employeeId, nextStatus) => {
     try {
@@ -87,62 +180,7 @@ const EmployeeList = ({ user, onNavigateToProfile, isAdmin = false }) => {
     }
   };
 
-  const departments = useMemo(
-    () => ["All", ...new Set(employees.map((employee) => employee.department).filter(Boolean))],
-    [employees]
-  );
-
-  const filteredEmployees = useMemo(() => {
-    return employees.filter((employee) => {
-      const matchesSearch =
-        employee.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        employee.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        employee.designation?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        employee.department?.toLowerCase().includes(searchTerm.toLowerCase());
-
-      const matchesDepartment =
-        filterDepartment === "All" || employee.department === filterDepartment;
-
-      const isActive = employee.is_active !== false;
-      const matchesStatus =
-        filterStatus === "All" ||
-        (filterStatus === "Active" && isActive) ||
-        (filterStatus === "Inactive" && !isActive);
-
-      return matchesSearch && matchesDepartment && matchesStatus;
-    });
-  }, [employees, filterDepartment, filterStatus, searchTerm]);
-
   const downloadCSV = () => {
-    const formatDateForCSV = (dateValue) => {
-      if (!dateValue) return "";
-
-      try {
-        let date;
-
-        if (typeof dateValue === "string") {
-          date = new Date(dateValue.replace("Z", "").replace(/\.\d{3}/, ""));
-        } else if (dateValue.$date) {
-          date = new Date(dateValue.$date);
-        } else {
-          date = new Date(dateValue);
-        }
-
-        if (Number.isNaN(date.getTime())) {
-          return "";
-        }
-
-        const day = String(date.getDate()).padStart(2, "0");
-        const month = String(date.getMonth() + 1).padStart(2, "0");
-        const year = date.getFullYear();
-
-        return `${day}/${month}/${year}`;
-      } catch (error) {
-        console.error("Date formatting error:", error);
-        return "";
-      }
-    };
-
     const csvHeaders = [
       "Employee ID",
       "Name",
@@ -150,22 +188,30 @@ const EmployeeList = ({ user, onNavigateToProfile, isAdmin = false }) => {
       "Designation",
       "Department",
       "Role",
-      "Shift Timings",
+      "Projects",
       "Date of Joining",
       "Reports To",
+      "Leave Period Start",
+      "Leave Period End",
+      "Leave Period Days",
+      "Leave Period Records",
       "Status",
     ];
 
-    const csvRows = filteredEmployees.map((employee) => [
+    const csvRows = employees.map((employee) => [
       employee.employeeId || employee._id,
       employee.name || "",
       employee.email || "",
       employee.designation || "",
       employee.department || "",
       employee.role || "Employee",
-      employee.shiftTimings || "",
-      formatDateForCSV(employee.dateOfJoining),
+      formatProjectNames(employee.projectNames),
+      formatDate(employee.dateOfJoining),
       employee.reportsToEmail || "",
+      employee.leaveSummary?.periodStart || "",
+      employee.leaveSummary?.periodEnd || "",
+      employee.leaveSummary?.days ?? 0,
+      employee.leaveSummary?.records ?? 0,
       employee.is_active !== false ? "Active" : "Inactive",
     ]);
 
@@ -187,6 +233,25 @@ const EmployeeList = ({ user, onNavigateToProfile, isAdmin = false }) => {
     document.body.removeChild(link);
   };
 
+  const stats = useMemo(
+    () => ({
+      total: directoryMeta.scope_records || 0,
+      active: directoryMeta.active_filtered_records || 0,
+      departments: directoryMeta.available_filters?.departments?.length || 0,
+      filtered: directoryMeta.filtered_records || employees.length,
+    }),
+    [directoryMeta, employees.length]
+  );
+
+  const departments = useMemo(
+    () => ["All", ...(directoryMeta.available_filters?.departments || [])],
+    [directoryMeta.available_filters]
+  );
+  const projects = useMemo(
+    () => ["All", ...(directoryMeta.available_filters?.projects || [])],
+    [directoryMeta.available_filters]
+  );
+
   if (loading) {
     return (
       <section className="employee-directory">
@@ -194,7 +259,7 @@ const EmployeeList = ({ user, onNavigateToProfile, isAdmin = false }) => {
           <Users size={28} />
           <div>
             <strong>Loading employee directory</strong>
-            <p>Preparing workforce and reporting information.</p>
+            <p>Preparing employee, project, and leave summary data.</p>
           </div>
         </div>
       </section>
@@ -211,13 +276,17 @@ const EmployeeList = ({ user, onNavigateToProfile, isAdmin = false }) => {
           <h1>{isAdmin ? "Employee Directory" : "Team Members"}</h1>
           <p>
             {isAdmin
-              ? "Review the full workforce directory, keep employee records visible, and move quickly into individual profiles."
-              : "Review your reporting structure, filter your team by department or status, and open profiles from one place."}
+              ? "Filter workforce data by joining date, project assignment, last-month leave activity, and sorting in one place."
+              : "Review your direct reports with project visibility and last-month leave summaries from the HRMS leave module."}
           </p>
         </div>
 
         <div className="employee-directory-hero-actions">
-          <button className="fiori-button secondary" onClick={downloadCSV}>
+          <button className="fiori-button secondary" onClick={fetchEmployees}>
+            <Filter size={16} />
+            <span>Refresh view</span>
+          </button>
+          <button className="fiori-button secondary" onClick={downloadCSV} disabled={!employees.length}>
             <Download size={16} />
             <span>Export current view</span>
           </button>
@@ -227,40 +296,40 @@ const EmployeeList = ({ user, onNavigateToProfile, isAdmin = false }) => {
       <div className="employee-directory-summary">
         <article className="fiori-stat-card">
           <div className="fiori-stat-topline">
-            <span className="fiori-stat-label">{isAdmin ? "Total Workforce" : "Team Size"}</span>
+            <span className="fiori-stat-label">{isAdmin ? "Visible Workforce" : "Visible Team"}</span>
             <Users size={18} />
           </div>
           <div className="fiori-stat-value">{stats.total}</div>
-          <div className="fiori-stat-note">
-            {isAdmin ? "Employees available in the HRMS directory" : "Direct reports in your reporting line"}
-          </div>
+          <div className="fiori-stat-note">Employees in the current backend scope</div>
         </article>
 
         <article className="fiori-stat-card">
           <div className="fiori-stat-topline">
-            <span className="fiori-stat-label">Active Members</span>
+            <span className="fiori-stat-label">Active In View</span>
             <UserCheck size={18} />
           </div>
           <div className="fiori-stat-value">{stats.active}</div>
-          <div className="fiori-stat-note">Profiles currently marked active</div>
+          <div className="fiori-stat-note">Active records after applying current filters</div>
         </article>
 
         <article className="fiori-stat-card">
           <div className="fiori-stat-topline">
-            <span className="fiori-stat-label">Departments</span>
+            <span className="fiori-stat-label">Projects</span>
             <Building2 size={18} />
           </div>
-          <div className="fiori-stat-value">{Math.max(departments.length - 1, 0)}</div>
-          <div className="fiori-stat-note">Distinct departments in the current scope</div>
+          <div className="fiori-stat-value">{projects.length - 1}</div>
+          <div className="fiori-stat-note">Project filter options available in this scope</div>
         </article>
 
         <article className="fiori-stat-card">
           <div className="fiori-stat-topline">
-            <span className="fiori-stat-label">Filtered View</span>
+            <span className="fiori-stat-label">Filtered Results</span>
             <Filter size={18} />
           </div>
-          <div className="fiori-stat-value">{filteredEmployees.length}</div>
-          <div className="fiori-stat-note">Employees matching the active filters</div>
+          <div className="fiori-stat-value">{stats.filtered}</div>
+          <div className="fiori-stat-note">
+            Leave summary window: {formatLeaveWindow(directoryMeta.period_window || directoryMeta.last_month_window)}
+          </div>
         </article>
       </div>
 
@@ -268,20 +337,20 @@ const EmployeeList = ({ user, onNavigateToProfile, isAdmin = false }) => {
         <div className="fiori-panel-header">
           <div>
             <h3>Filters</h3>
-            <p>Search and narrow the directory without leaving the workspace</p>
+            <p>All filters are sent to the backend so the table reflects the exact API response.</p>
           </div>
         </div>
 
-        <div className="employee-directory-filters">
+        <div className="employee-directory-filters employee-directory-filters-extended">
           <label className="employee-filter-field employee-filter-search">
             <span>Search</span>
             <div className="employee-filter-input-shell">
               <Search size={16} />
               <input
                 className="input"
-                placeholder="Search by name, email, designation, or department"
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Search by employee, email, department, manager, or project"
+                value={filters.search}
+                onChange={(event) => handleFilterChange("search", event.target.value)}
               />
             </div>
           </label>
@@ -290,8 +359,8 @@ const EmployeeList = ({ user, onNavigateToProfile, isAdmin = false }) => {
             <span>Department</span>
             <select
               className="input"
-              value={filterDepartment}
-              onChange={(event) => setFilterDepartment(event.target.value)}
+              value={filters.department}
+              onChange={(event) => handleFilterChange("department", event.target.value)}
             >
               {departments.map((department) => (
                 <option key={department} value={department}>
@@ -305,113 +374,253 @@ const EmployeeList = ({ user, onNavigateToProfile, isAdmin = false }) => {
             <span>Status</span>
             <select
               className="input"
-              value={filterStatus}
-              onChange={(event) => setFilterStatus(event.target.value)}
+              value={filters.status}
+              onChange={(event) => handleFilterChange("status", event.target.value)}
             >
               <option value="All">All</option>
               <option value="Active">Active</option>
               <option value="Inactive">Inactive</option>
             </select>
           </label>
+
+          <label className="employee-filter-field">
+            <span>Project</span>
+            <select
+              className="input"
+              value={filters.project}
+              onChange={(event) => handleFilterChange("project", event.target.value)}
+            >
+              {projects.map((project) => (
+                <option key={project} value={project}>
+                  {project}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="employee-filter-field">
+            <span>Joined From</span>
+            <input
+              className="input"
+              type="date"
+              value={filters.joiningFrom}
+              onChange={(event) => handleFilterChange("joiningFrom", event.target.value)}
+            />
+          </label>
+
+          <label className="employee-filter-field">
+            <span>Joined To</span>
+            <input
+              className="input"
+              type="date"
+              value={filters.joiningTo}
+              onChange={(event) => handleFilterChange("joiningTo", event.target.value)}
+            />
+          </label>
+
+          <label className="employee-filter-field">
+            <span>Leave Period Start</span>
+            <input
+              className="input"
+              type="date"
+              value={filters.periodStart}
+              onChange={(event) => handleFilterChange("periodStart", event.target.value)}
+            />
+          </label>
+
+          <label className="employee-filter-field">
+            <span>Leave Period End</span>
+            <input
+              className="input"
+              type="date"
+              value={filters.periodEnd}
+              onChange={(event) => handleFilterChange("periodEnd", event.target.value)}
+            />
+          </label>
+
+          <label className="employee-filter-field">
+            <span>Last Month Leave</span>
+            <select
+              className="input"
+              value={filters.leaveLastMonth}
+              onChange={(event) => handleFilterChange("leaveLastMonth", event.target.value)}
+            >
+              <option value="All">All</option>
+              <option value="With Leave">With Leave</option>
+              <option value="Without Leave">Without Leave</option>
+            </select>
+          </label>
+
+          <label className="employee-filter-field">
+            <span>Sort By</span>
+            <select
+              className="input"
+              value={filters.sortBy}
+              onChange={(event) => handleFilterChange("sortBy", event.target.value)}
+            >
+              <option value="name">Name</option>
+              <option value="department">Department</option>
+              <option value="joiningDate">Joining date</option>
+              <option value="lastMonthLeave">Last month leave</option>
+              <option value="status">Status</option>
+            </select>
+          </label>
+
+          <label className="employee-filter-field">
+            <span>Sort Order</span>
+            <select
+              className="input"
+              value={filters.sortOrder}
+              onChange={(event) => handleFilterChange("sortOrder", event.target.value)}
+            >
+              <option value="asc">Ascending</option>
+              <option value="desc">Descending</option>
+            </select>
+          </label>
         </div>
       </section>
 
-      {filteredEmployees.length === 0 ? (
+      {employees.length === 0 ? (
         <div className="admin-empty-state">
           <UserRound size={28} />
           <div>
             <strong>
-              {searchTerm || filterDepartment !== "All" || filterStatus !== "All"
-                ? "No employees match the current filters"
-                : "No employees available"}
+              {canViewDirectory ? "No employees match the current filters" : "No employees available"}
             </strong>
-            <p>Adjust the filters or search terms to expand the directory view.</p>
+            <p>Adjust the filters or refresh the workspace to review more records.</p>
           </div>
         </div>
       ) : (
-        <div className="employee-directory-grid">
-          {filteredEmployees.map((employee) => {
-            const isActive = employee.is_active !== false;
-            return (
-              <article
-                key={employee._id}
-                className="employee-directory-card"
-                onClick={() => onNavigateToProfile(employee._id)}
-              >
-                <div className="employee-card-header">
-                  <div className="employee-card-identity">
-                    <div className="employee-card-avatar-wrap">
-                      {employee.photoUrl ? (
-                        <img
-                          src={employee.photoUrl}
-                          alt={employee.name || "Employee"}
-                          className="employee-card-avatar"
-                        />
-                      ) : (
-                        <div className="employee-card-avatar employee-card-avatar-fallback">
-                          {employee.name?.charAt(0) || "E"}
+        <section className="fiori-panel">
+          <div className="fiori-panel-header">
+            <div>
+              <h3>Employee Table</h3>
+              <p>
+                Showing {directoryMeta.filtered_records} of {directoryMeta.scope_records} employees
+              </p>
+            </div>
+          </div>
+
+          <div className="fiori-table-shell">
+            <table className="fiori-table">
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th>Department</th>
+                  <th>Role</th>
+                  <th>Projects</th>
+                  <th>Joined On</th>
+                  <th>Leave In Period</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {employees.map((employee) => {
+                  const isActive = employee.is_active !== false;
+
+                  return (
+                    <tr key={employee._id}>
+                      <td>
+                        <div className="employee-directory-table-primary">
+                          <div className="employee-card-avatar-wrap">
+                            {employee.photoUrl ? (
+                              <img
+                                src={employee.photoUrl}
+                                alt={employee.name || "Employee"}
+                                className="employee-card-avatar"
+                              />
+                            ) : (
+                              <div className="employee-card-avatar employee-card-avatar-fallback">
+                                {employee.name?.charAt(0) || "E"}
+                              </div>
+                            )}
+                            <div className="employee-card-leave-status">
+                              <LeaveStatusDot userId={employee._id} size={10} />
+                            </div>
+                          </div>
+
+                          <div className="fiori-primary-cell">
+                            <strong>{employee.name || "Unnamed employee"}</strong>
+                            <span>{employee.designation || "Designation not available"}</span>
+                            <span>{employee.employeeId || employee._id}</span>
+                            <span>
+                              <Mail size={13} /> {employee.email || "No email available"}
+                            </span>
+                          </div>
                         </div>
-                      )}
-                      <div className="employee-card-leave-status">
-                        <LeaveStatusDot userId={employee._id} size={10} />
-                      </div>
-                    </div>
-
-                    <div>
-                      <h4>{employee.name || "Unnamed employee"}</h4>
-                      <p>{employee.designation || "Designation not available"}</p>
-                    </div>
-                  </div>
-
-                  <div className="employee-card-badges">
-                    <span className={`fiori-status-pill ${isActive ? "is-approved" : "is-rejected"}`}>
-                      {isActive ? "Active" : "Inactive"}
-                    </span>
-                    {employee.role === "Admin" && (
-                      <span className="fiori-status-pill is-neutral">Admin</span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="employee-card-details">
-                  <div className="employee-card-detail">
-                    <Mail size={15} />
-                    <span>{employee.email || "No email available"}</span>
-                  </div>
-                  <div className="employee-card-detail">
-                    <Building2 size={15} />
-                    <span>{employee.department || "Unassigned department"}</span>
-                  </div>
-                  <div className="employee-card-detail">
-                    <ShieldCheck size={15} />
-                    <span>{employee.role || "Employee"}</span>
-                  </div>
-                </div>
-
-                <div className="employee-card-footer">
-                  <div className="employee-card-link">Open employee profile</div>
-
-                  {isAdmin && (
-                    <button
-                      className={`fiori-button secondary ${isActive ? "danger" : ""}`}
-                      disabled={actionLoadingId === employee._id}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleActiveToggle(employee._id, !isActive);
-                      }}
-                    >
-                      {actionLoadingId === employee._id
-                        ? "Updating..."
-                        : isActive
-                          ? "Mark inactive"
-                          : "Mark active"}
-                    </button>
-                  )}
-                </div>
-              </article>
-            );
-          })}
-        </div>
+                      </td>
+                      <td>
+                        <div className="fiori-primary-cell">
+                          <strong>{employee.department || "Unassigned"}</strong>
+                          <span>{employee.reportsToEmail || "No reporting manager"}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="fiori-primary-cell">
+                          <strong>{employee.role || "Employee"}</strong>
+                          <span>{employee.employment_type || "Employee"}</span>
+                          <span>{employee.shiftTimings || "Shift not set"}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="fiori-primary-cell">
+                          <strong>{employee.projectNames?.length || 0} project(s)</strong>
+                          <span>{formatProjectNames(employee.projectNames)}</span>
+                        </div>
+                      </td>
+                      <td>{formatDate(employee.dateOfJoining)}</td>
+                      <td>
+                        <div className="fiori-primary-cell">
+                          <strong>{employee.leaveSummary?.days ?? 0} day(s)</strong>
+                          <span>{employee.leaveSummary?.records ?? 0} record(s)</span>
+                          <span>{employee.leaveSummary?.approvedDays ?? 0} approved day(s)</span>
+                          <span>
+                            {formatLeaveWindow({
+                              start: employee.leaveSummary?.periodStart,
+                              end: employee.leaveSummary?.periodEnd,
+                            })}
+                          </span>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="fiori-primary-cell">
+                          <span className={`fiori-status-pill ${isActive ? "is-approved" : "is-rejected"}`}>
+                            {isActive ? "Active" : "Inactive"}
+                          </span>
+                          <span>{employee.leaveSummary?.pendingRecords ?? 0} pending leave record(s)</span>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="employee-table-actions">
+                          <button
+                            className="fiori-button secondary"
+                            onClick={() => onNavigateToProfile(employee._id)}
+                          >
+                            Open profile
+                          </button>
+                          {isAdmin && (
+                            <button
+                              className={`fiori-button secondary ${isActive ? "danger" : ""}`}
+                              disabled={actionLoadingId === employee._id}
+                              onClick={() => handleActiveToggle(employee._id, !isActive)}
+                            >
+                              {actionLoadingId === employee._id
+                                ? "Updating..."
+                                : isActive
+                                  ? "Mark inactive"
+                                  : "Mark active"}
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
       )}
 
       {message && (
