@@ -1014,6 +1014,109 @@ body {
   line-height: 1.5;
 }
 
+.admin-hero-brief-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.admin-hero-brief-card {
+  padding: 16px 18px;
+  border-radius: 14px;
+  border: 1px solid rgba(164, 188, 212, 0.45);
+  background: rgba(255, 255, 255, 0.76);
+  box-shadow: 0 12px 24px rgba(31, 50, 69, 0.06);
+  backdrop-filter: blur(10px);
+}
+
+.admin-hero-brief-card h3 {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.admin-hero-brief-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.admin-hero-brief-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.admin-hero-brief-item strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.admin-hero-token-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-hero-token {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(10, 110, 209, 0.12);
+  background: rgba(255, 255, 255, 0.88);
+  color: #18324d;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.admin-hero-progress-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.admin-hero-progress-row {
+  display: grid;
+  grid-template-columns: minmax(84px, auto) 1fr auto;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.admin-hero-progress-row b {
+  color: var(--text);
+}
+
+.admin-hero-progress-track {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(184, 199, 214, 0.45);
+  overflow: hidden;
+}
+
+.admin-hero-progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #0a6ed1, #5b738b);
+}
+
+.admin-hero-note {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
 .admin-hero-meta {
   min-width: 280px;
   display: flex;

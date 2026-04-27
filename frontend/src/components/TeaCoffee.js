@@ -516,7 +516,6 @@ const AdminView = ({
       );
     });
   }, [dates, filters.beverageType, filters.dateFrom, filters.dateTo, orders]);
-
   const availableDepartments = useMemo(
     () => ["all", ...new Set(historyOrders.map((order) => order.employee_department).filter(Boolean))],
     [historyOrders]
@@ -680,27 +679,50 @@ const AdminView = ({
   return (
     <section className="tea-workspace">
       <header className="admin-hero">
-        <div>
+        <div className="admin-hero-copy">
           <div className="admin-section-overline">Hospitality Operations</div>
           <h1>Tea and Coffee</h1>
+          <p>
+            Manage employee orders, guest requests, and service availability from a clean hospitality workspace.
+          </p>
+          <div className="admin-hero-brief-grid">
+            <article className="admin-hero-brief-card">
+              <h3>Daily Service</h3>
+              <div className="admin-hero-note" style={{ marginTop: 0 }}>
+                Use the daily tab to review upcoming order demand and open employee lists by date when needed.
+              </div>
+            </article>
+            <article className="admin-hero-brief-card">
+              <h3>Guest Orders</h3>
+              <div className="admin-hero-note" style={{ marginTop: 0 }}>
+                The guest section is meant for ad hoc catering requests including tea, coffee, milk, and custom snack entries.
+              </div>
+            </article>
+            <article className="admin-hero-brief-card">
+              <h3>Availability Control</h3>
+              <div className="admin-hero-note" style={{ marginTop: 0 }}>
+                Use blocked dates and history together to keep pantry operations predictable without cluttering the header with counts.
+              </div>
+            </article>
+          </div>
         </div>
 
         <div className="admin-hero-meta">
           <div className="admin-hero-meta-item">
-            <span>Total orders</span>
-            <strong>{summaryStats.totalOrders}</strong>
+            <span>Primary View</span>
+            <strong>Hospitality workspace</strong>
           </div>
           <div className="admin-hero-meta-item">
-            <span>Active days</span>
-            <strong>{summaryStats.activeDays}</strong>
+            <span>Built For</span>
+            <strong>Daily operations</strong>
           </div>
           <div className="admin-hero-meta-item">
-            <span>Blocked days</span>
-            <strong>{summaryStats.blockedDays}</strong>
+            <span>Includes</span>
+            <strong>Demand, guests, history</strong>
           </div>
           <div className="admin-hero-meta-item">
-            <span>Guest orders</span>
-            <strong>{guestOrders.length}</strong>
+            <span>Outcome</span>
+            <strong>Smoother service planning</strong>
           </div>
         </div>
       </header>

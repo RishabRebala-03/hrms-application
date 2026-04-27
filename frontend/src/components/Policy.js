@@ -166,8 +166,6 @@ const Policy = () => {
   );
 
   const activePoliciesCount = policies.filter((policy) => policy.status === "Active").length;
-  const categoriesCount = new Set(policies.map((policy) => policy.category)).size;
-
   useEffect(() => {
     if (!selectedPolicy || !contentRootRef.current) {
       contentRefs.current = {};
@@ -371,23 +369,46 @@ const Policy = () => {
   return (
     <section className="policy-workspace">
       <header className="admin-hero">
-        <div>
+        <div className="admin-hero-copy">
           <div className="admin-section-overline">Knowledge Hub</div>
           <h1>Policies</h1>
+          <p>
+            Keep the policy library easy to manage, easy to browse, and easy to read without crowding the page with summary stats.
+          </p>
+          <div className="admin-hero-brief-grid">
+            <article className="admin-hero-brief-card">
+              <h3>Library Purpose</h3>
+              <div className="admin-hero-note" style={{ marginTop: 0 }}>
+                This page is for maintaining policy records and opening the exact document people need without extra noise.
+              </div>
+            </article>
+            <article className="admin-hero-brief-card">
+              <h3>Reading Flow</h3>
+              <div className="admin-hero-note" style={{ marginTop: 0 }}>
+                Filter the library, select a document, and inspect the full content below in a more focused reading workspace.
+              </div>
+            </article>
+            <article className="admin-hero-brief-card">
+              <h3>Admin Intent</h3>
+              <div className="admin-hero-note" style={{ marginTop: 0 }}>
+                The top section stays plain so the actual policy list and document detail area do the real work.
+              </div>
+            </article>
+          </div>
         </div>
 
         <div className="admin-hero-meta">
           <div className="admin-hero-meta-item">
-            <span>Published policies</span>
-            <strong>{policies.length}</strong>
+            <span>Primary View</span>
+            <strong>Library and reader</strong>
           </div>
           <div className="admin-hero-meta-item">
-            <span>Categories</span>
-            <strong>{categoriesCount}</strong>
+            <span>Built For</span>
+            <strong>Policy maintenance</strong>
           </div>
           <div className="admin-hero-meta-item">
-            <span>Active now</span>
-            <strong>{activePoliciesCount}</strong>
+            <span>Outcome</span>
+            <strong>Clear documentation access</strong>
           </div>
         </div>
       </header>

@@ -693,23 +693,46 @@ const AdminLeaves = ({ user }) => {
   return (
     <section className="leave-workspace">
       <header className="admin-hero">
-        <div>
+        <div className="admin-hero-copy">
           <div className="admin-section-overline">Leave Operations</div>
           <h1>Leave management</h1>
+          <p>
+            Handle requests, review employee context, and move through approvals without the page feeling overloaded.
+          </p>
+          <div className="admin-hero-brief-grid">
+            <article className="admin-hero-brief-card">
+              <h3>Approval Workspace</h3>
+              <div className="admin-hero-note" style={{ marginTop: 0 }}>
+                Review pending requests, open employee history, and act from one place without jumping between views.
+              </div>
+            </article>
+            <article className="admin-hero-brief-card">
+              <h3>What Lives Here</h3>
+              <div className="admin-hero-note" style={{ marginTop: 0 }}>
+                Filters, history, employee details, and approval actions stay grouped below so the flow remains easy to scan.
+              </div>
+            </article>
+            <article className="admin-hero-brief-card">
+              <h3>Admin Intent</h3>
+              <div className="admin-hero-note" style={{ marginTop: 0 }}>
+                Use this section to process leave cleanly, keep records consistent, and resolve cases with full context visible.
+              </div>
+            </article>
+          </div>
         </div>
 
         <div className="admin-hero-meta">
           <div className="admin-hero-meta-item">
-            <span>Pending approvals</span>
-            <strong>{summaryMetrics.pending}</strong>
+            <span>Primary View</span>
+            <strong>Approvals and records</strong>
           </div>
           <div className="admin-hero-meta-item">
-            <span>Approval rate</span>
-            <strong>{summaryMetrics.approvalRate}%</strong>
+            <span>Built For</span>
+            <strong>Fast admin review</strong>
           </div>
           <div className="admin-hero-meta-item">
-            <span>Escalated cases</span>
-            <strong>{summaryMetrics.escalated}</strong>
+            <span>Outcome</span>
+            <strong>Clear leave decisions</strong>
           </div>
         </div>
       </header>
