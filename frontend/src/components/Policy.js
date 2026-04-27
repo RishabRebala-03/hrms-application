@@ -374,10 +374,6 @@ const Policy = () => {
         <div>
           <div className="admin-section-overline">Knowledge Hub</div>
           <h1>Policies</h1>
-          <p>
-            Browse published company policies, narrow the library quickly, and open the latest
-            guidance without leaving the HRMS workspace.
-          </p>
         </div>
 
         <div className="admin-hero-meta">

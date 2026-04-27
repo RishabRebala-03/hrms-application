@@ -385,10 +385,6 @@ const Calendar = ({ user, setSection, navigationState }) => {
         <div>
           <div className="admin-section-overline">Enterprise Calendar</div>
           <h1>Enterprise Calendar</h1>
-          <p>
-            Browse holidays, birthdays, and your approved leaves in one place. Approved leave days
-            are highlighted in red and open the leave workspace when clicked.
-          </p>
         </div>
 
         <div className="admin-hero-meta">

@@ -83,10 +83,6 @@ const UserForm = ({ onSaved }) => {
         <div>
           <div className="admin-section-overline">Workforce Setup</div>
           <h1>Employee Setup</h1>
-          <p>
-            Create employee records with reporting lines, work details, projects, and leadership
-            metadata in a single onboarding form.
-          </p>
         </div>
 
         <div className="admin-hero-meta">

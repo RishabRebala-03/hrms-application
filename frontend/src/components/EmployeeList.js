@@ -299,11 +299,6 @@ const EmployeeList = ({ user, onNavigateToProfile, isAdmin = false }) => {
             {isAdmin ? "Enterprise Directory" : "Team Directory"}
           </div>
           <h1>{isAdmin ? "Employee Directory" : "Team Members"}</h1>
-          <p>
-            {isAdmin
-              ? "Filter workforce data by joining date, project assignment, last-month leave activity, and sorting in one place."
-              : "Review your direct reports with project visibility and last-month leave summaries from the HRMS leave module."}
-          </p>
         </div>
 
         <div className="employee-directory-hero-actions">

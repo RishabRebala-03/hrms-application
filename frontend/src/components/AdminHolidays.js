@@ -134,10 +134,6 @@ const AdminHolidays = () => {
         <div>
           <div className="admin-section-overline">Holiday Administration</div>
           <h1>Holiday Calendar</h1>
-          <p>
-            Maintain the organization holiday list that powers the enterprise calendar for all
-            employees.
-          </p>
         </div>
 
         <div className="admin-hero-meta">

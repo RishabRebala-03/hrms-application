@@ -574,6 +574,9 @@ const AdminView = ({
         "Blocked",
         "Reason",
         "Total Orders",
+        "Employee Names",
+        "Morning Orders By Employee",
+        "Evening Orders By Employee",
         "Morning Tea",
         "Morning Coffee",
         "Morning Milk",
@@ -583,11 +586,32 @@ const AdminView = ({
       ],
       filteredDates.map((date) => {
         const stats = getStats(date);
+        const dayOrders = orders[date] || [];
+        const employeeNames = Array.from(
+          new Set(dayOrders.map((order) => order.employee_name).filter(Boolean))
+        ).join(" | ");
+        const morningOrders = dayOrders
+          .filter((order) => order.morning)
+          .map((order) => {
+            const quantity =
+              order.order_type === "guest" && Number(order.guest_beverage_quantity || 0) > 1
+                ? ` x${order.guest_beverage_quantity}`
+                : "";
+            return `${order.employee_name || "Unknown"}: ${getBeverageIcon(order.morning)}${quantity}`;
+          })
+          .join(" | ");
+        const eveningOrders = dayOrders
+          .filter((order) => order.evening)
+          .map((order) => `${order.employee_name || "Unknown"}: ${getBeverageIcon(order.evening)}`)
+          .join(" | ");
         return [
           date,
           isBlocked(date) ? "Yes" : "No",
           getBlockReason(date),
           stats.total,
+          employeeNames,
+          morningOrders,
+          eveningOrders,
           stats.morningTea,
           stats.morningCoffee,
           stats.morningMilk,
@@ -659,10 +683,6 @@ const AdminView = ({
         <div>
           <div className="admin-section-overline">Hospitality Operations</div>
           <h1>Tea and Coffee</h1>
-          <p>
-            Monitor daily beverage demand, review team orders, and manage blocked service dates
-            from a single admin dashboard.
-          </p>
         </div>
 
         <div className="admin-hero-meta">
@@ -1616,10 +1636,6 @@ const TeaCoffee = ({ user }) => {
         <div>
           <div className="admin-section-overline">Hospitality Requests</div>
           <h1>Tea and Coffee</h1>
-          <p>
-            Place beverage requests for the next 15 days, use bulk mode for repeated choices, and
-            track cutoff windows for each slot.
-          </p>
         </div>
 
         <div className="admin-hero-meta">

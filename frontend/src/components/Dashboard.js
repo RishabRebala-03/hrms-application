@@ -453,10 +453,6 @@ const AdminDashboard = ({ user, onNavigate }) => {
           <h1>
             {getTimeBasedGreeting()}, {user?.name?.split(" ")[0] || "Administrator"}
           </h1>
-          <p>
-            Monitor workforce capacity, review approvals, and keep the HR operations model aligned
-            across the enterprise.
-          </p>
         </div>
 
         <div className="admin-hero-meta">
@@ -545,7 +541,7 @@ const AdminDashboard = ({ user, onNavigate }) => {
         <article className="fiori-panel fiori-chart-card is-clickable" onClick={() => handleNavigate("leaves")}>
           <div className="fiori-panel-header">
             <div>
-              <h3>Leave status mix</h3>
+              <h3>Leave status breakdown</h3>
               <p>Current distribution of request outcomes across the system</p>
             </div>
             <div className="fiori-card-link">Open leave workspace</div>

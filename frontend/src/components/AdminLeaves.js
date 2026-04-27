@@ -696,10 +696,6 @@ const AdminLeaves = ({ user }) => {
         <div>
           <div className="admin-section-overline">Leave Operations</div>
           <h1>Leave management</h1>
-          <p>
-            Review pending approvals, monitor leave demand, and track escalation performance
-            across the organization from one enterprise workspace.
-          </p>
         </div>
 
         <div className="admin-hero-meta">
@@ -1044,7 +1040,7 @@ const AdminLeaves = ({ user }) => {
             >
               <div className="fiori-panel-header">
                 <div>
-                  <h3>Leave status mix</h3>
+                  <h3>Leave status breakdown</h3>
                   <p>Distribution of request outcomes across all leave records</p>
                 </div>
                 <BarChart3 size={18} />

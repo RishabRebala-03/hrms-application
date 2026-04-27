@@ -42,7 +42,6 @@ const Sidebar = ({ section, setSection, role, restricted = [], isOpen, isCollaps
         <div className="brand-copy">
           <strong>
             <span>Naxrita</span>
-            <span>HRMS Portal</span>
           </strong>
         </div>
       </div>

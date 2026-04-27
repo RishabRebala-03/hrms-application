@@ -165,10 +165,6 @@ const AdminApplyLeave = ({ user }) => {
         <div>
           <div className="admin-section-overline">Leave Action</div>
           <h1>Apply on Behalf</h1>
-          <p>
-            Search the workforce, review available balances, and submit an approved leave request
-            for an employee from one admin workspace.
-          </p>
         </div>
 
         <div className="admin-hero-meta">

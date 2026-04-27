@@ -411,7 +411,6 @@ const Projects = () => {
         <div>
           <div className="admin-section-overline">Project Portfolio</div>
           <h1>Projects</h1>
-          <p>Admin oversight for project staffing, time investment, leave pressure, and delivery risk.</p>
         </div>
         <div className="admin-hero-meta">
           <div className="admin-hero-meta-item"><span>Projects</span><strong>{totals.projects}</strong></div>
@@ -514,7 +513,7 @@ const Projects = () => {
       {activeTab === "visuals" && (
         <section className="projects-visual-grid">
           <ChartPanel title="Hours by Project"><ResponsiveContainer width="100%" height={280}><BarChart data={hoursChart}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" /><YAxis /><Tooltip /><Bar dataKey="hours" fill="#0a6ed1" /></BarChart></ResponsiveContainer></ChartPanel>
-          <ChartPanel title="Status Mix"><ResponsiveContainer width="100%" height={280}><PieChart><Pie data={statusChart} dataKey="value" nameKey="name" outerRadius={95} label>{statusChart.map((_, index) => <Cell key={index} fill={COLORS[index % COLORS.length]} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer></ChartPanel>
+          <ChartPanel title="Status Breakdown"><ResponsiveContainer width="100%" height={280}><PieChart><Pie data={statusChart} dataKey="value" nameKey="name" outerRadius={95} label>{statusChart.map((_, index) => <Cell key={index} fill={COLORS[index % COLORS.length]} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer></ChartPanel>
           <ChartPanel title="Leave Events Over Time"><ResponsiveContainer width="100%" height={280}><AreaChart data={leaveTimeline}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="month" /><YAxis /><Tooltip /><Area type="monotone" dataKey="count" stroke="#0f2742" fill="rgba(15,39,66,0.16)" /></AreaChart></ResponsiveContainer></ChartPanel>
         </section>
       )}

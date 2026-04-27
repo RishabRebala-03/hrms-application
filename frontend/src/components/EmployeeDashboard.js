@@ -403,10 +403,6 @@ const EmployeeDashboard = ({ user, setSection }) => {
             <span className="employee-hero-greeting">{getTimeBasedGreeting()},</span>
             <span className="employee-hero-name">{user?.name?.split(" ")[0] || "there"}</span>
           </h1>
-          <p>
-            Your leave overview is now organized into one polished workspace for balances,
-            approvals, holidays, and quick actions.
-          </p>
 
           <div className="employee-hero-actions">
             <button className="fiori-button primary employee-apply-button" onClick={() => openLeaves()}>
@@ -523,7 +519,7 @@ const EmployeeDashboard = ({ user, setSection }) => {
                 onClick={() => openLeaves({ source: "dashboard-chart", historyFilterStatus: "approved" })}
               >
                 <div className="fiori-stat-topline">
-                  <span className="fiori-stat-label">Approval mix</span>
+                  <span className="fiori-stat-label">Approval breakdown</span>
                   <PieChartIcon size={18} />
                 </div>
                 <div className="fiori-chart-shell employee-chart-shell">

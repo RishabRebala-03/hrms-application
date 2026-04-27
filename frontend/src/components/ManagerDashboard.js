@@ -239,10 +239,6 @@ const ManagerDashboard = ({ user, onNavigateToProfile }) => {
           <h1>
             {getTimeBasedGreeting()}, {user?.name?.split(" ")[0] || "Manager"}
           </h1>
-          <p>
-            Review team availability, act on leave requests, and open reporting details from one
-            consistent dashboard.
-          </p>
         </div>
 
         <div className="admin-hero-meta">
