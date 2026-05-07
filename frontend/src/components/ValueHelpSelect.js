@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronDown, Search, X } from "lucide-react";
 
 function normalizeOption(option) {
@@ -26,7 +27,10 @@ export default function ValueHelpSelect({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const rootRef = useRef(null);
+  const triggerRef = useRef(null);
+  const popoverRef = useRef(null);
   const searchRef = useRef(null);
+  const [popoverStyle, setPopoverStyle] = useState({});
 
   const normalizedOptions = useMemo(() => options.map(normalizeOption), [options]);
   const selected = normalizedOptions.find((option) => option.value === String(value ?? ""));
@@ -45,8 +49,34 @@ export default function ValueHelpSelect({
   useEffect(() => {
     if (!open) return undefined;
 
+    const updatePopoverPosition = () => {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      const viewportWidth = window.innerWidth;
+      const preferredWidth = Math.max(rect.width, Math.min(360, viewportWidth - 24));
+      const maxWidth = viewportWidth - 24;
+      const width = Math.min(preferredWidth, maxWidth);
+      const left = Math.max(12, Math.min(rect.left, viewportWidth - width - 12));
+
+      setPopoverStyle({
+        position: "fixed",
+        top: rect.bottom + 6,
+        left,
+        width,
+        minWidth: width,
+        right: "auto",
+        zIndex: 4000,
+      });
+    };
+
     const handleClickOutside = (event) => {
-      if (rootRef.current && !rootRef.current.contains(event.target)) {
+      if (
+        rootRef.current &&
+        !rootRef.current.contains(event.target) &&
+        popoverRef.current &&
+        !popoverRef.current.contains(event.target)
+      ) {
         setOpen(false);
       }
     };
@@ -54,13 +84,18 @@ export default function ValueHelpSelect({
       if (event.key === "Escape") setOpen(false);
     };
 
+    updatePopoverPosition();
     document.addEventListener("mousedown", handleClickOutside);
     document.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", updatePopoverPosition);
+    window.addEventListener("scroll", updatePopoverPosition, true);
     window.setTimeout(() => searchRef.current?.focus(), 0);
 
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", updatePopoverPosition);
+      window.removeEventListener("scroll", updatePopoverPosition, true);
     };
   }, [open]);
 
@@ -71,9 +106,10 @@ export default function ValueHelpSelect({
   };
 
   return (
-    <div className={`value-help ${className}`} ref={rootRef} style={style}>
+    <div className={`value-help ${open ? "is-open" : ""} ${className}`.trim()} ref={rootRef} style={style}>
       <button
         type="button"
+        ref={triggerRef}
         className="value-help-trigger input"
         onClick={() => !disabled && setOpen((previous) => !previous)}
         disabled={disabled}
@@ -87,48 +123,51 @@ export default function ValueHelpSelect({
       </button>
 
       {open ? (
-        <div className="value-help-popover">
-          <div className="value-help-search">
-            <Search size={15} />
-            <input
-              ref={searchRef}
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={searchPlaceholder}
-            />
-            {query ? (
-              <button type="button" onClick={() => setQuery("")} aria-label="Clear search">
-                <X size={14} />
-              </button>
-            ) : null}
-          </div>
+        createPortal(
+          <div className="value-help-popover" ref={popoverRef} style={popoverStyle}>
+            <div className="value-help-search">
+              <Search size={15} />
+              <input
+                ref={searchRef}
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={searchPlaceholder}
+              />
+              {query ? (
+                <button type="button" onClick={() => setQuery("")} aria-label="Clear search">
+                  <X size={14} />
+                </button>
+              ) : null}
+            </div>
 
-          <div className="value-help-list" role="listbox">
-            {filteredOptions.length ? (
-              filteredOptions.map((option) => {
-                const isSelected = option.value === String(value ?? "");
-                return (
-                  <button
-                    type="button"
-                    key={option.value}
-                    className={`value-help-option ${isSelected ? "is-selected" : ""}`}
-                    onClick={() => handleSelect(option.value)}
-                    role="option"
-                    aria-selected={isSelected}
-                  >
-                    <span>
-                      <strong>{option.label}</strong>
-                      {option.description ? <small>{option.description}</small> : null}
-                    </span>
-                    {isSelected ? <Check size={16} /> : null}
-                  </button>
-                );
-              })
-            ) : (
-              <div className="value-help-empty">No matching options</div>
-            )}
-          </div>
-        </div>
+            <div className="value-help-list" role="listbox">
+              {filteredOptions.length ? (
+                filteredOptions.map((option) => {
+                  const isSelected = option.value === String(value ?? "");
+                  return (
+                    <button
+                      type="button"
+                      key={option.value}
+                      className={`value-help-option ${isSelected ? "is-selected" : ""}`}
+                      onClick={() => handleSelect(option.value)}
+                      role="option"
+                      aria-selected={isSelected}
+                    >
+                      <span>
+                        <strong>{option.label}</strong>
+                        {option.description ? <small>{option.description}</small> : null}
+                      </span>
+                      {isSelected ? <Check size={16} /> : null}
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="value-help-empty">No matching options</div>
+              )}
+            </div>
+          </div>,
+          document.body
+        )
       ) : null}
     </div>
   );

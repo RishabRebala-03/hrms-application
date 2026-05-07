@@ -2076,6 +2076,10 @@ body {
   width: 100%;
 }
 
+.value-help.is-open {
+  z-index: 240;
+}
+
 .value-help-trigger {
   align-items: center;
   background: #ffffff;
@@ -2118,6 +2122,10 @@ body {
   position: absolute;
   right: 0;
   z-index: 80;
+}
+
+.value-help.is-open .value-help-popover {
+  z-index: 260;
 }
 
 .value-help-search {

@@ -5,10 +5,12 @@ import {
   parseISO, subMonths,
 } from 'date-fns';
 import {
-  Plus, Trash2, Send, AlertCircle,
+  Plus, Trash2, AlertCircle,
   CheckCircle, CheckCircle2, XCircle, Clock, Eye,
-  Download, TrendingUp, BarChart3, Building2, UserCheck,
-  FileText, Calendar, Users, RefreshCw,
+  Download, TrendingUp, BarChart3, UserCheck,
+  FileText, Calendar, RefreshCw, CircleHelp,
+  LayoutGrid, ChevronLeft, ChevronRight,
+  Save,
 } from 'lucide-react';
 import {
   BarChart, Bar, PieChart, Pie, Cell,
@@ -16,6 +18,7 @@ import {
 } from 'recharts';
 import ValueHelpSelect from './ValueHelpSelect';
 import ValueHelpSearch from './ValueHelpSearch';
+import './TimesheetsPortal.css';
 
 const API_BASE = process.env.REACT_APP_BACKEND_URL
   ? `${process.env.REACT_APP_BACKEND_URL}/api`
@@ -243,6 +246,38 @@ function ChargeCodeSelector({ chargeCodes, selectedId, onChange, disabled }) {
 
 const blankDateRange = { start: '', end: '' };
 
+const getAvailablePeriods = (referenceDate = new Date()) => {
+  const periods = [];
+  const currentYear = referenceDate.getFullYear();
+
+  for (let month = 0; month < 12; month += 1) {
+    const monthStart = new Date(currentYear, month, 1);
+    if (monthStart > referenceDate) continue;
+
+    const lastDay = endOfMonth(monthStart).getDate();
+    periods.push({
+      value: `${currentYear}-${String(month + 1).padStart(2, '0')}-1st`,
+      label: `${format(monthStart, 'MMMM yyyy')} – 1st Half (1–15)`,
+      shortLabel: `${String(month + 1).padStart(2, '0')}/15/${currentYear}`,
+      start: format(monthStart, 'yyyy-MM-dd'),
+      end: format(new Date(currentYear, month, 15), 'yyyy-MM-dd'),
+    });
+
+    const sixteenth = new Date(currentYear, month, 16);
+    if (sixteenth <= referenceDate) {
+      periods.push({
+        value: `${currentYear}-${String(month + 1).padStart(2, '0')}-2nd`,
+        label: `${format(monthStart, 'MMMM yyyy')} – 2nd Half (16–${lastDay})`,
+        shortLabel: `${String(month + 1).padStart(2, '0')}/${lastDay}/${currentYear}`,
+        start: format(sixteenth, 'yyyy-MM-dd'),
+        end: format(endOfMonth(monthStart), 'yyyy-MM-dd'),
+      });
+    }
+  }
+
+  return periods.reverse();
+};
+
 const isTimesheetInRange = (timesheet, dateRange) => {
   if (!dateRange.start && !dateRange.end) return true;
   const start = timesheet.period_start?.slice(0, 10);
@@ -275,61 +310,12 @@ const uniqSuggestions = (items, fields) => {
   );
 };
 
-// ─── TimesheetTabBar ──────────────────────────────────────────────────────────
-function TimesheetTabBar({ activeTab, setActiveTab, user }) {
-  const role = user?.role || 'Employee';
-  const tabs = role === 'Admin'
-    ? [
-        { key: 'all_timesheets', label: 'All Timesheets', Icon: Building2  },
-        { key: 'approvals',      label: 'Approvals',       Icon: CheckCircle },
-        { key: 'charge_codes',   label: 'Charge Codes',    Icon: FileText   },
-      ]
-    : [
-        { key: 'timesheet',      label: 'My Timesheet',    Icon: FileText  },
-        ...(user?.reportsTo || role === 'Manager'
-          ? [{ key: 'team_timesheets', label: 'Team Timesheets', Icon: Users }]
-          : []),
-        { key: 'approvals',      label: 'Approvals',       Icon: CheckCircle },
-        { key: 'history',        label: 'History',          Icon: Clock      },
-        { key: 'reports',        label: 'Reports',          Icon: BarChart3  },
-      ];
-
-  return (
-    <div style={{
-      background: C.headerBg, borderBottom: `1px solid ${C.border}`,
-      padding: '0 16px', overflowX: 'auto', WebkitOverflowScrolling: 'touch',
-      width: '100%', boxSizing: 'border-box',
-    }}>
-      <nav style={{ display: 'flex', gap: '4px', minWidth: 'max-content' }}>
-        {tabs.map(({ key, label, Icon }) => {
-          const active = activeTab === key;
-          return (
-            <button
-              key={key}
-              onClick={() => setActiveTab(key)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '6px',
-                padding: '12px 16px', background: 'none', border: 'none',
-                borderBottom: active ? `2px solid ${C.purple}` : '2px solid transparent',
-                color: active ? C.purple : C.textMid,
-                fontSize: '14px', fontWeight: active ? '600' : '400',
-                cursor: 'pointer', marginBottom: '-1px', whiteSpace: 'nowrap',
-              }}
-            >
-              <Icon size={15} />{label}
-            </button>
-          );
-        })}
-      </nav>
-    </div>
-  );
-}
-
 // ─── TimesheetGrid ────────────────────────────────────────────────────────────
 function TimesheetGrid({
   dates, rows, chargeCodes, onRowUpdate, onRowAdd, onRowDelete,
   readOnly = false, approvedLeaves = [], holidays = [],
 }) {
+  const WORKDAY_HOURS = 9;
   const getEntry = (row, dateStr) =>
     row.entries.find((e) => e.date === dateStr) || { date: dateStr, hours: 0, entry_type: 'work' };
 
@@ -346,6 +332,24 @@ function TimesheetGrid({
 
   const getRowTotal = (row) =>
     row.entries.reduce((s, e) => s + numericVal(e), 0);
+
+  const holidayByDate = Object.fromEntries((holidays || []).map((holiday) => [holiday.date, holiday]));
+  const holidayDates = Object.keys(holidayByDate);
+  const isWeekday = (dateStr) => {
+    const day = parseISO(dateStr).getDay();
+    return day >= 1 && day <= 5;
+  };
+  const displayHours = (hours) => (hours ? hours.toFixed(1) : '');
+  const holidayHoursForDate = (dateStr) => (holidayByDate[dateStr] ? WORKDAY_HOURS : 0);
+  const totalHoursForDate = (dateStr) => getColTotal(dateStr) + holidayHoursForDate(dateStr);
+  const workScheduleForDate = (dateStr) => (isWeekday(dateStr) ? WORKDAY_HOURS : 0);
+  const supportCheckboxRows = [
+    'Shift Allowance – Shift Type B',
+    'Shift Allowance – Shift Type C',
+    'On Call – Primary Support',
+    'On Call – Secondary Support',
+    'On Call – Support By Unassigned',
+  ];
 
   const thStyle = (isHol) => ({
     padding: '10px 8px', textAlign: 'center', fontSize: '12px', fontWeight: '600',
@@ -365,18 +369,21 @@ function TimesheetGrid({
     boxShadow: '2px 0 4px rgba(0,0,0,0.06)',
   };
 
+  const locationCode = '15';
+  const costCenterCode = '8134';
+
   return (
-    <div style={{ ...S.card, overflow: 'hidden' }}>
-      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', position: 'relative' }}>
-        <table style={{ ...S.table, minWidth: 'max-content' }}>
+    <div className="mte-sheet-card" style={{ ...S.card, overflow: 'visible' }}>
+      <div className="mte-sheet-scroll" style={{ overflowX: 'auto', overflowY: 'visible', WebkitOverflowScrolling: 'touch', position: 'relative' }}>
+        <table className="mte-sheet-table" style={{ ...S.table, minWidth: 'max-content' }}>
           <thead>
             <tr style={{ borderBottom: `1px solid ${C.border}`, background: C.headerBg }}>
-              <th style={stickyThStyle}>Charge Code</th>
+              <th style={stickyThStyle}>Charge Codes</th>
 
               {dates.map((d) => {
                 const isHol = isHoliday(d);
                 return (
-                  <th key={d} style={thStyle(isHol)}>
+                  <th key={d} style={thStyle(isHol)} className="mte-sheet-date-head">
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
                       <span style={{ fontSize: '11px', color: isHol ? C.holidayText : C.textMid }}>
                         {format(parseISO(d), 'EEE')}
@@ -408,12 +415,77 @@ function TimesheetGrid({
           </thead>
 
           <tbody>
+            <tr className="mte-sheet-meta-row">
+              <td className="mte-sheet-meta-label" style={{
+                padding: '10px 16px',
+                position: 'sticky', left: 0,
+                background: C.white,
+                zIndex: 9,
+                borderRight: `1px solid ${C.borderLight}`,
+              }}>
+                <span className="mte-sheet-meta-link">Work Location</span>
+              </td>
+              {dates.map((d) => (
+                <td key={`work-location-${d}`} className="mte-sheet-meta-cell">▼</td>
+              ))}
+              <td className="mte-sheet-meta-total" />
+              {!readOnly && <td className="mte-sheet-sticky-end" />}
+            </tr>
+
+            <tr className="mte-sheet-meta-row">
+              <td className="mte-sheet-meta-label" style={{
+                padding: '10px 16px',
+                position: 'sticky', left: 0,
+                background: C.white,
+                zIndex: 9,
+                borderRight: `1px solid ${C.borderLight}`,
+              }}>
+                Assigned Location
+              </td>
+              {dates.map((d) => (
+                <td key={`assigned-location-${d}`} className="mte-sheet-meta-cell">{locationCode}</td>
+              ))}
+              <td className="mte-sheet-meta-total">{locationCode}</td>
+              {!readOnly && <td className="mte-sheet-sticky-end" />}
+            </tr>
+
+            <tr className="mte-sheet-meta-row mte-sheet-meta-row-last">
+              <td className="mte-sheet-meta-label" style={{
+                padding: '10px 16px',
+                position: 'sticky', left: 0,
+                background: C.white,
+                zIndex: 9,
+                borderRight: `1px solid ${C.borderLight}`,
+              }}>
+                Company Code/Cost Center
+              </td>
+              {dates.map((d) => (
+                <td key={`cost-center-${d}`} className="mte-sheet-meta-cell">{costCenterCode}</td>
+              ))}
+              <td className="mte-sheet-meta-total">{costCenterCode}</td>
+              {!readOnly && <td className="mte-sheet-sticky-end" />}
+            </tr>
+
+            <tr className="mte-sheet-spacer-row">
+              <td style={{
+                padding: '14px 16px',
+                position: 'sticky', left: 0,
+                background: C.white,
+                zIndex: 9,
+                borderRight: `1px solid ${C.borderLight}`,
+              }} />
+              {dates.map((d) => <td key={`spacer-${d}`} />)}
+              <td />
+              {!readOnly && <td className="mte-sheet-sticky-end" />}
+            </tr>
+
             {rows.map((row, ri) => {
               const rowBg = ri % 2 === 0 ? C.white : C.rowAlt;
 
               return (
                 <tr
                   key={row.id}
+                  className="mte-sheet-entry-row"
                   style={{ background: rowBg, borderBottom: `1px solid ${C.borderLight}` }}
                 >
                   <td style={{
@@ -423,6 +495,7 @@ function TimesheetGrid({
                     zIndex: 10,
                     borderRight: `1px solid ${C.borderLight}`,
                     boxShadow: '2px 0 4px rgba(0,0,0,0.04)',
+                    overflow: 'visible',
                   }}>
                     <ChargeCodeSelector
                       chargeCodes={chargeCodes}
@@ -442,6 +515,7 @@ function TimesheetGrid({
                         background: isHol ? '#fffbeb' : 'transparent',
                       }}>
                         <input
+                          className="mte-sheet-hour-input"
                           type="text"
                           value={entry.value ?? ''}
                           disabled={readOnly}
@@ -491,39 +565,131 @@ function TimesheetGrid({
               );
             })}
 
-            <tr style={{ background: C.totalBg, borderTop: `2px solid ${C.totalBorder}` }}>
-              <td style={{
-                padding: '10px 16px', fontWeight: '600', color: C.purple,
+            {holidayDates.map((dateStr) => (
+              <tr key={`holiday-${dateStr}`} className="mte-sheet-static-row">
+                <td className="mte-sheet-static-label" style={{
+                  padding: '10px 16px',
+                  position: 'sticky', left: 0,
+                  background: C.white,
+                  zIndex: 10,
+                  borderRight: `1px solid ${C.borderLight}`,
+                  boxShadow: '2px 0 4px rgba(0,0,0,0.04)',
+                }}>
+                  <span className="mte-sheet-static-row-title">{`${holidayByDate[dateStr].holiday_name || 'Public holiday'} (97OX00)`}</span>
+                </td>
+                {dates.map((d) => (
+                  <td key={`holiday-cell-${dateStr}-${d}`} className="mte-sheet-static-value-cell">
+                    {d === dateStr ? displayHours(WORKDAY_HOURS) : ''}
+                  </td>
+                ))}
+                <td className="mte-sheet-static-total-cell">{displayHours(WORKDAY_HOURS)}</td>
+                {!readOnly && <td className="mte-sheet-sticky-end" />}
+              </tr>
+            ))}
+
+            <tr className="mte-sheet-static-row">
+              <td className="mte-sheet-static-label" style={{
+                padding: '10px 16px',
                 position: 'sticky', left: 0,
-                background: C.totalBg,
+                background: C.white,
                 zIndex: 10,
+                borderRight: `1px solid ${C.borderLight}`,
                 boxShadow: '2px 0 4px rgba(0,0,0,0.04)',
               }}>
-                Daily Total
+                Total hours
               </td>
               {dates.map((d) => (
-                <td key={d} style={{ padding: '10px 8px', textAlign: 'center', fontWeight: '600', color: C.purple, borderLeft: `1px solid ${C.borderLight}` }}>
-                  {getColTotal(d)}h
+                <td key={`total-hours-${d}`} className="mte-sheet-static-value-cell">
+                  {displayHours(totalHoursForDate(d))}
                 </td>
               ))}
-              <td style={{ padding: '10px 16px', textAlign: 'center', fontWeight: '700', background: C.purpleLight, color: C.purple, borderLeft: `1px solid ${C.totalBorder}` }}>
-                {dates.reduce((s, d) => s + getColTotal(d), 0)}h
-              </td>
-              {!readOnly && (
-                <td style={{
-                  borderLeft: `1px solid ${C.borderLight}`,
-                  position: 'sticky', right: 0,
-                  background: C.totalBg,
-                  zIndex: 10,
-                }} />
-              )}
+              <td className="mte-sheet-static-total-cell">{displayHours(dates.reduce((sum, dateStr) => sum + totalHoursForDate(dateStr), 0))}</td>
+              {!readOnly && <td className="mte-sheet-sticky-end" />}
             </tr>
+
+            <tr className="mte-sheet-static-row mte-sheet-static-divider-top">
+              <td className="mte-sheet-static-label mte-sheet-underlined-label" style={{
+                padding: '10px 16px',
+                position: 'sticky', left: 0,
+                background: C.white,
+                zIndex: 10,
+                borderRight: `1px solid ${C.borderLight}`,
+                boxShadow: '2px 0 4px rgba(0,0,0,0.04)',
+              }}>
+                Work Schedule
+              </td>
+              {dates.map((d) => (
+                <td key={`work-schedule-${d}`} className="mte-sheet-static-value-cell">
+                  {displayHours(workScheduleForDate(d))}
+                </td>
+              ))}
+              <td className="mte-sheet-static-total-cell">{displayHours(dates.reduce((sum, dateStr) => sum + workScheduleForDate(dateStr), 0))}</td>
+              {!readOnly && <td className="mte-sheet-sticky-end" />}
+            </tr>
+
+            <tr className="mte-sheet-static-row mte-sheet-static-divider-top">
+              <td className="mte-sheet-static-label" style={{
+                padding: '10px 16px',
+                position: 'sticky', left: 0,
+                background: C.white,
+                zIndex: 10,
+                borderRight: `1px solid ${C.borderLight}`,
+                boxShadow: '2px 0 4px rgba(0,0,0,0.04)',
+              }}>
+                Daily Overtime
+              </td>
+              {dates.map((d) => (
+                <td key={`daily-overtime-${d}`} className="mte-sheet-static-value-cell" />
+              ))}
+              <td className="mte-sheet-static-total-cell">0</td>
+              {!readOnly && <td className="mte-sheet-sticky-end" />}
+            </tr>
+
+            <tr className="mte-sheet-static-row">
+              <td className="mte-sheet-static-label" style={{
+                padding: '10px 16px',
+                position: 'sticky', left: 0,
+                background: C.white,
+                zIndex: 10,
+                borderRight: `1px solid ${C.borderLight}`,
+                boxShadow: '2px 0 4px rgba(0,0,0,0.04)',
+              }}>
+                Holiday Payout
+              </td>
+              {dates.map((d) => (
+                <td key={`holiday-payout-${d}`} className="mte-sheet-static-value-cell" />
+              ))}
+              <td className="mte-sheet-static-total-cell">0</td>
+              {!readOnly && <td className="mte-sheet-sticky-end" />}
+            </tr>
+
+            {supportCheckboxRows.map((label) => (
+              <tr key={label} className="mte-sheet-static-row">
+                <td className="mte-sheet-static-label" style={{
+                  padding: '10px 16px',
+                  position: 'sticky', left: 0,
+                  background: C.white,
+                  zIndex: 10,
+                  borderRight: `1px solid ${C.borderLight}`,
+                  boxShadow: '2px 0 4px rgba(0,0,0,0.04)',
+                }}>
+                  {label}
+                </td>
+                {dates.map((d) => (
+                  <td key={`${label}-${d}`} className="mte-sheet-checkbox-cell">
+                    <input type="checkbox" className="mte-sheet-checkbox" disabled={readOnly} />
+                  </td>
+                ))}
+                <td className="mte-sheet-static-total-cell">0</td>
+                {!readOnly && <td className="mte-sheet-sticky-end" />}
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
 
       {!readOnly && (
-        <div style={{ padding: '12px 16px', borderTop: `1px solid ${C.border}`, background: C.headerBg }}>
+        <div className="mte-sheet-footer" style={{ padding: '12px 16px', borderTop: `1px solid ${C.border}`, background: C.headerBg }}>
           <button onClick={onRowAdd} style={S.btnSecondary}>
             <Plus size={14} /> Add Charge Code
           </button>
@@ -534,37 +700,9 @@ function TimesheetGrid({
 }
 
 // ─── TimesheetPage (Employee) ─────────────────────────────────────────────────
-function TimesheetPage({ user }) {
-  const currentDate = new Date();
-
-  const buildAvailablePeriods = () => {
-    const today = new Date();
-    const periods = [];
-    for (let month = 0; month < 12; month++) {
-      const monthStart = new Date(2026, month, 1);
-      if (monthStart > today) continue;
-      const lastDay = endOfMonth(monthStart).getDate();
-      periods.push({
-        value: `2026-${String(month + 1).padStart(2, '0')}-1st`,
-        label: `${format(monthStart, 'MMMM yyyy')} – 1st Half (1–15)`,
-        start: format(monthStart, 'yyyy-MM-dd'),
-        end:   format(new Date(2026, month, 15), 'yyyy-MM-dd'),
-      });
-      const sixteenth = new Date(2026, month, 16);
-      if (sixteenth <= today) {
-        periods.push({
-          value: `2026-${String(month + 1).padStart(2, '0')}-2nd`,
-          label: `${format(monthStart, 'MMMM yyyy')} – 2nd Half (16–${lastDay})`,
-          start: format(sixteenth, 'yyyy-MM-dd'),
-          end:   format(endOfMonth(monthStart), 'yyyy-MM-dd'),
-        });
-      }
-    }
-    return periods.reverse();
-  };
-
-  const availablePeriods = useMemo(() => buildAvailablePeriods(), []);
-  const [selectedPeriod, setSelectedPeriod]     = useState(availablePeriods[0]?.value || '');
+function TimesheetPage({ user, selectedPeriod, onSelectedPeriodChange, embedded = false }) {
+  const availablePeriods = useMemo(() => getAvailablePeriods(), []);
+  const [internalSelectedPeriod, setInternalSelectedPeriod] = useState(availablePeriods[0]?.value || '');
   const [timesheetStatus, setTimesheetStatus]   = useState('draft');
   const [rows, setRows]                         = useState([]);
   const [validationErrors, setValidationErrors] = useState([]);
@@ -576,15 +714,18 @@ function TimesheetPage({ user }) {
   const [reloadTrigger, setReloadTrigger]       = useState(0);
 
   const userId = user?._id || user?.id;
+  const activePeriod = selectedPeriod ?? internalSelectedPeriod;
+  const setActivePeriod = onSelectedPeriodChange ?? setInternalSelectedPeriod;
+  const selectedPeriodOption = availablePeriods.find((period) => period.value === activePeriod) || availablePeriods[0];
 
   const dates = useMemo(() => {
-    const period = availablePeriods.find((p) => p.value === selectedPeriod);
+    const period = availablePeriods.find((p) => p.value === activePeriod);
     if (!period) return [];
     return eachDayOfInterval({
       start: parseISO(period.start),
       end:   parseISO(period.end),
     }).map((d) => format(d, 'yyyy-MM-dd'));
-  }, [selectedPeriod, availablePeriods]);
+  }, [activePeriod, availablePeriods]);
 
   useEffect(() => {
     if (!userId) return;
@@ -806,108 +947,132 @@ function TimesheetPage({ user }) {
   };
 
   return (
-    <div style={S.page}>
-      <div style={S.inner}>
-        <div style={S.maxW}>
-          <div style={S.pageHeader}>
-            <h1 style={S.pageTitle}>My Timesheet</h1>
-            <p style={S.pageSub}>Track and submit your hours by fortnight period</p>
+    <div className={`mte-embedded-shell ${embedded ? 'is-embedded' : ''}`}>
+      <div className="mte-date-toolbar">
+        <div className="mte-date-picker-group">
+          <button type="button" className="mte-ghost-icon" aria-label="Previous period">
+            <ChevronLeft size={16} />
+          </button>
+          <div className="mte-date-select-shell">
+            <Calendar size={15} />
+            <select
+              className="mte-native-select"
+              value={activePeriod}
+              onChange={(event) => {
+                setActivePeriod(event.target.value);
+                setTimesheetStatus('draft');
+              }}
+            >
+              {availablePeriods.map((period) => (
+                <option key={period.value} value={period.value}>
+                  {period.shortLabel || period.label}
+                </option>
+              ))}
+            </select>
           </div>
-
-          <div style={{ ...S.card, marginBottom: '20px' }}>
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: '12px',
-              padding: '14px 16px 10px 16px',
-              borderBottom: `1px solid ${C.borderLight}`,
-              flexWrap: 'wrap',
-            }}>
-              <SelectWrap
-                value={selectedPeriod}
-                onChange={(e) => {
-                  setSelectedPeriod(e.target.value);
-                  setTimesheetStatus('draft');
-                }}
-              >
-                {availablePeriods.map((p) => (
-                  <option key={p.value} value={p.value}>{p.label}</option>
-                ))}
-              </SelectWrap>
+          <button type="button" className="mte-ghost-icon" aria-label="Next period">
+            <ChevronRight size={16} />
+          </button>
+        </div>
+        <div className="mte-primary-actions">
+          <span className="mte-link-action">New</span>
+          {canSubmit ? (
+            <button
+              type="button"
+              className="mte-submit-button"
+              onClick={handleSubmit}
+              disabled={errors.length > 0 || loading}
+            >
+              {loading ? 'Submitting' : 'Submit'}
+            </button>
+          ) : (
+            <div className="mte-status-inline">
               <StatusBadge status={timesheetStatus} />
             </div>
-
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: '12px',
-              padding: '10px 16px 14px 16px',
-              flexWrap: 'wrap',
-            }}>
-              <span style={{ fontSize: '13px', color: C.textMid }}>
-                Total hours: <strong style={{ color: C.text }}>{getTotalHours()}h</strong>
-              </span>
-              {canSubmit && (
-                <button
-                  onClick={handleSubmit}
-                  disabled={errors.length > 0 || loading}
-                  style={errors.length > 0 || loading ? S.btnDisabled : S.btnPrimary}
-                >
-                  <Send size={14} />{loading ? 'Submitting…' : 'Submit Timesheet'}
-                </button>
-              )}
-              {timesheetStatus === 'pending_lead' && (
-                <button
-                  onClick={handleRecall}
-                  disabled={loading}
-                  style={loading ? S.btnDisabled : { ...S.btnPrimary, background: '#ea580c' }}
-                >
-                  Edit Timesheet
-                </button>
-              )}
-            </div>
-          </div>
-
-          {canSubmit && errors.length > 0 && (
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '14px 16px', borderRadius: '6px', marginBottom: '20px', border: '1px solid #fca5a5', background: '#fef2f2' }}>
-              <AlertCircle size={16} style={{ color: '#dc2626', flexShrink: 0, marginTop: '2px' }} />
-              <div>
-                <p style={{ fontSize: '13px', fontWeight: '600', color: '#991b1b', margin: '0 0 6px 0' }}>
-                  Fix the following before submitting:
-                </p>
-                {errors.map((e, i) => (
-                  <p key={i} style={{ fontSize: '13px', color: '#b91c1c', margin: '0 0 2px 0' }}>• {e}</p>
-                ))}
-              </div>
-            </div>
           )}
+        </div>
+      </div>
 
-          {statusMessage()}
+      <div className="mte-action-toolbar">
+        <button type="button" className="mte-tool-button" onClick={() => setReloadTrigger((value) => value + 1)}>
+          <Save size={18} />
+          <span>Save</span>
+        </button>
+        <button
+          type="button"
+          className="mte-tool-button"
+          onClick={() => !isReadOnly && rows.length > 1 && setRows((previous) => previous.slice(0, -1))}
+        >
+          <Trash2 size={18} />
+          <span>Delete</span>
+        </button>
+        <button type="button" className="mte-tool-button" onClick={() => setRows((previous) => [...previous, {
+          id: `row${Date.now()}`,
+          chargeCodeId: '',
+          entries: dates.map((date) => ({ date, hours: 0, value: '', entry_type: 'work' })),
+        }])}>
+          <Plus size={18} />
+          <span>Set Template</span>
+        </button>
+        <button type="button" className="mte-tool-button">
+          <CircleHelp size={18} />
+          <span>Help</span>
+        </button>
+        <div className="mte-toolbar-summary">
+          <strong>{selectedPeriodOption?.label || 'Current period'}</strong>
+          <span>Total hours {getTotalHours()}h</span>
+        </div>
+      </div>
 
-          <TimesheetGrid
-            dates={dates}
-            rows={rows}
-            chargeCodes={chargeCodes}
-            onRowUpdate={(id, u) => setRows((p) => p.map((r) => r.id === id ? { ...r, ...u } : r))}
-            onRowAdd={() => setRows((p) => [...p, {
-              id: `row${Date.now()}`,
-              chargeCodeId: '',
-              entries: dates.map((d) => ({ date: d, hours: 0, value: '', entry_type: 'work' })),
-            }])}
-            onRowDelete={(id) => setRows((p) => p.filter((r) => r.id !== id))}
-            readOnly={isReadOnly}
-            approvedLeaves={approvedLeaves}
-            holidays={holidays}
-          />
+      {timesheetStatus === 'pending_lead' ? (
+        <div className="mte-inline-banner">
+          <span>Pending with your reporting lead.</span>
+          <button type="button" className="mte-inline-banner-button" onClick={handleRecall} disabled={loading}>
+            {loading ? 'Updating' : 'Edit Timesheet'}
+          </button>
+        </div>
+      ) : null}
 
-          <div style={S.infoBox}>
-            <p style={S.infoTitle}>How it works</p>
-            <ul style={S.infoList}>
-              {[
-                'Select a charge code for each row (only your assigned codes appear here)',
-                'Enter hours worked per day in 0.5h increments',
-                'For leave days (SL, CL, PL), add the leave charge code as a row and enter hours as normal',
-                'Public holidays are highlighted automatically — no hours needed',
-                'Your reporting lead is the sole approver — use "Edit Timesheet" to recall while pending',
-              ].map((t, i) => <li key={i} style={S.infoItem}>• {t}</li>)}
-            </ul>
+      {canSubmit && errors.length > 0 && (
+        <div className="mte-error-banner">
+          <AlertCircle size={16} />
+          <div>
+            <strong>Fix these items before you submit.</strong>
+            <p>{errors.join(' • ')}</p>
           </div>
+        </div>
+      )}
+
+      {statusMessage()}
+
+      <div className="mte-grid-caption">
+        <div>
+          <strong>Charge Codes</strong>
+          <span>Use your assigned codes and enter day-wise hours exactly as in the reference layout.</span>
+        </div>
+        <StatusBadge status={timesheetStatus} />
+      </div>
+
+      <TimesheetGrid
+        dates={dates}
+        rows={rows}
+        chargeCodes={chargeCodes}
+        onRowUpdate={(id, u) => setRows((p) => p.map((r) => r.id === id ? { ...r, ...u } : r))}
+        onRowAdd={() => setRows((p) => [...p, {
+          id: `row${Date.now()}`,
+          chargeCodeId: '',
+          entries: dates.map((d) => ({ date: d, hours: 0, value: '', entry_type: 'work' })),
+        }])}
+        onRowDelete={(id) => setRows((p) => p.filter((r) => r.id !== id))}
+        readOnly={isReadOnly}
+        approvedLeaves={approvedLeaves}
+        holidays={holidays}
+      />
+
+      <div className="mte-bottom-note">
+        <div>
+          <strong>Portal behaviour</strong>
+          <span>Select a charge code, enter hours, and submit for your reporting lead. Approved periods stay locked.</span>
         </div>
       </div>
     </div>
@@ -2984,37 +3149,350 @@ function ChargeCodeAdmin({ user }) {
   );
 }
 
+function EmptyModuleState({ title, message, actionLabel = '', icon: Icon = FileText }) {
+  return (
+    <div className="mte-empty-state">
+      <div className="mte-empty-icon"><Icon size={22} /></div>
+      <strong>{title}</strong>
+      <p>{message}</p>
+      {actionLabel ? <span className="mte-empty-chip">{actionLabel}</span> : null}
+    </div>
+  );
+}
+
+function AssignedChargeCodesPanel({ user }) {
+  const userId = user?._id || user?.id;
+  const [assignedCodes, setAssignedCodes] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!userId) return;
+    setLoading(true);
+    fetchAPI(`/charge_codes/employee/${userId}?active_only=true`)
+      .then((data) => setAssignedCodes(Array.isArray(data) ? data : []))
+      .catch(() => setAssignedCodes([]))
+      .finally(() => setLoading(false));
+  }, [userId]);
+
+  return (
+    <div className="mte-module-card">
+      <div className="mte-module-card-header">
+        <div>
+          <h3>Assigned Charge Codes</h3>
+          <p>Only the codes mapped to you are available while filling your timesheet.</p>
+        </div>
+      </div>
+      <div className="mte-simple-table-wrap">
+        <table className="mte-simple-table">
+          <thead>
+            <tr>
+              <th>Charge Code</th>
+              <th>Description</th>
+              <th>Assignment</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={3}>Loading assigned charge codes…</td>
+              </tr>
+            ) : assignedCodes.length === 0 ? (
+              <tr>
+                <td colSpan={3}>No charge codes are assigned yet.</td>
+              </tr>
+            ) : assignedCodes.map((code) => (
+              <tr key={code._id}>
+                <td>{code.charge_code}</td>
+                <td>{code.charge_code_name}</td>
+                <td>Visible in TIME</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function ExpensesPanel({ user }) {
+  const isAdmin = user?.role === 'Admin';
+
+  return (
+    <div className="mte-module-card">
+      <div className="mte-module-toolbar">
+        <div className="mte-select-shell">
+          <span>Select Expenses to Add</span>
+          <ChevronRight size={14} />
+        </div>
+        <button type="button" className="mte-icon-text-button">
+          <LayoutGrid size={16} />
+          <span>AMEX IMPORT</span>
+        </button>
+      </div>
+      <EmptyModuleState
+        title="There are no expenses for the selected period"
+        message={
+          isAdmin
+            ? 'This shell is ready for expense administration once your expense data endpoint is connected.'
+            : 'Expense cards and submitted receipts can plug into this area without changing the portal layout.'
+        }
+        actionLabel={isAdmin ? 'Expense admin ready' : 'My expenses'}
+        icon={FileText}
+      />
+    </div>
+  );
+}
+
+function LocationsPanel({ selectedPeriod, periods }) {
+  const period = periods.find((item) => item.value === selectedPeriod) || periods[0];
+  const dates = period
+    ? eachDayOfInterval({ start: parseISO(period.start), end: parseISO(period.end) })
+    : [];
+
+  return (
+    <div className="mte-module-card mte-module-card-flat">
+      <div className="mte-locations-grid-wrap">
+        <table className="mte-locations-grid">
+          <thead>
+            <tr>
+              <th>Charge Codes</th>
+              {dates.map((day) => (
+                <th key={day.toISOString()}>
+                  <span>{format(day, 'EEE')}</span>
+                  <strong>{format(day, 'dd')}</strong>
+                </th>
+              ))}
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span className="mte-sheet-meta-link">Work Location</span></td>
+              {dates.map((day) => <td key={`location-${day.toISOString()}`}>▼</td>)}
+              <td />
+            </tr>
+            <tr>
+              <td>Assigned Location</td>
+              {dates.map((day) => <td key={`assigned-${day.toISOString()}`}>15</td>)}
+              <td>15</td>
+            </tr>
+            <tr>
+              <td>Company Code/Cost Center</td>
+              {dates.map((day) => <td key={`cost-${day.toISOString()}`}>8134</td>)}
+              <td>8134</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function AdjustmentsPanel({ user }) {
+  return (
+    <div className="mte-module-card">
+      <div className="mte-module-card-header">
+        <div>
+          <h3>Adjustments</h3>
+          <p>Keep correction requests, overrides, and manual payroll adjustments in the same visual shell.</p>
+        </div>
+      </div>
+      <div className="mte-adjustments-list">
+        <article>
+          <strong>Manual overtime correction</strong>
+          <span>Use this area for approved exception handling and retro changes.</span>
+        </article>
+        <article>
+          <strong>Holiday payout review</strong>
+          <span>Pair this view with payroll exports when exception payouts need sign-off.</span>
+        </article>
+        <article>
+          <strong>{user?.role === 'Admin' ? 'Admin exception queue' : 'My exception requests'}</strong>
+          <span>Designed so your real adjustment data can drop into the same rows later.</span>
+        </article>
+      </div>
+    </div>
+  );
+}
+
+function PreferencesPanel({ user }) {
+  const reviewer = user?.reportsToEmail || user?.reportsTo || user?.managerEmail || '';
+  const email = user?.email || '';
+
+  return (
+    <div className="mte-module-card">
+      <div className="mte-preferences-grid">
+        <div className="mte-pref-field">
+          <label>Time Report Reviewer(s):</label>
+          <input className="input" defaultValue="" placeholder="e.g. john.a.smith" />
+        </div>
+        <div className="mte-pref-arrow">›</div>
+        <div className="mte-pref-field">
+          <label>Selected Reviewers:</label>
+          <textarea className="input" defaultValue={reviewer} rows={3} />
+        </div>
+        <div className="mte-pref-field">
+          <label>Theme:</label>
+          <select className="input" defaultValue="Default">
+            <option>Default</option>
+            <option>Classic</option>
+          </select>
+        </div>
+
+        <div className="mte-pref-field">
+          <label>Notify of Submission:</label>
+          <input className="input" defaultValue="" placeholder="e.g. john.a.smith@accenture.com" />
+        </div>
+        <div className="mte-pref-arrow">›</div>
+        <div className="mte-pref-field">
+          <label>Selected Notifications:</label>
+          <textarea className="input" defaultValue={email} rows={3} />
+        </div>
+        <div />
+
+        <div className="mte-pref-field">
+          <label>Delegate(s):</label>
+          <input className="input" defaultValue="" placeholder="e.g. john.a.smith" />
+        </div>
+        <div className="mte-pref-arrow">›</div>
+        <div className="mte-pref-field">
+          <label>Selected Delegates:</label>
+          <textarea className="input" defaultValue="" rows={3} />
+        </div>
+        <div />
+
+        <div className="mte-pref-field">
+          <label>Approver(s):</label>
+          <input className="input" defaultValue="" placeholder="e.g. john.a.smith" />
+        </div>
+        <div className="mte-pref-arrow">›</div>
+        <div className="mte-pref-field">
+          <label>Selected Approvers:</label>
+          <textarea className="input" defaultValue={reviewer} rows={3} />
+        </div>
+        <div />
+      </div>
+    </div>
+  );
+}
+
+function PortalTimeWorkspace({ user, selectedPeriod, onSelectedPeriodChange }) {
+  const hasTeamScope = Boolean(user?.reportsTo || user?.role === 'Manager');
+  const isAdmin = user?.role === 'Admin';
+  const defaultView = isAdmin ? 'all' : 'entry';
+  const [activeView, setActiveView] = useState(defaultView);
+
+  useEffect(() => {
+    setActiveView(defaultView);
+  }, [defaultView]);
+
+  const views = isAdmin
+    ? [{ key: 'all', label: 'All Timesheets' }]
+    : [
+        { key: 'entry', label: 'My Timesheet' },
+        ...(hasTeamScope ? [{ key: 'approvals', label: 'Approvals' }, { key: 'team', label: 'Team History' }] : []),
+        { key: 'history', label: 'Past Timesheets' },
+      ];
+
+  return (
+    <div className="mte-module-stack">
+      <div className="mte-subtabs">
+        {views.map((view) => (
+          <button
+            key={view.key}
+            type="button"
+            className={activeView === view.key ? 'is-active' : ''}
+            onClick={() => setActiveView(view.key)}
+          >
+            {view.label}
+          </button>
+        ))}
+      </div>
+
+      {activeView === 'entry' ? (
+        <TimesheetPage
+          user={user}
+          selectedPeriod={selectedPeriod}
+          onSelectedPeriodChange={onSelectedPeriodChange}
+          embedded
+        />
+      ) : null}
+      {activeView === 'approvals' ? <Approvals user={user} /> : null}
+      {activeView === 'team' ? <TeamTimesheets user={user} /> : null}
+      {activeView === 'history' ? <History user={user} onNavigate={() => setActiveView('entry')} /> : null}
+      {activeView === 'all' ? <AdminTimesheets user={user} /> : null}
+    </div>
+  );
+}
+
+function PortalSummaryWorkspace({ user }) {
+  if (user?.role === 'Admin') {
+    return <AdminTimesheets user={user} />;
+  }
+  return <Reports user={user} />;
+}
+
 // ─── Main Export ──────────────────────────────────────────────────────────────
 export default function Timesheets({ user }) {
-  const defaultTab = user?.role === 'Admin' ? 'all_timesheets' : 'timesheet';
-  const [activeTab, setActiveTab] = useState(defaultTab);
+  const periods = useMemo(() => getAvailablePeriods(), []);
+  const [selectedPeriod, setSelectedPeriod] = useState(periods[0]?.value || '');
+  const [activeModule, setActiveModule] = useState('time');
 
-  const renderTab = () => {
-    switch (activeTab) {
-      case 'timesheet':       return <TimesheetPage   user={user} />;
-      case 'team_timesheets': return <TeamTimesheets  user={user} />;
-      case 'all_timesheets':  return <AdminTimesheets user={user} />;
-      case 'approvals':       return <Approvals       user={user} />;
-      case 'history':         return <History         user={user} onNavigate={setActiveTab} />;
-      case 'reports':         return <Reports         user={user} />;
-      case 'charge_codes':    return <ChargeCodeAdmin user={user} />;
-      default:                return <TimesheetPage   user={user} />;
+  const modules = [
+    { key: 'time', label: 'TIME' },
+    { key: 'expenses', label: 'EXPENSES' },
+    { key: 'locations', label: 'LOCATIONS' },
+    { key: 'charge_codes', label: 'CHARGE CODES' },
+    { key: 'adjustments', label: 'ADJUSTMENTS' },
+    { key: 'summary', label: 'SUMMARY' },
+    { key: 'preferences', label: 'PREFERENCES' },
+  ];
+
+  const renderActiveModule = () => {
+    switch (activeModule) {
+      case 'time':
+        return (
+          <PortalTimeWorkspace
+            user={user}
+            selectedPeriod={selectedPeriod}
+            onSelectedPeriodChange={setSelectedPeriod}
+          />
+        );
+      case 'expenses':
+        return <ExpensesPanel user={user} />;
+      case 'locations':
+        return <LocationsPanel selectedPeriod={selectedPeriod} periods={periods} />;
+      case 'charge_codes':
+        return user?.role === 'Admin' ? <ChargeCodeAdmin user={user} /> : <AssignedChargeCodesPanel user={user} />;
+      case 'adjustments':
+        return <AdjustmentsPanel user={user} />;
+      case 'summary':
+        return <PortalSummaryWorkspace user={user} />;
+      case 'preferences':
+        return <PreferencesPanel user={user} />;
+      default:
+        return <PortalTimeWorkspace user={user} selectedPeriod={selectedPeriod} onSelectedPeriodChange={setSelectedPeriod} />;
     }
   };
 
   return (
-    <div style={{
-      background: C.bg,
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-      fontSize: '14px',
-      color: C.text,
-      width: '100%',
-      minWidth: 0,
-      boxSizing: 'border-box',
-      overflow: 'hidden',
-    }}>
-      <TimesheetTabBar activeTab={activeTab} setActiveTab={setActiveTab} user={user} />
-      {renderTab()}
+    <div className="mte-portal-shell">
+      <div className="mte-portal-tabs">
+        {modules.map((module) => (
+          <button
+            type="button"
+            key={module.key}
+            className={activeModule === module.key ? 'is-active' : ''}
+            onClick={() => setActiveModule(module.key)}
+          >
+            {module.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="mte-portal-content">
+        {renderActiveModule()}
+      </div>
     </div>
   );
 }
