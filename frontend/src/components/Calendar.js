@@ -371,7 +371,7 @@ const Calendar = ({ user, setSection, navigationState }) => {
         <div className="fiori-loading-card">
           <CalendarDays size={28} />
           <div>
-            <strong>Loading enterprise calendar</strong>
+            <strong>Loading calendar</strong>
             <p>Preparing holidays, birthdays, approved leaves, and the yearly view.</p>
           </div>
         </div>
@@ -383,8 +383,8 @@ const Calendar = ({ user, setSection, navigationState }) => {
     <section className="enterprise-calendar-workspace">
       <header className="admin-hero">
         <div>
-          <div className="admin-section-overline">Enterprise Calendar</div>
-          <h1>Enterprise Calendar</h1>
+          <div className="admin-section-overline">Calendar</div>
+          <h1>Calendar</h1>
         </div>
 
         <div className="admin-hero-meta">

@@ -1017,7 +1017,8 @@ def update_user(user_id):
         # Fields that can be updated (REMOVED dateOfJoining and dateOfBirth from here)
         allowed_fields = [
             "name", "email", "designation", "department", "shiftTimings",
-            "projects", "role", "leaveBalance", "workLocation", "companyCode", "costCenter", "employment_type"
+            "projects", "role", "leaveBalance", "workLocation", "assignedLocation",
+            "companyCode", "costCenter", "employment_type"
         ]
 
         for field in allowed_fields:

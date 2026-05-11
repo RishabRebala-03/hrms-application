@@ -23,6 +23,7 @@ import './TimesheetsPortal.css';
 const API_BASE = process.env.REACT_APP_BACKEND_URL
   ? `${process.env.REACT_APP_BACKEND_URL}/api`
   : 'http://localhost:5000/api';
+const DAILY_WORK_HOUR_LIMIT = 9;
 
 // ─── Design tokens (matches leave/user colour system exactly) ────────────────
 const C = {
@@ -178,6 +179,8 @@ const fetchAPI = async (endpoint, options = {}) => {
   return response.json();
 };
 
+const getUserId = (user) => user?._id || user?.id || user?.user_id || '';
+
 // ─── Status config ───────────────────────────────────────────────────────────
 const STATUS_STYLES = {
   draft:               { bg: '#f9fafb', color: '#6b7280', border: '#d1d5db' },
@@ -312,13 +315,20 @@ const uniqSuggestions = (items, fields) => {
 
 const getTimesheetAssignmentMeta = (source = {}) => {
   const assignedLocation = source.employee_work_location || source.workLocation || '';
+  const explicitAssignedLocation = (
+    source.employee_assigned_location
+    || source.assignedLocation
+    || source.costCenter
+    || assignedLocation
+    || ''
+  );
   const companyCode = source.employee_company_code || source.companyCode || '';
   const costCenter = source.employee_cost_center || source.costCenter || '';
-  const companyCostCenter = [companyCode, costCenter].filter(Boolean).join(' / ');
+  const companyCostCenter = companyCode || costCenter;
 
   return {
     workLocation: assignedLocation || 'Not assigned',
-    assignedLocation: assignedLocation || 'Not assigned',
+    assignedLocation: explicitAssignedLocation || 'Not assigned',
     companyCode,
     costCenter,
     companyCostCenter: companyCostCenter || 'Not assigned',
@@ -331,7 +341,7 @@ function TimesheetGrid({
   readOnly = false, approvedLeaves = [], holidays = [],
   assignmentMeta = {},
 }) {
-  const WORKDAY_HOURS = 9;
+  const WORKDAY_HOURS = DAILY_WORK_HOUR_LIMIT;
   const getEntry = (row, dateStr) =>
     row.entries.find((e) => e.date === dateStr) || { date: dateStr, hours: 0, entry_type: 'work' };
 
@@ -408,7 +418,7 @@ function TimesheetGrid({
                         {format(parseISO(d), 'EEE')}
                       </span>
                       <span>{format(parseISO(d), 'MMM d')}</span>
-                      {isHol && <span style={{ fontSize: '10px' }}>🎉</span>}
+                      {isHol && <span style={{ fontSize: '10px' }}>Holiday</span>}
                     </div>
                   </th>
                 );
@@ -535,18 +545,29 @@ function TimesheetGrid({
                       }}>
                         <input
                           className="mte-sheet-hour-input"
-                          type="text"
+                          type="number"
+                          min="0"
+                          max={DAILY_WORK_HOUR_LIMIT}
+                          step="0.25"
                           value={entry.value ?? ''}
                           disabled={readOnly}
-                          onChange={(e) =>
+                          onChange={(e) => {
+                            const typedValue = e.target.value;
+                            const typedHours = parseFloat(typedValue);
+                            const cappedHours = Number.isFinite(typedHours)
+                              ? Math.min(Math.max(typedHours, 0), DAILY_WORK_HOUR_LIMIT)
+                              : 0;
+                            const nextValue = typedValue === ''
+                              ? ''
+                              : String(cappedHours);
                             onRowUpdate(row.id, {
                               entries: row.entries.map((ent) =>
                                 ent.date === d
-                                  ? { ...ent, value: e.target.value, hours: parseFloat(e.target.value) || 0, entry_type: 'work' }
+                                  ? { ...ent, value: nextValue, hours: cappedHours, entry_type: 'work' }
                                   : ent
                               ),
-                            })
-                          }
+                            });
+                          }}
                           style={{
                             width: '52px', padding: '4px 6px',
                             border: `1px solid ${isHol ? '#e5c84a' : C.border}`, borderRadius: '4px',
@@ -729,14 +750,15 @@ function TimesheetPage({ user, selectedPeriod, onSelectedPeriodChange, embedded 
   const [approvedLeaves, setApprovedLeaves]     = useState([]);
   const [holidays, setHolidays]                 = useState([]);
   const [loading, setLoading]                   = useState(false);
+  const [profile, setProfile]                   = useState(user || {});
   // FIX 2: reload trigger — incrementing forces the timesheet data useEffect to re-run
   const [reloadTrigger, setReloadTrigger]       = useState(0);
 
-  const userId = user?._id || user?.id;
+  const userId = getUserId(user);
   const activePeriod = selectedPeriod ?? internalSelectedPeriod;
   const setActivePeriod = onSelectedPeriodChange ?? setInternalSelectedPeriod;
   const selectedPeriodOption = availablePeriods.find((period) => period.value === activePeriod) || availablePeriods[0];
-  const assignmentMeta = useMemo(() => getTimesheetAssignmentMeta(user), [user]);
+  const assignmentMeta = useMemo(() => getTimesheetAssignmentMeta(profile), [profile]);
 
   const dates = useMemo(() => {
     const period = availablePeriods.find((p) => p.value === activePeriod);
@@ -757,7 +779,15 @@ function TimesheetPage({ user, selectedPeriod, onSelectedPeriodChange, embedded 
     fetchAPI(`/leaves/history/${userId}`)
       .then((d) => setApprovedLeaves(Array.isArray(d) ? d.filter((l) => l.status === 'Approved') : []))
       .catch(console.error);
+
+    fetchAPI(`/users/${userId}`)
+      .then((data) => setProfile(data))
+      .catch(console.error);
   }, [userId]);
+
+  useEffect(() => {
+    setProfile(user || {});
+  }, [user]);
 
   useEffect(() => {
     if (!dates.length) return;
@@ -835,8 +865,22 @@ function TimesheetPage({ user, selectedPeriod, onSelectedPeriodChange, embedded 
     if (rows.some((r) => !r.chargeCodeId)) errors.push(`${rows.filter((r) => !r.chargeCodeId).length} row(s) missing a charge code`);
     if (rows.every((r) => r.entries.every((e) => !e.hours || e.hours === 0)))
       errors.push('Enter hours for at least one row');
+    dates.forEach((date) => {
+      const total = rows.reduce((sum, row) => {
+        const entry = row.entries.find((item) => item.date === date);
+        const rawValue = entry?.value !== undefined ? entry.value : String(entry?.hours ?? '');
+        const hours = parseFloat(rawValue);
+        if (!isNaN(hours) && hours > DAILY_WORK_HOUR_LIMIT) {
+          errors.push(`${date} has a charge code entry above ${DAILY_WORK_HOUR_LIMIT} hours`);
+        }
+        return sum + (isNaN(hours) ? 0 : hours);
+      }, 0);
+      if (total > DAILY_WORK_HOUR_LIMIT) {
+        errors.push(`${date} has ${total} hours. Maximum allowed is ${DAILY_WORK_HOUR_LIMIT} hours`);
+      }
+    });
     return errors;
-  }, [rows]);
+  }, [rows, dates]);
 
   useEffect(() => { setValidationErrors(validate()); }, [rows, validate]);
 
@@ -847,6 +891,50 @@ function TimesheetPage({ user, selectedPeriod, onSelectedPeriodChange, embedded 
         const n = parseFloat(v);
         return s + (isNaN(n) ? 0 : n);
       }, 0), 0);
+
+  const buildWorkEntries = ({ requireChargeCode = true } = {}) => {
+    const entries = [];
+    const totalsByDate = {};
+
+    rows.forEach((row) => {
+      row.entries.forEach((e) => {
+        const rawVal = e.value !== undefined ? e.value : String(e.hours || '');
+        const trimmed = String(rawVal).trim();
+        const numHrs = parseFloat(trimmed);
+        if (!trimmed || trimmed === '0' || isNaN(numHrs)) return;
+        if (numHrs < 0) throw new Error(`Hours cannot be negative on ${e.date}`);
+        if (numHrs > DAILY_WORK_HOUR_LIMIT) {
+          throw new Error(`Working hours for any charge code cannot exceed ${DAILY_WORK_HOUR_LIMIT} hours on ${e.date}`);
+        }
+        if (requireChargeCode && !row.chargeCodeId) throw new Error(`Select a charge code for ${e.date}`);
+        totalsByDate[e.date] = (totalsByDate[e.date] || 0) + numHrs;
+        entries.push({
+          date:           e.date,
+          entry_type:     'work',
+          charge_code_id: row.chargeCodeId,
+          hours:          numHrs,
+          description:    '',
+        });
+      });
+    });
+
+    const overLimit = Object.entries(totalsByDate).find(([, total]) => total > DAILY_WORK_HOUR_LIMIT);
+    if (overLimit) {
+      throw new Error(`${overLimit[0]} has ${overLimit[1]} hours. Maximum allowed is ${DAILY_WORK_HOUR_LIMIT} hours`);
+    }
+
+    return entries;
+  };
+
+  const findCurrentTimesheet = async () => {
+    const existing = await fetchAPI(`/timesheets/employee/${userId}`);
+    return Array.isArray(existing)
+      ? existing.find((ts) =>
+          ts.period_start === dates[0] &&
+          ts.period_end   === dates[dates.length - 1]
+        )
+      : null;
+  };
 
   // FIX 2: handleRecall now triggers a full reload via reloadTrigger
   const handleRecall = async () => {
@@ -879,33 +967,11 @@ function TimesheetPage({ user, selectedPeriod, onSelectedPeriodChange, embedded 
     if (errors.length) { alert('Please fix:\n\n' + errors.join('\n')); return; }
     setLoading(true);
     try {
-      const entries = [];
-      rows.forEach((row) => {
-        if (!row.chargeCodeId) return;
-        row.entries.forEach((e) => {
-          const rawVal = e.value !== undefined ? e.value : String(e.hours || '');
-          const numHrs = parseFloat(rawVal);
-          if (rawVal && rawVal.trim() !== '' && rawVal.trim() !== '0') {
-            entries.push({
-              date:           e.date,
-              entry_type:     'work',
-              charge_code_id: row.chargeCodeId,
-              hours:          isNaN(numHrs) ? 0 : numHrs,
-              description:    isNaN(numHrs) ? rawVal : '',
-            });
-          }
-        });
-      });
+      const entries = buildWorkEntries();
 
       let existingId = null;
       try {
-        const existing = await fetchAPI(`/timesheets/employee/${userId}`);
-        const match = Array.isArray(existing)
-          ? existing.find((ts) =>
-              ts.period_start === dates[0] &&
-              ts.period_end   === dates[dates.length - 1]
-            )
-          : null;
+        const match = await findCurrentTimesheet();
         existingId = match ? (match._id || match.id) : null;
       } catch (_) {}
 
@@ -931,6 +997,50 @@ function TimesheetPage({ user, selectedPeriod, onSelectedPeriodChange, embedded 
       alert('Timesheet submitted successfully!');
     } catch (err) {
       alert(`Submission failed: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    if (isReadOnly) return;
+    setLoading(true);
+    try {
+      const entries = buildWorkEntries();
+      await fetchAPI('/timesheets/save_draft', {
+        method: 'POST',
+        body: JSON.stringify({
+          employee_id: userId,
+          period_start: dates[0],
+          period_end: dates[dates.length - 1],
+          entries,
+        }),
+      });
+      setTimesheetStatus('draft');
+      setReloadTrigger((t) => t + 1);
+      alert('Draft saved successfully');
+    } catch (err) {
+      alert(`Save failed: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteTimesheet = async () => {
+    if (isReadOnly) return;
+    if (!window.confirm('Delete this draft timesheet for the selected period?')) return;
+    setLoading(true);
+    try {
+      const match = await findCurrentTimesheet();
+      if (match) {
+        await fetchAPI(`/timesheets/delete/${match._id || match.id}`, { method: 'DELETE' });
+      }
+      setTimesheetStatus('draft');
+      setRows([{ id: 'row1', chargeCodeId: '', entries: dates.map((date) => ({ date, hours: 0, value: '', entry_type: 'work' })) }]);
+      setReloadTrigger((t) => t + 1);
+      alert('Timesheet deleted successfully');
+    } catch (err) {
+      alert(`Delete failed: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -1014,14 +1124,15 @@ function TimesheetPage({ user, selectedPeriod, onSelectedPeriodChange, embedded 
       </div>
 
       <div className="mte-action-toolbar">
-        <button type="button" className="mte-tool-button" onClick={() => setReloadTrigger((value) => value + 1)}>
+        <button type="button" className="mte-tool-button" onClick={handleSaveDraft} disabled={isReadOnly || loading}>
           <Save size={18} />
           <span>Save</span>
         </button>
         <button
           type="button"
           className="mte-tool-button"
-          onClick={() => !isReadOnly && rows.length > 1 && setRows((previous) => previous.slice(0, -1))}
+          onClick={handleDeleteTimesheet}
+          disabled={isReadOnly || loading}
         >
           <Trash2 size={18} />
           <span>Delete</span>
@@ -1032,7 +1143,7 @@ function TimesheetPage({ user, selectedPeriod, onSelectedPeriodChange, embedded 
           entries: dates.map((date) => ({ date, hours: 0, value: '', entry_type: 'work' })),
         }])}>
           <Plus size={18} />
-          <span>Set Template</span>
+          <span>Add New Row</span>
         </button>
         <button type="button" className="mte-tool-button">
           <CircleHelp size={18} />
@@ -1279,7 +1390,7 @@ function TimesheetDetailModal({ timesheet, onClose, ccLookup = {} }) {
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
                           <span style={{ fontSize: '10px', color: isHol ? C.holidayText : isWkd ? C.textMid : C.textMid, fontWeight: '400' }}>{dow}</span>
                           <span>{format(parseISO(date), 'MMM d')}</span>
-                          {isHol && <span style={{ fontSize: '9px' }}>🎉</span>}
+                          {isHol && <span style={{ fontSize: '9px' }}>Holiday</span>}
                         </div>
                       </th>
                     );
@@ -1566,7 +1677,7 @@ function TimesheetFullPageView({ timesheet, onClose, onApprove, onReject, user, 
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
                             <span style={{ fontSize: '10px', fontWeight: '400', color: isHol ? C.holidayText : C.textMid }}>{dow}</span>
                             <span>{format(parseISO(date), 'MMM d')}</span>
-                            {isHol && <span style={{ fontSize: '9px' }}>🎉</span>}
+                            {isHol && <span style={{ fontSize: '9px' }}>Holiday</span>}
                           </div>
                         </th>
                       );
@@ -1716,7 +1827,7 @@ function Approvals({ user }) {
   const ccLookup = useCcLookup();
 
   const role   = user?.role;
-  const userId = user?._id || user?.id;
+  const userId = getUserId(user);
 
   const loadApprovals = useCallback(() => {
     if (!userId) return;
@@ -2109,7 +2220,7 @@ function History({ user, onNavigate }) {
   const [viewingTimesheet, setViewingTimesheet] = useState(null);
 
   const ccLookup = useCcLookup();
-  const userId = user?._id || user?.id;
+  const userId = getUserId(user);
 
   useEffect(() => {
     if (!userId) return;
@@ -2323,8 +2434,9 @@ function History({ user, onNavigate }) {
 // ─── Reports ──────────────────────────────────────────────────────────────────
 const PIE_COLORS = [C.purple, C.purpleMid, '#a89db5', '#c5bfd1', '#e0dae6'];
 
+// eslint-disable-next-line no-unused-vars
 function Reports({ user }) {
-  const userId = user?._id || user?.id;
+  const userId = getUserId(user);
 
   const [dateRange,  setDateRange]  = useState({
     start: format(startOfMonth(subMonths(new Date(), 2)), 'yyyy-MM-dd'),
@@ -2957,8 +3069,333 @@ function AdminTimesheets() {
   );
 }
 
+function getChargeCodeGridRow(item = {}, index = 0) {
+  const code = item.code || item.charge_code || item.chargeCode || '';
+  const description = item.description || item.charge_code_name || item.name || item.project_name || '-';
+  const client = item.client || item.project_name || item.client_name || '-';
+  const country = item.country || item.countryRegion || item.country_region || '-';
+  const type = item.type || item.charge_type || (item.entry_type === 'absence' ? 'Training/Recruiting/Absence' : 'Chargeable');
+  const subType = item.subType || item.sub_type || item.subtype || '-';
+  const owner = item.owner || item.owner_email || item.created_by_name || item.assigned_by_name || '-';
+
+  return {
+    id: item._id || item.charge_code_id || code || `charge-code-${index}`,
+    code,
+    description,
+    client,
+    country,
+    type,
+    subType,
+    owner,
+    active: item.is_active !== false,
+    raw: item,
+  };
+}
+
+function ChargeCodesWorkspace({ user, adminMode = false }) {
+  const userId = getUserId(user);
+  const [codes, setCodes] = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const [selectedRows, setSelectedRows] = useState([]);
+  const [displayRows, setDisplayRows] = useState({});
+  const [entryCode, setEntryCode] = useState('');
+  const [filter, setFilter] = useState('All');
+  const [selectedEmployees, setSelectedEmployees] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const loadCodes = useCallback(() => {
+    if (!userId) return;
+    setLoading(true);
+    const endpoint = adminMode
+      ? '/charge_codes/all'
+      : `/charge_codes/employee/${userId}?active_only=true`;
+    fetchAPI(endpoint)
+      .then((data) => {
+        const items = Array.isArray(data) ? data : [];
+        setCodes(items);
+        let savedDisplayRows = {};
+        if (!adminMode) {
+          try {
+            savedDisplayRows = JSON.parse(localStorage.getItem(`mte_charge_code_display_${userId}`) || '{}');
+          } catch (_) {
+            savedDisplayRows = {};
+          }
+        }
+        setDisplayRows({
+          ...items.reduce((acc, item, index) => {
+            const row = getChargeCodeGridRow(item, index);
+            acc[row.id] = row.active;
+            return acc;
+          }, {}),
+          ...savedDisplayRows,
+        });
+      })
+      .catch((err) => alert(`Failed to load charge codes: ${err.message}`))
+      .finally(() => setLoading(false));
+  }, [adminMode, userId]);
+
+  useEffect(() => {
+    loadCodes();
+  }, [loadCodes]);
+
+  useEffect(() => {
+    if (!adminMode) return;
+    fetchAPI('/users/get_all_employees')
+      .then((data) => setEmployees(Array.isArray(data) ? data : []))
+      .catch(console.error);
+  }, [adminMode]);
+
+  const rows = useMemo(() => {
+    const normalized = codes.map(getChargeCodeGridRow);
+    if (filter === 'Displayed') return normalized.filter((row) => displayRows[row.id]);
+    if (filter === 'Selected') return normalized.filter((row) => selectedRows.includes(row.id));
+    return normalized;
+  }, [codes, displayRows, filter, selectedRows]);
+
+  const businessDevelopmentCount = rows.filter((row) =>
+    [row.client, row.description, row.type].some((value) =>
+      String(value || '').toLowerCase().includes('business')
+    )
+  ).length;
+
+  const toggleSelectedRow = (rowId) => {
+    setSelectedRows((previous) =>
+      previous.includes(rowId)
+        ? previous.filter((id) => id !== rowId)
+        : [...previous, rowId]
+    );
+  };
+
+  const handleAddCode = async () => {
+    const code = entryCode.trim();
+    if (!code) {
+      alert('Enter a charge code');
+      return;
+    }
+    if (!adminMode) {
+      alert('Only admins can add charge codes');
+      return;
+    }
+    if (!userId) {
+      alert('User not loaded properly');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await fetchAPI('/charge_codes/create', {
+        method: 'POST',
+        body: JSON.stringify({
+          code,
+          name: code,
+          description: '',
+          project_name: '',
+          is_active: true,
+          created_by: userId,
+        }),
+      });
+      setEntryCode('');
+      loadCodes();
+    } catch (err) {
+      alert(`Failed to add charge code: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!adminMode) {
+      localStorage.setItem(`mte_charge_code_display_${userId}`, JSON.stringify(displayRows));
+      alert('Charge code display preferences saved');
+      return;
+    }
+
+    if (selectedEmployees.length === 0 || selectedRows.length === 0) {
+      alert('Select at least one employee and one charge code');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const selectedCodes = rows
+        .filter((row) => selectedRows.includes(row.id))
+        .map((row) => row.raw._id || row.raw.charge_code_id)
+        .filter(Boolean);
+
+      const results = await Promise.allSettled(
+        selectedEmployees.map((employeeId) =>
+          fetchAPI('/charge_codes/assign', {
+            method: 'POST',
+            body: JSON.stringify({
+              employee_id: employeeId,
+              charge_code_ids: selectedCodes,
+              assigned_by: userId,
+            }),
+          })
+        )
+      );
+      const succeeded = results.filter((result) => result.status === 'fulfilled').length;
+      const failed = results.length - succeeded;
+      alert(failed ? `Assigned to ${succeeded}, failed for ${failed}` : `Assigned to ${succeeded} employee${succeeded !== 1 ? 's' : ''}`);
+      setSelectedRows([]);
+      setSelectedEmployees([]);
+    } catch (err) {
+      alert(`Failed to submit charge code assignment: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="mte-chargecodes-shell">
+      <div className="mte-chargecodes-topbar">
+        <div className="mte-chargecodes-add">
+          <input
+            value={entryCode}
+            onChange={(event) => setEntryCode(event.target.value)}
+            placeholder="Enter Charge Code"
+            disabled={!adminMode || loading}
+          />
+          <button type="button" onClick={handleAddCode} disabled={!adminMode || loading}>Add</button>
+        </div>
+
+        <div className="mte-chargecodes-business">
+          <button type="button" aria-label="Business development charge codes">
+            <Plus size={16} />
+          </button>
+          <span>BUSINESS DEVELOPMENT</span>
+          <small>{businessDevelopmentCount}</small>
+        </div>
+
+        {adminMode ? (
+          <div className="mte-chargecodes-employee-pick">
+            <ValueHelpSelect
+              value=""
+              onChange={(employeeId) => {
+                if (!employeeId) return;
+                setSelectedEmployees((previous) =>
+                  previous.includes(employeeId) ? previous : [...previous, employeeId]
+                );
+              }}
+              placeholder={selectedEmployees.length ? `${selectedEmployees.length} employee(s) selected` : 'Select employee'}
+              searchPlaceholder="Search employees"
+              options={[
+                { value: '', label: 'Select employee' },
+                ...employees.map((employee) => ({
+                  value: employee._id,
+                  label: `${employee.name} - ${employee.email}`,
+                  description: employee.department || employee.employeeId,
+                })),
+              ]}
+            />
+          </div>
+        ) : null}
+
+        <div className="mte-chargecodes-actions">
+          <select value={filter} onChange={(event) => setFilter(event.target.value)}>
+            <option>All</option>
+            <option>Displayed</option>
+            <option>Selected</option>
+          </select>
+          <button type="button" onClick={() => {
+            setEntryCode('');
+            setSelectedRows([]);
+            setFilter('All');
+          }}>
+            New
+          </button>
+          <button type="button" className="is-primary" onClick={handleSubmit} disabled={loading}>
+            Submit
+          </button>
+        </div>
+      </div>
+
+      {selectedEmployees.length > 0 ? (
+        <div className="mte-chargecodes-selected-employees">
+          {selectedEmployees.map((employeeId) => {
+            const employee = employees.find((item) => item._id === employeeId);
+            return (
+              <button
+                key={employeeId}
+                type="button"
+                onClick={() => setSelectedEmployees((previous) => previous.filter((id) => id !== employeeId))}
+              >
+                {employee?.name || employeeId}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
+      <div className="mte-chargecodes-table-wrap">
+        <table className="mte-chargecodes-table">
+          <thead>
+            <tr>
+              <th>Select</th>
+              <th>Display <span className="mte-chargecodes-info">i</span></th>
+              <th>Type</th>
+              <th>SubType</th>
+              <th>Client</th>
+              <th>Country/Region</th>
+              <th>Description</th>
+              <th>Charge Code</th>
+              <th>Owner</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading && rows.length === 0 ? (
+              <tr><td colSpan={9}>Loading charge codes...</td></tr>
+            ) : rows.length === 0 ? (
+              <tr><td colSpan={9}>No charge codes found</td></tr>
+            ) : rows.map((row) => {
+              const selected = selectedRows.includes(row.id);
+              const displayed = displayRows[row.id] !== false;
+              return (
+                <tr key={row.id}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={selected}
+                      onChange={() => toggleSelectedRow(row.id)}
+                    />
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      className={`mte-chargecodes-toggle ${displayed ? 'is-on' : ''}`}
+                      aria-pressed={displayed}
+                      onClick={() => setDisplayRows((previous) => ({ ...previous, [row.id]: !displayed }))}
+                    >
+                      <span />
+                    </button>
+                  </td>
+                  <td>{row.type}</td>
+                  <td>{row.subType}</td>
+                  <td>{row.client}</td>
+                  <td>{row.country}</td>
+                  <td>{row.description}</td>
+                  <td className={selected ? 'is-selected-code' : ''}>{row.code || '-'}</td>
+                  <td>
+                    <span className="mte-chargecodes-owner-dot" />
+                    {row.owner}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ─── ChargeCodeAdmin ──────────────────────────────────────────────────────────
 function ChargeCodeAdmin({ user }) {
+  return <ChargeCodesWorkspace user={user} adminMode />;
+}
+
+// eslint-disable-next-line no-unused-vars
+function LegacyChargeCodeAdmin({ user }) {
   const [codes,             setCodes]             = useState([]);
   const [employees,         setEmployees]         = useState([]);
   const [newCode,           setNewCode]           = useState({ charge_code: '', charge_code_name: '' });
@@ -2966,7 +3403,7 @@ function ChargeCodeAdmin({ user }) {
   const [selectedCode,      setSelectedCode]      = useState('');
   const [loading,           setLoading]           = useState(false);
 
-  const userId = user?._id || user?.id;
+  const userId = getUserId(user);
 
   const loadCodes = () => {
     fetchAPI('/charge_codes/all')
@@ -3244,7 +3681,7 @@ function AssignmentAdmin({ user }) {
             acc[employee._id] = {
               workLocation: employee.workLocation || '',
               companyCode: employee.companyCode || '',
-              costCenter: employee.costCenter || '',
+              assignedLocation: employee.assignedLocation || employee.costCenter || '',
             };
             return acc;
           }, {})
@@ -3271,8 +3708,8 @@ function AssignmentAdmin({ user }) {
       employee.employeeId,
       employee.department,
       employee.workLocation,
+      employee.assignedLocation,
       employee.companyCode,
-      employee.costCenter,
     ]
       .filter(Boolean)
       .some((value) => String(value).toLowerCase().includes(q));
@@ -3285,14 +3722,14 @@ function AssignmentAdmin({ user }) {
       'employeeId',
       'department',
       'workLocation',
+      'assignedLocation',
       'companyCode',
-      'costCenter',
     ]),
     [employees]
   );
 
   const assignedCount = employees.filter(
-    (employee) => employee.workLocation || employee.companyCode || employee.costCenter
+    (employee) => employee.workLocation || employee.companyCode || employee.assignedLocation || employee.costCenter
   ).length;
 
   const handleDraftChange = (employeeId, field, value) => {
@@ -3310,7 +3747,7 @@ function AssignmentAdmin({ user }) {
     const draft = drafts[employeeId] || {
       workLocation: '',
       companyCode: '',
-      costCenter: '',
+      assignedLocation: '',
     };
 
     setSavingEmployeeId(employeeId);
@@ -3320,7 +3757,8 @@ function AssignmentAdmin({ user }) {
         body: JSON.stringify({
           workLocation: draft.workLocation.trim(),
           companyCode: draft.companyCode.trim(),
-          costCenter: draft.costCenter.trim(),
+          assignedLocation: draft.assignedLocation.trim(),
+          costCenter: draft.assignedLocation.trim(),
         }),
       });
 
@@ -3331,7 +3769,8 @@ function AssignmentAdmin({ user }) {
                 ...item,
                 workLocation: draft.workLocation.trim(),
                 companyCode: draft.companyCode.trim(),
-                costCenter: draft.costCenter.trim(),
+                assignedLocation: draft.assignedLocation.trim(),
+                costCenter: draft.assignedLocation.trim(),
               }
             : item
         )
@@ -3357,7 +3796,7 @@ function AssignmentAdmin({ user }) {
               { label: 'Employees', value: employees.length, sub: 'Available for assignment', Icon: Users, color: C.text },
               { label: 'Assigned', value: assignedCount, sub: 'Have at least one value set', Icon: CheckCircle2, color: C.green },
               { label: 'Missing', value: Math.max(employees.length - assignedCount, 0), sub: 'Need admin review', Icon: AlertCircle, color: C.red },
-              { label: 'Visible In Time', value: '3 fields', sub: 'Location, code, cost center', Icon: Building2, color: C.text },
+              { label: 'Visible In Time', value: '3 fields', sub: 'Location, code, assigned location', Icon: Building2, color: C.text },
             ].map(({ label, value, sub, Icon, color }) => (
               <div key={label} style={S.statCard}>
                 <div style={S.statRow}>
@@ -3390,7 +3829,7 @@ function AssignmentAdmin({ user }) {
               <table style={{ ...S.table, minWidth: '1120px' }}>
                 <thead style={S.thead}>
                   <tr>
-                    {['Employee', 'Department', 'Work Location', 'Company Code', 'Cost Center', 'Status', 'Action'].map((header) => (
+                    {['Employee', 'Department', 'Work Location', 'Company Code', 'Assigned Location', 'Status', 'Action'].map((header) => (
                       <th
                         key={header}
                         style={header === 'Status' || header === 'Action' ? S.thCenter : S.th}
@@ -3413,9 +3852,9 @@ function AssignmentAdmin({ user }) {
                     const draft = drafts[employee._id] || {
                       workLocation: '',
                       companyCode: '',
-                      costCenter: '',
+                      assignedLocation: '',
                     };
-                    const isComplete = draft.workLocation.trim() && draft.companyCode.trim() && draft.costCenter.trim();
+                    const isComplete = draft.workLocation.trim() && draft.companyCode.trim() && draft.assignedLocation.trim();
                     const isSaving = savingEmployeeId === employee._id;
 
                     return (
@@ -3447,9 +3886,9 @@ function AssignmentAdmin({ user }) {
                         <td style={S.td}>
                           <input
                             className="input"
-                            value={draft.costCenter}
-                            onChange={(event) => handleDraftChange(employee._id, 'costCenter', event.target.value)}
-                            placeholder="Assign cost center"
+                            value={draft.assignedLocation}
+                            onChange={(event) => handleDraftChange(employee._id, 'assignedLocation', event.target.value)}
+                            placeholder="Assign location"
                             style={{ ...S.input, width: '100%' }}
                           />
                         </td>
@@ -3501,62 +3940,183 @@ function AssignmentAdmin({ user }) {
   );
 }
 
-function EmptyModuleState({ title, message, actionLabel = '', icon: Icon = FileText }) {
-  return (
-    <div className="mte-empty-state">
-      <div className="mte-empty-icon"><Icon size={22} /></div>
-      <strong>{title}</strong>
-      <p>{message}</p>
-      {actionLabel ? <span className="mte-empty-chip">{actionLabel}</span> : null}
-    </div>
-  );
+function AssignedChargeCodesPanel({ user }) {
+  return <ChargeCodesWorkspace user={user} />;
 }
 
-function AssignedChargeCodesPanel({ user }) {
-  const userId = user?._id || user?.id;
-  const [assignedCodes, setAssignedCodes] = useState([]);
+function ExpensesPanel({ user }) {
+  const isAdmin = user?.role === 'Admin';
+  const userId = getUserId(user);
+  const today = format(new Date(), 'yyyy-MM-dd');
+  const [expenses, setExpenses] = useState([]);
+  const [form, setForm] = useState({
+    expense_date: today,
+    category: 'Travel',
+    amount: '',
+    description: '',
+  });
+  const [editingId, setEditingId] = useState('');
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
+  const loadExpenses = useCallback(() => {
     if (!userId) return;
     setLoading(true);
-    fetchAPI(`/charge_codes/employee/${userId}?active_only=true`)
-      .then((data) => setAssignedCodes(Array.isArray(data) ? data : []))
-      .catch(() => setAssignedCodes([]))
+    fetchAPI(`/expenses?employee_id=${userId}&role=${encodeURIComponent(user?.role || '')}`)
+      .then((data) => setExpenses(Array.isArray(data) ? data : []))
+      .catch((err) => alert(`Failed to load expenses: ${err.message}`))
       .finally(() => setLoading(false));
-  }, [userId]);
+  }, [userId, user?.role]);
+
+  useEffect(() => {
+    loadExpenses();
+  }, [loadExpenses]);
+
+  const resetForm = () => {
+    setEditingId('');
+    setForm({ expense_date: today, category: 'Travel', amount: '', description: '' });
+  };
+
+  const handleSaveExpense = async () => {
+    if (!userId) {
+      alert('User not loaded properly');
+      return;
+    }
+    if (!form.expense_date || !form.category || !form.amount || Number(form.amount) <= 0) {
+      alert('Enter date, category, and an amount greater than zero');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const payload = {
+        employee_id: userId,
+        expense_date: form.expense_date,
+        category: form.category,
+        amount: Number(form.amount),
+        description: form.description,
+      };
+      if (editingId) {
+        await fetchAPI(`/expenses/${editingId}`, { method: 'PUT', body: JSON.stringify(payload) });
+      } else {
+        await fetchAPI('/expenses', { method: 'POST', body: JSON.stringify(payload) });
+      }
+      resetForm();
+      loadExpenses();
+    } catch (err) {
+      alert(`Failed to save expense: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditExpense = (expense) => {
+    setEditingId(expense._id);
+    setForm({
+      expense_date: expense.expense_date || today,
+      category: expense.category || 'Travel',
+      amount: String(expense.amount || ''),
+      description: expense.description || '',
+    });
+  };
+
+  const handleDeleteExpense = async (expenseId) => {
+    if (!window.confirm('Delete this expense?')) return;
+    setLoading(true);
+    try {
+      await fetchAPI(`/expenses/${expenseId}`, { method: 'DELETE' });
+      if (editingId === expenseId) resetForm();
+      loadExpenses();
+    } catch (err) {
+      alert(`Failed to delete expense: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="mte-module-card">
-      <div className="mte-module-card-header">
-        <div>
-          <h3>Assigned Charge Codes</h3>
-          <p>Only the codes mapped to you are available while filling your timesheet.</p>
-        </div>
+      <div className="mte-module-toolbar">
+        <button
+          type="button"
+          className="mte-select-shell"
+          onClick={handleSaveExpense}
+          disabled={loading}
+        >
+          <span>{editingId ? 'Edit Expense' : 'Add Expense'}</span>
+          <ChevronRight size={14} />
+        </button>
+        <button type="button" className="mte-icon-text-button" onClick={resetForm}>
+          <LayoutGrid size={16} />
+          <span>Clear</span>
+        </button>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+        <input
+          className="input"
+          type="date"
+          value={form.expense_date}
+          onChange={(event) => setForm({ ...form, expense_date: event.target.value })}
+        />
+        <select
+          className="input"
+          value={form.category}
+          onChange={(event) => setForm({ ...form, category: event.target.value })}
+        >
+          <option>Travel</option>
+          <option>Meals</option>
+          <option>Lodging</option>
+          <option>Supplies</option>
+          <option>Other</option>
+        </select>
+        <input
+          className="input"
+          type="number"
+          min="0"
+          step="0.01"
+          placeholder="Amount"
+          value={form.amount}
+          onChange={(event) => setForm({ ...form, amount: event.target.value })}
+        />
+        <input
+          className="input"
+          placeholder="Description"
+          value={form.description}
+          onChange={(event) => setForm({ ...form, description: event.target.value })}
+        />
+        <button type="button" className="mte-submit-button" onClick={handleSaveExpense} disabled={loading}>
+          <Save size={16} />
+          <span>{editingId ? 'Update Expense' : 'Save Expense'}</span>
+        </button>
       </div>
       <div className="mte-simple-table-wrap">
         <table className="mte-simple-table">
           <thead>
             <tr>
-              <th>Charge Code</th>
-              <th>Description</th>
-              <th>Assignment</th>
+              {['Date', ...(isAdmin ? ['Employee'] : []), 'Category', 'Description', 'Amount', 'Action'].map((header) => (
+                <th key={header}>{header}</th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={3}>Loading assigned charge codes…</td>
-              </tr>
-            ) : assignedCodes.length === 0 ? (
-              <tr>
-                <td colSpan={3}>No charge codes are assigned yet.</td>
-              </tr>
-            ) : assignedCodes.map((code) => (
-              <tr key={code._id}>
-                <td>{code.charge_code}</td>
-                <td>{code.charge_code_name}</td>
-                <td>Visible in TIME</td>
+            {loading && expenses.length === 0 ? (
+              <tr><td colSpan={isAdmin ? 6 : 5}>Loading expenses...</td></tr>
+            ) : expenses.length === 0 ? (
+              <tr><td colSpan={isAdmin ? 6 : 5}>No expenses added yet.</td></tr>
+            ) : expenses.map((expense) => (
+              <tr key={expense._id}>
+                <td>{expense.expense_date}</td>
+                {isAdmin ? <td>{expense.employee_name || 'Employee'}</td> : null}
+                <td>{expense.category}</td>
+                <td>{expense.description || '-'}</td>
+                <td>{Number(expense.amount || 0).toFixed(2)}</td>
+                <td>
+                  <button type="button" style={S.btnIcon} onClick={() => handleEditExpense(expense)} title="Edit expense">
+                    <FileText size={14} />
+                  </button>
+                  <button type="button" style={{ ...S.btnIcon, color: C.red }} onClick={() => handleDeleteExpense(expense._id)} title="Delete expense">
+                    <Trash2 size={14} />
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -3566,76 +4126,213 @@ function AssignedChargeCodesPanel({ user }) {
   );
 }
 
-function ExpensesPanel({ user }) {
-  const isAdmin = user?.role === 'Admin';
-
-  return (
-    <div className="mte-module-card">
-      <div className="mte-module-toolbar">
-        <div className="mte-select-shell">
-          <span>Select Expenses to Add</span>
-          <ChevronRight size={14} />
-        </div>
-        <button type="button" className="mte-icon-text-button">
-          <LayoutGrid size={16} />
-          <span>AMEX IMPORT</span>
-        </button>
-      </div>
-      <EmptyModuleState
-        title="There are no expenses for the selected period"
-        message={
-          isAdmin
-            ? 'This shell is ready for expense administration once your expense data endpoint is connected.'
-            : 'Expense cards and submitted receipts can plug into this area without changing the portal layout.'
-        }
-        actionLabel={isAdmin ? 'Expense admin ready' : 'My expenses'}
-        icon={FileText}
-      />
-    </div>
-  );
-}
-
 function LocationsPanel({ selectedPeriod, periods, user }) {
+  const userId = getUserId(user);
+  const [profile, setProfile] = useState(user || {});
+  const [country, setCountry] = useState(user?.countryRegion || user?.country || 'India');
+  const [locationOne, setLocationOne] = useState(user?.workLocation || '');
+  const [locationTwo, setLocationTwo] = useState(user?.assignedLocation || user?.costCenter || '');
+  const [dailyLocations, setDailyLocations] = useState({});
+  const [loading, setLoading] = useState(false);
   const period = periods.find((item) => item.value === selectedPeriod) || periods[0];
   const dates = period
     ? eachDayOfInterval({ start: parseISO(period.start), end: parseISO(period.end) })
     : [];
-  const assignmentMeta = getTimesheetAssignmentMeta(user);
+  const assignmentMeta = getTimesheetAssignmentMeta(profile);
+
+  useEffect(() => {
+    if (!userId) return;
+    fetchAPI(`/users/${userId}`)
+      .then((data) => {
+        setProfile({ ...user, ...data });
+        setCountry(data.countryRegion || data.country || 'India');
+        setLocationOne(data.workLocation || '');
+        setLocationTwo(data.assignedLocation || data.costCenter || '');
+      })
+      .catch(() => setProfile(user || {}));
+  }, [userId, user]);
+
+  useEffect(() => {
+    if (!userId || !period) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem(`mte_locations_${userId}_${period.value}`) || '{}');
+      setDailyLocations(saved.dailyLocations || {});
+      if (saved.country) setCountry(saved.country);
+      if (saved.locationOne) setLocationOne(saved.locationOne);
+      if (saved.locationTwo) setLocationTwo(saved.locationTwo);
+    } catch (_) {
+      setDailyLocations({});
+    }
+  }, [period, userId]);
+
+  const locationOptions = useMemo(() => {
+    const values = [
+      profile.workLocation,
+      profile.assignedLocation,
+      profile.costCenter,
+      'Hyderabad',
+      'Bengaluru',
+      'Chennai',
+      'Mumbai',
+      'Pune',
+      'Gurugram',
+      'Remote',
+      'Client Site',
+    ].filter(Boolean);
+    return Array.from(new Set(values));
+  }, [profile]);
+
+  const persistLocations = async ({ submit = false } = {}) => {
+    if (!userId) return;
+    if (!country || !locationOne) {
+      alert('Select country/region and location one');
+      return;
+    }
+
+    const nextDailyLocations = dates.reduce((acc, day) => {
+      const key = format(day, 'yyyy-MM-dd');
+      acc[key] = dailyLocations[key] || locationOne;
+      return acc;
+    }, {});
+
+    setLoading(true);
+    try {
+      localStorage.setItem(`mte_locations_${userId}_${period.value}`, JSON.stringify({
+        country,
+        locationOne,
+        locationTwo,
+        dailyLocations: nextDailyLocations,
+      }));
+      await fetchAPI(`/users/update_user/${userId}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          workLocation: locationOne,
+          assignedLocation: locationTwo || locationOne,
+          costCenter: locationTwo || locationOne,
+        }),
+      });
+      setProfile((previous) => ({
+        ...previous,
+        workLocation: locationOne,
+        assignedLocation: locationTwo || locationOne,
+        costCenter: locationTwo || locationOne,
+      }));
+      setDailyLocations(nextDailyLocations);
+      alert(submit ? 'Locations submitted successfully' : 'Locations saved successfully');
+    } catch (err) {
+      alert(`Failed to save locations: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddLocation = () => {
+    if (!country || !locationOne) {
+      alert('Select country/region and location one');
+      return;
+    }
+    const nextDailyLocations = dates.reduce((acc, day) => {
+      acc[format(day, 'yyyy-MM-dd')] = locationOne;
+      return acc;
+    }, {});
+    setDailyLocations(nextDailyLocations);
+  };
 
   return (
-    <div className="mte-module-card mte-module-card-flat">
-      <div className="mte-locations-grid-wrap">
-        <table className="mte-locations-grid">
-          <thead>
-            <tr>
-              <th>Charge Codes</th>
-              {dates.map((day) => (
-                <th key={day.toISOString()}>
-                  <span>{format(day, 'EEE')}</span>
-                  <strong>{format(day, 'dd')}</strong>
-                </th>
-              ))}
-              <th>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><span className="mte-sheet-meta-link">Work Location</span></td>
-              {dates.map((day) => <td key={`location-${day.toISOString()}`}>{assignmentMeta.workLocation}</td>)}
-              <td />
-            </tr>
-            <tr>
-              <td>Assigned Location</td>
-              {dates.map((day) => <td key={`assigned-${day.toISOString()}`}>{assignmentMeta.assignedLocation}</td>)}
-              <td>{assignmentMeta.assignedLocation}</td>
-            </tr>
-            <tr>
-              <td>Company Code/Cost Center</td>
-              {dates.map((day) => <td key={`cost-${day.toISOString()}`}>{assignmentMeta.companyCostCenter}</td>)}
-              <td>{assignmentMeta.companyCostCenter}</td>
-            </tr>
-          </tbody>
-        </table>
+    <div className="mte-locations-shell">
+      <div className="mte-locations-actions">
+        <button type="button" onClick={() => persistLocations()} disabled={loading}>
+          <Save size={22} />
+          <span>Save</span>
+        </button>
+        <button type="button">
+          <CircleHelp size={24} />
+          <span>Help</span>
+        </button>
+        <div className="mte-locations-submit">
+          <button type="button" onClick={() => {
+            setDailyLocations({});
+            setLocationOne('');
+            setLocationTwo('');
+          }}>
+            New
+          </button>
+          <button type="button" className="is-primary" onClick={() => persistLocations({ submit: true })} disabled={loading}>
+            Submit
+          </button>
+        </div>
+      </div>
+
+      <div className="mte-locations-date-strip">
+        <div />
+        {dates.map((day) => (
+          <div key={day.toISOString()} className={format(day, 'EEE') === 'Sat' || format(day, 'EEE') === 'Sun' ? 'is-weekend' : ''}>
+            <span>{format(day, 'EEE')}</span>
+            <strong>{format(day, 'dd')}</strong>
+          </div>
+        ))}
+      </div>
+
+      <div className="mte-locations-add-row">
+        <label>Locations</label>
+        <button type="button" onClick={handleAddLocation}>
+          <span>Add Location</span>
+          <ChevronRight size={15} />
+        </button>
+        <p>Location by Day information must be completed</p>
+      </div>
+
+      <div className="mte-locations-body">
+        <aside className="mte-locations-card">
+          <label>
+            <span>Country</span>
+            <select value={country} onChange={(event) => setCountry(event.target.value)}>
+              <option value="">Select a country/region</option>
+              <option>India</option>
+              <option>Italy</option>
+              <option>United States</option>
+              <option>United Kingdom</option>
+              <option>Germany</option>
+            </select>
+          </label>
+
+          <label>
+            <span>Location One</span>
+            <select value={locationOne} onChange={(event) => setLocationOne(event.target.value)}>
+              <option value="">Select a location</option>
+              {locationOptions.map((option) => <option key={option}>{option}</option>)}
+            </select>
+          </label>
+
+          <label>
+            <span>Location Two</span>
+            <select value={locationTwo} onChange={(event) => setLocationTwo(event.target.value)}>
+              <option value="">Select a secondary location</option>
+              {locationOptions.map((option) => <option key={option}>{option}</option>)}
+            </select>
+          </label>
+
+          <button type="button" onClick={handleAddLocation}>Add</button>
+        </aside>
+
+        <section className="mte-locations-info">
+          <p>
+            For business, you must accurately reflect your work location. When traveling outside your
+            home country/region, you must record locations for all business days. For non-working days
+            in your home country/region, leave your default home office location for non-workdays.
+          </p>
+          <div className="mte-locations-preview">
+            {dates.map((day) => {
+              const key = format(day, 'yyyy-MM-dd');
+              return (
+                <div key={key}>
+                  <span>{format(day, 'dd')}</span>
+                  <strong>{dailyLocations[key] || assignmentMeta.workLocation}</strong>
+                </div>
+              );
+            })}
+          </div>
+        </section>
       </div>
     </div>
   );
@@ -3778,11 +4475,205 @@ function PortalTimeWorkspace({ user, selectedPeriod, onSelectedPeriodChange }) {
   );
 }
 
-function PortalSummaryWorkspace({ user }) {
-  if (user?.role === 'Admin') {
-    return <AdminTimesheets user={user} />;
-  }
-  return <Reports user={user} />;
+function MyTimeSummaryWorkspace({ user, selectedPeriod, periods }) {
+  const userId = getUserId(user);
+  const period = periods.find((item) => item.value === selectedPeriod) || periods[0];
+  const [timesheet, setTimesheet] = useState(null);
+  const [expenses, setExpenses] = useState([]);
+  const [profile, setProfile] = useState(user || {});
+  const [loading, setLoading] = useState(false);
+
+  const dates = useMemo(() => {
+    if (!period) return [];
+    return eachDayOfInterval({ start: parseISO(period.start), end: parseISO(period.end) });
+  }, [period]);
+
+  const loadSummary = useCallback(() => {
+    if (!userId || !period) return;
+    setLoading(true);
+    Promise.allSettled([
+      fetchAPI(`/timesheets/employee/${userId}`),
+      fetchAPI(`/expenses?employee_id=${userId}&role=${encodeURIComponent(user?.role || '')}`),
+      fetchAPI(`/users/${userId}`),
+    ])
+      .then(([timesheetResult, expenseResult, profileResult]) => {
+        const timesheets = timesheetResult.status === 'fulfilled' && Array.isArray(timesheetResult.value)
+          ? timesheetResult.value
+          : [];
+        setTimesheet(timesheets.find((item) =>
+          item.period_start === period.start && item.period_end === period.end
+        ) || null);
+
+        setExpenses(expenseResult.status === 'fulfilled' && Array.isArray(expenseResult.value)
+          ? expenseResult.value.filter((expense) =>
+              !expense.expense_date || (expense.expense_date >= period.start && expense.expense_date <= period.end)
+            )
+          : []);
+
+        if (profileResult.status === 'fulfilled') setProfile(profileResult.value);
+      })
+      .finally(() => setLoading(false));
+  }, [period, user?.role, userId]);
+
+  useEffect(() => {
+    loadSummary();
+  }, [loadSummary]);
+
+  const entries = timesheet?.entries || [];
+  const workEntries = entries.filter((entry) => (entry.entry_type || 'work') === 'work');
+  const absenceEntries = entries.filter((entry) => ['leave', 'holiday'].includes(entry.entry_type));
+  const expenseTotal = expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+  const workHours = workEntries.reduce((sum, entry) => sum + Number(entry.hours || 0), 0);
+  const absenceHours = absenceEntries.reduce((sum, entry) => sum + Number(entry.hours || 0), 0);
+  const weekdayCount = dates.filter((date) => {
+    const day = date.getDay();
+    return day >= 1 && day <= 5;
+  }).length;
+  const workSchedule = weekdayCount * DAILY_WORK_HOUR_LIMIT;
+  const standardAvailable = Math.max(workSchedule - absenceHours, 0);
+  const overtime = Math.max(workHours - standardAvailable, 0);
+  const availablePercent = standardAvailable ? Math.round((workHours / standardAvailable) * 100) : 0;
+  const assignmentMeta = getTimesheetAssignmentMeta({ ...profile, ...timesheet });
+  const country = profile.countryRegion || profile.country || 'India';
+  const location = assignmentMeta.workLocation === 'Not assigned' ? country : assignmentMeta.workLocation;
+
+  const chargeRows = useMemo(() => {
+    const grouped = {};
+    workEntries.forEach((entry) => {
+      const key = entry.charge_code || entry.charge_code_id || 'Unassigned';
+      if (!grouped[key]) {
+        grouped[key] = {
+          label: `${entry.charge_code_name || entry.description || 'Charge Code'} (${entry.charge_code || key})`,
+          hours: 0,
+          expenses: 0,
+        };
+      }
+      grouped[key].hours += Number(entry.hours || 0);
+    });
+    if (absenceHours > 0) {
+      grouped.absence = {
+        label: 'Public holiday / Absence',
+        hours: absenceHours,
+        expenses: 0,
+        absence: absenceHours,
+      };
+    }
+    return Object.values(grouped);
+  }, [absenceHours, workEntries]);
+
+  const summaryRows = [
+    ...chargeRows,
+    { label: 'Total', hours: workHours + absenceHours, expenses: expenseTotal, absence: absenceHours, isTotal: true },
+    { label: 'Work Schedule', hours: workSchedule, expenses: '', absence: '', isMeta: true },
+    { label: 'Overtime', hours: overtime || '', expenses: '', absence: '', isMeta: true },
+    { label: 'Standard Available Hours', hours: standardAvailable || '', expenses: '', absence: '', isMeta: true },
+    { label: 'Percentage of Standard Available Hours', hours: standardAvailable ? `${availablePercent}%` : '', expenses: '', absence: '', isMeta: true },
+  ];
+
+  const leaveBalance = profile.leaveBalance || {};
+  const earnedLeave = Number(leaveBalance.earned ?? leaveBalance.earnedLeave ?? 0);
+  const sickLeave = Number(leaveBalance.sick ?? leaveBalance.sickLeave ?? 0);
+  const casualLeave = Number(leaveBalance.casual ?? leaveBalance.casualLeave ?? 0);
+  const summaryCell = (value, decimals = 1) => {
+    if (value === '' || value === undefined || value === null) return '';
+    const numberValue = Number(value);
+    return Number.isFinite(numberValue) ? numberValue.toFixed(decimals) : value;
+  };
+
+  return (
+    <div className="mte-summary-shell">
+      <div className="mte-summary-actions">
+        <button type="button" onClick={loadSummary}>New</button>
+        <button
+          type="button"
+          className="is-primary"
+          onClick={() => alert('Summary submitted successfully')}
+          disabled={loading}
+        >
+          Submit
+        </button>
+      </div>
+
+      <div className="mte-summary-table-wrap">
+        <table className="mte-summary-table">
+          <thead>
+            <tr>
+              <th rowSpan={2}>Charge Code</th>
+              <th colSpan={2}>Current Time Report <span>i</span></th>
+              <th colSpan={6}>Projected Productivity Metrics <span>i</span></th>
+              <th colSpan={2}>Adjustments <span>i</span></th>
+            </tr>
+            <tr>
+              <th>Hours</th>
+              <th>Expenses</th>
+              <th>Chargeable <span>i</span></th>
+              <th>Client Facing <span>i</span></th>
+              <th>Market Facing <span>i</span></th>
+              <th>Recovery <span>i</span></th>
+              <th>Other <span>i</span></th>
+              <th>Absences <span>i</span></th>
+              <th>Hours</th>
+              <th>Expenses</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading && !timesheet ? (
+              <tr><td colSpan={11}>Loading summary...</td></tr>
+            ) : summaryRows.map((row) => (
+              <tr key={row.label} className={row.isTotal || row.isMeta ? 'is-summary-row' : ''}>
+                <td>{row.label}</td>
+                <td>{summaryCell(row.hours)}</td>
+                <td>{summaryCell(row.expenses, 2)}</td>
+                <td>{!row.isMeta ? summaryCell(row.hours) : ''}</td>
+                <td />
+                <td />
+                <td />
+                <td />
+                <td>{row.absence ? Number(row.absence).toFixed(1) : ''}</td>
+                <td />
+                <td />
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <table className="mte-summary-location-table">
+        <thead>
+          <tr>
+            <th>Country/Region ↑</th>
+            <th>Location</th>
+            <th>Hours</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>{country}</td>
+            <td>{location}</td>
+            <td>{(workHours + absenceHours).toFixed(2)}</td>
+          </tr>
+          <tr>
+            <td />
+            <td>Total</td>
+            <td>{(workHours + absenceHours).toFixed(2)}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div className="mte-summary-leave-copy">
+        <p><strong>Annual Chargeability Contribution:</strong> {availablePercent || 100}% <span>i</span></p>
+        <p>As of {period?.end ? format(parseISO(period.end), 'M/d/yyyy') : format(new Date(), 'M/d/yyyy')}, you have the following leave balances:</p>
+        <p>Earned Leave: {(earnedLeave * DAILY_WORK_HOUR_LIMIT).toFixed(2)} hours or {earnedLeave.toFixed(2)} days</p>
+        <p>Sick & Wellness Leave: {(sickLeave * DAILY_WORK_HOUR_LIMIT).toFixed(2)} hours or {sickLeave.toFixed(2)} days</p>
+        <p>Casual Leave: {(casualLeave * DAILY_WORK_HOUR_LIMIT).toFixed(2)} hours or {casualLeave.toFixed(2)} days</p>
+        <p>Sick & Wellness and Casual Leave: 0.00 hours or 0.00 days</p>
+      </div>
+    </div>
+  );
+}
+
+function PortalSummaryWorkspace({ user, selectedPeriod, periods }) {
+  return <MyTimeSummaryWorkspace user={user} selectedPeriod={selectedPeriod} periods={periods} />;
 }
 
 // ─── Main Export ──────────────────────────────────────────────────────────────
@@ -3823,7 +4714,7 @@ export default function Timesheets({ user }) {
       case 'adjustments':
         return <AdjustmentsPanel user={user} />;
       case 'summary':
-        return <PortalSummaryWorkspace user={user} />;
+        return <PortalSummaryWorkspace user={user} selectedPeriod={selectedPeriod} periods={periods} />;
       case 'preferences':
         return <PreferencesPanel user={user} />;
       default:

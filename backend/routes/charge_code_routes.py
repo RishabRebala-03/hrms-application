@@ -62,7 +62,7 @@ def create_charge_code():
         creator = mongo.db.users.find_one({"_id": creator_id})
         if not creator:
             return jsonify({"error": "Creator user not found"}), 404
-        if creator.get("role") != "Admin":
+        if str(creator.get("role", "")).lower() != "admin":
             return jsonify({"error": "Only admins can create charge codes"}), 403
 
         # Duplicate code check
@@ -239,7 +239,7 @@ def assign_charge_code():
             return jsonify({"error": "Invalid assigned_by format"}), 400
 
         admin = mongo.db.users.find_one({"_id": assigner_obj_id})
-        if not admin or admin.get("role") not in ["Admin", "Manager"]:
+        if not admin or str(admin.get("role", "")).lower() not in ["admin", "manager"]:
             return jsonify({"error": "Only admins or managers can assign charge codes"}), 403
 
         assigned_codes = []
@@ -264,6 +264,35 @@ def assign_charge_code():
             })
             if existing:
                 print(f"ℹ️ Already assigned: {charge_code.get('code')} → {employee.get('name')}")
+                assigned_codes.append({
+                    "assignment_id": str(existing["_id"]),
+                    "code": charge_code.get("code"),
+                    "already_assigned": True,
+                })
+                continue
+
+            inactive = mongo.db.charge_code_assignments.find_one({
+                "employee_id": emp_obj_id,
+                "charge_code_id": cc_obj_id,
+                "is_active": False,
+            })
+            if inactive:
+                mongo.db.charge_code_assignments.update_one(
+                    {"_id": inactive["_id"]},
+                    {"$set": {
+                        "employee_name": employee.get("name"),
+                        "charge_code": charge_code.get("code"),
+                        "charge_code_name": charge_code.get("name"),
+                        "assigned_by": assigner_obj_id,
+                        "assigned_at": datetime.utcnow(),
+                        "is_active": True,
+                    }, "$unset": {"removed_at": ""}},
+                )
+                assigned_codes.append({
+                    "assignment_id": str(inactive["_id"]),
+                    "code": charge_code.get("code"),
+                    "reactivated": True,
+                })
                 continue
 
             assignment = {
@@ -417,7 +446,7 @@ def bulk_assign_charge_codes():
             return jsonify({"error": "employee_ids, charge_code_ids, and assigned_by are required"}), 400
 
         admin = mongo.db.users.find_one({"_id": ObjectId(assigned_by)})
-        if not admin or admin.get("role") not in ["Admin", "Manager"]:
+        if not admin or str(admin.get("role", "")).lower() not in ["admin", "manager"]:
             return jsonify({"error": "Only admins or managers can bulk-assign charge codes"}), 403
 
         total_assigned = 0

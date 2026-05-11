@@ -29,7 +29,7 @@ const buttons = [
   { key: "logs", label: "Audit Logs", roles: ["Admin"], icon: ScrollText },
   { key: "add", label: "Employee Setup", roles: ["Admin"], icon: UserCog },
   { key: "holidays", label: "Holiday Calendar", roles: ["Admin"], icon: Briefcase },
-  { key: "calendar", label: "Enterprise Calendar", roles: ["Admin", "Manager", "Employee"], icon: CalendarDays },
+  { key: "calendar", label: "Calendar", roles: ["Admin", "Manager", "Employee"], icon: CalendarDays },
 ];
 
 const Sidebar = ({ section, setSection, role, restricted = [], isOpen, isCollapsed, onToggleCollapse }) => {

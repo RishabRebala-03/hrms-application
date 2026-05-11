@@ -55,6 +55,12 @@ def apply_employee_assignment_snapshot(timesheet_doc, employee):
         return timesheet_doc
 
     timesheet_doc["employee_work_location"] = employee.get("workLocation", "") or ""
+    timesheet_doc["employee_assigned_location"] = (
+        employee.get("assignedLocation")
+        or employee.get("costCenter")
+        or employee.get("workLocation")
+        or ""
+    )
     timesheet_doc["employee_company_code"] = employee.get("companyCode", "") or ""
     timesheet_doc["employee_cost_center"] = employee.get("costCenter", "") or ""
     return timesheet_doc
@@ -71,8 +77,8 @@ def enrich_timesheet_with_employee_assignments(timesheet_doc):
 
     if (
         timesheet_doc.get("employee_work_location")
+        and timesheet_doc.get("employee_assigned_location")
         and timesheet_doc.get("employee_company_code")
-        and timesheet_doc.get("employee_cost_center")
     ):
         return timesheet_doc
 
@@ -85,6 +91,35 @@ def enrich_timesheet_with_employee_assignments(timesheet_doc):
         pass
 
     return timesheet_doc
+
+
+def validate_daily_work_hours(entries):
+    """Block more than 9 submitted work hours on any single day."""
+    daily_totals = {}
+    for entry in entries or []:
+        if entry.get("entry_type", "work") != "work":
+            continue
+        date_key = entry.get("date")
+        if not date_key:
+            continue
+        try:
+            hours = float(entry.get("hours") or 0)
+        except (TypeError, ValueError):
+            return f"Invalid hours on {date_key}"
+        if hours < 0:
+            return f"Hours cannot be negative on {date_key}"
+        if hours > 9:
+            return f"Working hours for any charge code cannot exceed 9 hours on {date_key}"
+        daily_totals[date_key] = daily_totals.get(date_key, 0) + hours
+
+    over_limit = [
+        f"{date_key} ({total:g}h)"
+        for date_key, total in sorted(daily_totals.items())
+        if total > 9
+    ]
+    if over_limit:
+        return "Daily working hours cannot exceed 9 hours: " + ", ".join(over_limit)
+    return None
 
 
 # ========================================
@@ -102,6 +137,10 @@ def create_timesheet():
 
         if not all([employee_id, period_start, period_end]):
             return jsonify({"error": "Missing required fields: employee_id, period_start, period_end"}), 400
+
+        limit_error = validate_daily_work_hours(entries)
+        if limit_error:
+            return jsonify({"error": limit_error}), 400
 
         try:
             emp_obj_id = ObjectId(employee_id)
@@ -273,6 +312,10 @@ def update_timesheet(timesheet_id):
         data = request.get_json()
         entries = data.get("entries", [])
 
+        limit_error = validate_daily_work_hours(entries)
+        if limit_error:
+            return jsonify({"error": limit_error}), 400
+
         ts = mongo.db.timesheets.find_one({"_id": ObjectId(timesheet_id)})
         if not ts:
             return jsonify({"error": "Timesheet not found"}), 404
@@ -311,6 +354,129 @@ def update_timesheet(timesheet_id):
         return jsonify({"error": str(e)}), 500
 
 
+@timesheet_bp.route("/save_draft", methods=["POST"])
+def save_timesheet_draft():
+    """Create or update a draft timesheet without submitting it for approval."""
+    try:
+        data = request.get_json() or {}
+        employee_id = data.get("employee_id")
+        period_start = data.get("period_start")
+        period_end = data.get("period_end")
+        entries = data.get("entries", [])
+
+        if not all([employee_id, period_start, period_end]):
+            return jsonify({"error": "Missing required fields: employee_id, period_start, period_end"}), 400
+
+        limit_error = validate_daily_work_hours(entries)
+        if limit_error:
+            return jsonify({"error": limit_error}), 400
+
+        try:
+            emp_obj_id = ObjectId(employee_id)
+        except Exception:
+            return jsonify({"error": "Invalid employee_id format"}), 400
+
+        employee = mongo.db.users.find_one({"_id": emp_obj_id})
+        if not employee:
+            return jsonify({"error": "Employee not found"}), 404
+
+        existing = mongo.db.timesheets.find_one({
+            "employee_id": emp_obj_id,
+            "period_start": period_start,
+            "period_end": period_end,
+        })
+        if existing and existing.get("status") in ("approved", "pending_lead", "pending_manager"):
+            return jsonify({"error": "Submitted or approved timesheets cannot be saved as drafts"}), 400
+
+        validated_entries = []
+        for entry in entries:
+            if entry.get("entry_type", "work") != "work":
+                continue
+            charge_code_id = entry.get("charge_code_id")
+            if not charge_code_id:
+                return jsonify({"error": f"Charge code required for work entry on {entry.get('date')}"}), 400
+            try:
+                cc_obj_id = ObjectId(charge_code_id)
+            except Exception:
+                return jsonify({"error": f"Invalid charge_code_id on {entry.get('date')}"}), 400
+
+            assignment = mongo.db.charge_code_assignments.find_one({
+                "employee_id": emp_obj_id,
+                "charge_code_id": cc_obj_id,
+                "is_active": True,
+            })
+            if not assignment:
+                return jsonify({"error": f"You don't have access to charge code {charge_code_id}"}), 400
+
+            charge_code = mongo.db.charge_codes.find_one({"_id": cc_obj_id})
+            validated_entries.append({
+                "_id": ObjectId(),
+                "date": entry.get("date"),
+                "entry_type": "work",
+                "charge_code_id": cc_obj_id,
+                "charge_code": charge_code.get("code") if charge_code else "Unknown",
+                "charge_code_name": charge_code.get("name") if charge_code else "",
+                "hours": float(entry.get("hours") or 0),
+                "description": entry.get("description", ""),
+            })
+
+        total_hours = sum(e.get("hours", 0) for e in validated_entries)
+        now = datetime.utcnow()
+        draft = {
+            "employee_id": emp_obj_id,
+            "employee_name": employee.get("name"),
+            "employee_email": employee.get("email"),
+            "employee_department": employee.get("department", ""),
+            "period_start": period_start,
+            "period_end": period_end,
+            "entries": validated_entries,
+            "total_hours": total_hours,
+            "status": "draft",
+            "reporting_lead_id": employee.get("reportsTo"),
+            "manager_id": employee.get("peopleLead"),
+            "updated_at": now,
+            "approval_history": existing.get("approval_history", []) if existing else [],
+        }
+        apply_employee_assignment_snapshot(draft, employee)
+
+        if existing:
+            mongo.db.timesheets.update_one({"_id": existing["_id"]}, {"$set": draft})
+            timesheet_id = existing["_id"]
+        else:
+            draft["created_at"] = now
+            result = mongo.db.timesheets.insert_one(draft)
+            timesheet_id = result.inserted_id
+
+        return jsonify({
+            "message": "Draft saved successfully",
+            "timesheet_id": str(timesheet_id),
+            "total_hours": total_hours,
+        }), 200
+
+    except Exception as e:
+        print(f"❌ Error saving draft: {str(e)}")
+        import traceback; traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@timesheet_bp.route("/delete/<timesheet_id>", methods=["DELETE"])
+def delete_timesheet(timesheet_id):
+    """Delete an editable timesheet."""
+    try:
+        ts = mongo.db.timesheets.find_one({"_id": ObjectId(timesheet_id)})
+        if not ts:
+            return jsonify({"error": "Timesheet not found"}), 404
+        if ts.get("status") in ("approved", "pending_lead", "pending_manager"):
+            return jsonify({"error": "Submitted or approved timesheets cannot be deleted"}), 400
+
+        mongo.db.timesheets.delete_one({"_id": ObjectId(timesheet_id)})
+        return jsonify({"message": "Timesheet deleted successfully"}), 200
+
+    except Exception as e:
+        print(f"❌ Error deleting timesheet: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
 # ========================================
 # SUBMIT EXISTING TIMESHEET
 # ========================================
@@ -324,6 +490,10 @@ def submit_timesheet(timesheet_id):
             return jsonify({"error": "Timesheet not found"}), 404
         if ts.get("status") == "approved":
             return jsonify({"error": "Timesheet is already approved"}), 400
+
+        limit_error = validate_daily_work_hours(ts.get("entries", []))
+        if limit_error:
+            return jsonify({"error": limit_error}), 400
 
         now = datetime.utcnow()
         mongo.db.timesheets.update_one(

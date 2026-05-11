@@ -519,6 +519,636 @@
   line-height: 40px;
 }
 
+.mte-chargecodes-shell {
+  border-top: 1px solid #d0d0d0;
+  background: #fff;
+}
+
+.mte-chargecodes-topbar {
+  min-height: 52px;
+  display: grid;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(180px, auto) minmax(240px, 0.8fr) minmax(320px, auto);
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #d4d4d4;
+}
+
+.mte-chargecodes-add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mte-chargecodes-add input,
+.mte-chargecodes-actions select {
+  height: 34px;
+  border: 1px solid #bfbfbf;
+  background: #fff;
+  color: #333;
+  font-size: 13px;
+  padding: 0 12px;
+}
+
+.mte-chargecodes-add input {
+  min-width: 180px;
+  width: min(100%, 240px);
+}
+
+.mte-chargecodes-add button,
+.mte-chargecodes-actions button {
+  min-height: 34px;
+  border: 1px solid #a7a7a7;
+  background: #f7f7f7;
+  color: #2d2d2d;
+  padding: 0 18px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mte-chargecodes-add button:disabled,
+.mte-chargecodes-actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.mte-chargecodes-business {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #4b4b4b;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.mte-chargecodes-business button {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #5f5f5f;
+  border-radius: 50%;
+  background: #fff;
+  color: #4a4a4a;
+  cursor: pointer;
+}
+
+.mte-chargecodes-business small {
+  color: #777;
+}
+
+.mte-chargecodes-employee-pick {
+  min-width: 230px;
+}
+
+.mte-chargecodes-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.mte-chargecodes-actions select {
+  min-width: 190px;
+}
+
+.mte-chargecodes-actions button {
+  border: none;
+  background: transparent;
+  font-weight: 500;
+}
+
+.mte-chargecodes-actions button.is-primary {
+  background: #6f54b6;
+  color: #fff;
+  min-width: 92px;
+}
+
+.mte-chargecodes-selected-employees {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #dedede;
+  background: #fbfbfb;
+}
+
+.mte-chargecodes-selected-employees button {
+  border: 1px solid #cfc7e8;
+  background: #f6f2ff;
+  color: #4c3a86;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.mte-chargecodes-table-wrap {
+  overflow: auto;
+  max-height: calc(100vh - 290px);
+}
+
+.mte-chargecodes-table {
+  width: 100%;
+  min-width: 1180px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.mte-chargecodes-table th,
+.mte-chargecodes-table td {
+  border-right: 1px solid #dcdcdc;
+  border-bottom: 1px solid #d5d5d5;
+  padding: 9px 10px;
+  font-size: 13px;
+  color: #242424;
+  text-align: left;
+  vertical-align: middle;
+  background: #fff;
+}
+
+.mte-chargecodes-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f5f5f5;
+  font-weight: 600;
+  color: #333;
+}
+
+.mte-chargecodes-table th:nth-child(1),
+.mte-chargecodes-table td:nth-child(1) {
+  width: 56px;
+  text-align: center;
+}
+
+.mte-chargecodes-table th:nth-child(2),
+.mte-chargecodes-table td:nth-child(2) {
+  width: 86px;
+  text-align: center;
+}
+
+.mte-chargecodes-table th:nth-child(3),
+.mte-chargecodes-table td:nth-child(3) {
+  width: 160px;
+}
+
+.mte-chargecodes-table th:nth-child(4),
+.mte-chargecodes-table td:nth-child(4) {
+  width: 180px;
+}
+
+.mte-chargecodes-table th:nth-child(5),
+.mte-chargecodes-table td:nth-child(5) {
+  width: 240px;
+}
+
+.mte-chargecodes-table th:nth-child(6),
+.mte-chargecodes-table td:nth-child(6) {
+  width: 150px;
+}
+
+.mte-chargecodes-table th:nth-child(7),
+.mte-chargecodes-table td:nth-child(7) {
+  width: 300px;
+}
+
+.mte-chargecodes-table th:nth-child(8),
+.mte-chargecodes-table td:nth-child(8) {
+  width: 135px;
+}
+
+.mte-chargecodes-table th:nth-child(9),
+.mte-chargecodes-table td:nth-child(9) {
+  width: 190px;
+  border-right: none;
+}
+
+.mte-chargecodes-table input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #6f54b6;
+}
+
+.mte-chargecodes-info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 3px;
+  border-radius: 50%;
+  background: #777;
+  color: #fff;
+  font-size: 10px;
+}
+
+.mte-chargecodes-toggle {
+  width: 36px;
+  height: 18px;
+  border: none;
+  border-radius: 999px;
+  background: #b5b5b5;
+  padding: 2px;
+  cursor: pointer;
+}
+
+.mte-chargecodes-toggle span {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 140ms ease;
+}
+
+.mte-chargecodes-toggle.is-on {
+  background: #5c8f3f;
+}
+
+.mte-chargecodes-toggle.is-on span {
+  transform: translateX(18px);
+}
+
+.mte-chargecodes-table td.is-selected-code {
+  background: #b66b61;
+  color: #111;
+}
+
+.mte-chargecodes-owner-dot {
+  width: 12px;
+  height: 12px;
+  display: inline-block;
+  margin-right: 8px;
+  border: 2px solid #bdbdbd;
+  border-radius: 50%;
+  vertical-align: -2px;
+  background: #fff;
+}
+
+.mte-locations-shell {
+  background: #fff;
+  border-top: 1px solid #d2d2d2;
+  min-height: 560px;
+}
+
+.mte-locations-actions {
+  min-height: 70px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #d9d9d9;
+}
+
+.mte-locations-actions > button {
+  border: none;
+  background: transparent;
+  color: #595959;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-transform: uppercase;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.mte-locations-submit {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.mte-locations-submit button {
+  min-height: 38px;
+  border: none;
+  background: transparent;
+  color: #333;
+  padding: 0 18px;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.mte-locations-submit button.is-primary {
+  background: #6f54b6;
+  color: #fff;
+  font-weight: 700;
+  min-width: 106px;
+}
+
+.mte-locations-date-strip {
+  display: grid;
+  grid-template-columns: minmax(420px, 1fr) repeat(15, minmax(56px, 1fr));
+  border-bottom: 1px solid #d6d6d6;
+  overflow-x: auto;
+}
+
+.mte-locations-date-strip > div {
+  min-height: 58px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid #d9d9d9;
+  background: #fff;
+  color: #333;
+}
+
+.mte-locations-date-strip > div:first-child {
+  align-items: flex-start;
+  padding-left: 18px;
+}
+
+.mte-locations-date-strip > div.is-weekend {
+  background: #e8e8e8;
+}
+
+.mte-locations-date-strip span,
+.mte-locations-date-strip strong {
+  font-size: 15px;
+  line-height: 1.15;
+}
+
+.mte-locations-date-strip strong {
+  font-weight: 500;
+}
+
+.mte-locations-add-row {
+  display: grid;
+  grid-template-columns: minmax(420px, 1fr) minmax(0, 2.6fr);
+  border-bottom: 1px solid #202020;
+}
+
+.mte-locations-add-row label {
+  grid-column: 1 / -1;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  font-weight: 600;
+  color: #333;
+  border-bottom: 1px solid #d8d8d8;
+}
+
+.mte-locations-add-row button {
+  min-height: 48px;
+  border: none;
+  border-right: 1px solid #1f1f1f;
+  background: #fff;
+  color: #333;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.mte-locations-add-row p {
+  margin: 0;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  padding: 0 28px;
+  color: #555;
+}
+
+.mte-locations-body {
+  display: grid;
+  grid-template-columns: 420px minmax(0, 1fr);
+  align-items: start;
+}
+
+.mte-locations-card {
+  border-right: 1px solid #d3d3d3;
+  border-bottom: 1px solid #d3d3d3;
+  padding: 18px 18px 28px;
+  min-height: 280px;
+  background: #fdfdfd;
+}
+
+.mte-locations-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-bottom: 18px;
+  color: #606060;
+  font-size: 14px;
+}
+
+.mte-locations-card select {
+  width: 100%;
+  min-height: 42px;
+  border: 2px solid #333;
+  border-radius: 6px;
+  background: #fff;
+  color: #4b4b4b;
+  padding: 0 14px;
+  font-size: 15px;
+}
+
+.mte-locations-card label:nth-of-type(n+2) select {
+  border-color: #bdbdbd;
+  background: #f5f5f5;
+}
+
+.mte-locations-card > button {
+  min-height: 40px;
+  min-width: 112px;
+  border: none;
+  background: #6f54b6;
+  color: #fff;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.mte-locations-info {
+  padding: 16px 24px;
+}
+
+.mte-locations-info p {
+  margin: 0 0 18px;
+  min-height: 82px;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  border-radius: 7px;
+  background: #d9eef2;
+  color: #2f4f58;
+  font-size: 18px;
+  line-height: 1.55;
+}
+
+.mte-locations-preview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 8px;
+}
+
+.mte-locations-preview div {
+  min-height: 58px;
+  border: 1px solid #e0e0e0;
+  background: #fafafa;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.mte-locations-preview span {
+  color: #6b6b6b;
+  font-size: 12px;
+}
+
+.mte-locations-preview strong {
+  color: #2f2f2f;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.mte-summary-shell {
+  background: #fff;
+  border-top: 1px solid #d5d5d5;
+  min-height: 560px;
+  padding-bottom: 44px;
+}
+
+.mte-summary-actions {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #d8d8d8;
+}
+
+.mte-summary-actions button {
+  min-height: 38px;
+  border: none;
+  background: transparent;
+  color: #333;
+  padding: 0 18px;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.mte-summary-actions button.is-primary {
+  min-width: 106px;
+  background: #6f54b6;
+  color: #fff;
+  font-weight: 700;
+}
+
+.mte-summary-table-wrap {
+  overflow-x: auto;
+}
+
+.mte-summary-table {
+  width: 100%;
+  min-width: 1380px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.mte-summary-table th,
+.mte-summary-table td {
+  border-right: 1px solid #d0d0d0;
+  border-bottom: 1px solid #d0d0d0;
+  padding: 11px 10px;
+  color: #2a2a2a;
+  font-size: 13px;
+  background: #fff;
+}
+
+.mte-summary-table th {
+  background: #e5e5e5;
+  font-weight: 700;
+  text-align: center;
+}
+
+.mte-summary-table th:first-child,
+.mte-summary-table td:first-child {
+  width: 260px;
+}
+
+.mte-summary-table td:not(:first-child) {
+  text-align: right;
+}
+
+.mte-summary-table span,
+.mte-summary-leave-copy span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 4px;
+  border-radius: 50%;
+  background: #555;
+  color: #fff;
+  font-size: 10px;
+  font-style: normal;
+}
+
+.mte-summary-table tr.is-summary-row td:first-child {
+  text-align: right;
+  font-weight: 700;
+  background: #f4f4f4;
+}
+
+.mte-summary-table tr.is-summary-row td {
+  background: #fafafa;
+}
+
+.mte-summary-location-table {
+  width: min(620px, calc(100% - 28px));
+  margin: 18px 14px 0;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.mte-summary-location-table th,
+.mte-summary-location-table td {
+  border: 1px solid #cfcfcf;
+  padding: 12px 14px;
+  font-size: 13px;
+  color: #242424;
+}
+
+.mte-summary-location-table th {
+  background: #d9d9d9;
+  font-weight: 700;
+}
+
+.mte-summary-location-table td:last-child,
+.mte-summary-location-table th:last-child {
+  text-align: right;
+  width: 110px;
+}
+
+.mte-summary-location-table tbody tr:last-child td {
+  font-weight: 700;
+}
+
+.mte-summary-leave-copy {
+  margin: 18px 14px 0;
+  color: #222;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.mte-summary-leave-copy p {
+  margin: 0 0 11px;
+}
+
+.mte-summary-leave-copy strong {
+  font-weight: 700;
+}
+
 @media (max-width: 960px) {
   .mte-preferences-grid {
     grid-template-columns: 1fr;
@@ -526,6 +1156,26 @@
 
   .mte-pref-arrow {
     display: none;
+  }
+
+  .mte-chargecodes-topbar {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .mte-chargecodes-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .mte-locations-date-strip,
+  .mte-locations-add-row,
+  .mte-locations-body {
+    grid-template-columns: 1fr;
+  }
+
+  .mte-locations-card {
+    border-right: none;
   }
 }
 

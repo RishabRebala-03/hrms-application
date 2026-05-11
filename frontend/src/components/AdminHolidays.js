@@ -204,7 +204,7 @@ const AdminHolidays = () => {
           <div className="fiori-panel-header">
             <div>
               <h3>{editing ? "Edit Holiday" : "Add Holiday"}</h3>
-              <p>Create or update a holiday entry used by the enterprise calendar</p>
+              <p>Create or update a holiday entry used by the calendar</p>
             </div>
           </div>
 
@@ -294,7 +294,7 @@ const AdminHolidays = () => {
               <CalendarDays size={24} />
               <div>
                 <strong>No holidays added yet</strong>
-                <p>Add the first holiday entry to make it available in the enterprise calendar.</p>
+                <p>Add the first holiday entry to make it available in the calendar.</p>
               </div>
             </div>
           ) : (
