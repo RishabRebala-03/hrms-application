@@ -866,7 +866,7 @@ body {
 .admin-dashboard {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 16px;
 }
 
 .admin-dashboard-loading {
@@ -878,10 +878,10 @@ body {
 .admin-empty-state {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 24px;
+  gap: 12px;
+  padding: 16px;
   border: 1px dashed var(--panel-border);
-  border-radius: 16px;
+  border-radius: 10px;
   background: #fff;
   color: var(--muted);
 }
@@ -896,9 +896,9 @@ body {
 .admin-hero {
   display: flex;
   justify-content: space-between;
-  gap: 24px;
-  padding: 28px 32px;
-  border-radius: 18px;
+  gap: 18px;
+  padding: 20px 24px;
+  border-radius: 12px;
   border: 1px solid var(--panel-border);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96)),
@@ -916,7 +916,7 @@ body {
 }
 
 .admin-section-overline {
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -926,13 +926,13 @@ body {
 
 .admin-hero h1 {
   margin: 0;
-  font-size: 2rem;
+  font-size: 1.65rem;
   font-weight: 400;
   color: var(--text);
 }
 
 .admin-hero p {
-  margin: 10px 0 0;
+  margin: 8px 0 0;
   max-width: 720px;
   color: var(--muted);
   line-height: 1.6;
@@ -941,16 +941,16 @@ body {
 .admin-hero-pill-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 18px;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .admin-hero-pill {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 38px;
-  padding: 0 14px;
+  min-height: 32px;
+  padding: 0 10px;
   border-radius: 999px;
   border: 1px solid rgba(10, 110, 209, 0.14);
   background: linear-gradient(180deg, #ffffff 0%, #f4f8fc 100%);
@@ -969,20 +969,20 @@ body {
 .admin-hero-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 18px;
+  gap: 10px;
+  margin-top: 12px;
 }
 
 .admin-hero-kpi-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 18px;
+  gap: 10px;
+  margin-top: 14px;
 }
 
 .admin-hero-kpi-card {
-  padding: 16px 18px;
-  border-radius: 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
   border: 1px solid rgba(164, 188, 212, 0.45);
   background: rgba(255, 255, 255, 0.76);
   box-shadow: 0 12px 24px rgba(31, 50, 69, 0.06);
@@ -991,7 +991,7 @@ body {
 
 .admin-hero-kpi-card span {
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -1001,14 +1001,14 @@ body {
 
 .admin-hero-kpi-card strong {
   display: block;
-  font-size: 1.75rem;
+  font-size: 1.35rem;
   line-height: 1;
   color: var(--text);
 }
 
 .admin-hero-kpi-card small {
   display: block;
-  margin-top: 8px;
+  margin-top: 6px;
   color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
@@ -1118,15 +1118,15 @@ body {
 }
 
 .admin-hero-meta {
-  min-width: 280px;
+  min-width: 240px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .admin-hero-meta-item {
-  padding: 14px 16px;
-  border-radius: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
   background: #fff;
   border: 1px solid var(--panel-border);
 }
@@ -1137,28 +1137,28 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--muted);
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .admin-hero-meta-item strong {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text);
 }
 
 .admin-dashboard-grid {
   display: grid;
-  gap: 16px;
+  gap: 12px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .admin-dashboard-grid-compact {
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  margin-bottom: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  margin-bottom: 0;
 }
 
 .fiori-stat-card {
-  padding: 20px;
-  border-radius: 16px;
+  padding: 14px;
+  border-radius: 10px;
   border: 1px solid var(--panel-border);
   background: #fff;
   box-shadow: var(--shadow);
@@ -1185,7 +1185,7 @@ body {
   align-items: center;
   justify-content: space-between;
   color: var(--muted);
-  margin-bottom: 18px;
+  margin-bottom: 10px;
 }
 
 .fiori-stat-label {
@@ -1196,10 +1196,10 @@ body {
 }
 
 .fiori-stat-value {
-  font-size: 2rem;
+  font-size: 1.5rem;
   line-height: 1;
   color: var(--text);
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 }
 
 .fiori-stat-note,
@@ -1210,7 +1210,7 @@ body {
 
 .fiori-inline-link {
   color: var(--accent);
-  margin-top: 12px;
+  margin-top: 8px;
   font-weight: 600;
 }
 
@@ -1223,7 +1223,7 @@ body {
 .admin-analytics-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 20px;
+  gap: 14px;
 }
 
 .fiori-chart-card {
@@ -1239,7 +1239,7 @@ body {
 }
 
 .fiori-chart-shell {
-  height: 260px;
+  height: 210px;
   width: 100%;
 }
 
@@ -1271,7 +1271,7 @@ body {
 .admin-dashboard-layout {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(300px, 0.9fr);
-  gap: 20px;
+  gap: 14px;
   align-items: start;
 }
 
@@ -1471,33 +1471,33 @@ body {
 .admin-dashboard-secondary {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 14px;
 }
 
 .fiori-panel {
   background: #fff;
-  border-radius: 18px;
+  border-radius: 12px;
   border: 1px solid var(--panel-border);
   box-shadow: var(--shadow);
-  padding: 22px 24px;
+  padding: 16px 18px;
 }
 
 .fiori-panel-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 18px;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
 .fiori-panel-header h3 {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: 1.05rem;
   font-weight: 400;
 }
 
 .fiori-panel-header p {
-  margin: 6px 0 0;
+  margin: 4px 0 0;
   color: var(--muted);
   font-size: 13px;
 }
@@ -1517,12 +1517,12 @@ body {
 .admin-approval-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
 }
 
 .admin-approval-card {
-  padding: 18px;
-  border-radius: 14px;
+  padding: 14px;
+  border-radius: 10px;
   border: 1px solid #dce4ec;
   background: #fbfcfd;
 }
@@ -1536,12 +1536,12 @@ body {
 
 .admin-approval-card-header h4 {
   margin: 0;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
 }
 
 .admin-approval-card-header p {
-  margin: 6px 0 0;
+  margin: 4px 0 0;
   font-size: 13px;
   color: var(--muted);
 }
@@ -1550,11 +1550,11 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin: 14px 0 0;
+  margin: 10px 0 0;
 }
 
 .admin-approval-metadata span {
-  padding: 6px 10px;
+  padding: 5px 8px;
   border-radius: 999px;
   background: #eef3f8;
   color: #35516e;
@@ -1565,15 +1565,15 @@ body {
 .admin-approval-details {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 16px;
-  padding-top: 16px;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
   border-top: 1px solid #e9eef3;
 }
 
 .admin-approval-details div {
-  padding: 12px 14px;
-  border-radius: 12px;
+  padding: 10px;
+  border-radius: 8px;
   background: #fff;
   border: 1px solid #edf1f5;
 }
@@ -1599,8 +1599,8 @@ body {
 .admin-approval-actions,
 .admin-modal-actions {
   display: flex;
-  gap: 12px;
-  margin-top: 18px;
+  gap: 10px;
+  margin-top: 12px;
   justify-content: flex-end;
 }
 
@@ -4184,13 +4184,13 @@ body {
 .leave-workspace {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 16px;
 }
 
 .employee-workspace {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 16px;
 }
 
 .employee-dashboard-hero {
@@ -4199,7 +4199,7 @@ body {
   border: 1px solid #d7e4f2;
   background: linear-gradient(135deg, #f8fbff 0%, #eef5fb 52%, #f9fcff 100%);
   box-shadow: 0 18px 36px rgba(23, 52, 79, 0.08);
-  min-height: 320px;
+  min-height: 0;
 }
 
 .employee-dashboard-hero::before {
@@ -4221,14 +4221,14 @@ body {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
 .employee-hero-kicker-pill {
   display: inline-flex;
   align-items: center;
-  padding: 6px 12px;
+  padding: 5px 10px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.9);
   border: 1px solid rgba(10, 110, 209, 0.12);
@@ -4241,27 +4241,27 @@ body {
 .employee-dashboard-hero h1 {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   margin: 0;
 }
 
 .employee-hero-greeting {
-  font-size: 1.05rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: #53708d;
 }
 
 .employee-hero-name {
-  font-size: clamp(2rem, 4vw, 3.1rem);
+  font-size: clamp(1.7rem, 3vw, 2.25rem);
   line-height: 1;
   font-weight: 700;
-  letter-spacing: -0.03em;
+  letter-spacing: 0;
   color: #12324f;
 }
 
 .employee-dashboard-hero p {
   max-width: 640px;
-  font-size: 1rem;
+  font-size: 0.9rem;
   color: #34556f;
   text-wrap: balance;
 }
@@ -4269,14 +4269,14 @@ body {
 .employee-hero-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 18px;
+  gap: 10px;
+  margin-top: 12px;
 }
 
 .employee-dashboard-hero .admin-hero-meta {
   position: relative;
   z-index: 1;
-  min-width: 320px;
+  min-width: 260px;
 }
 
 .employee-dashboard-hero .admin-hero-meta-item {
@@ -4440,7 +4440,7 @@ body {
 .employee-leave-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 20px;
+  gap: 14px;
   align-items: start;
 }
 
@@ -4452,7 +4452,7 @@ body {
 .employee-dashboard-secondary {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 14px;
 }
 
 .employee-recent-leave-list,
@@ -4460,19 +4460,19 @@ body {
 .employee-quick-action-list {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
 }
 
 .employee-recent-leave-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 10px;
 }
 
 .employee-recent-leave-card,
 .employee-holiday-card {
-  padding: 14px 16px;
-  border-radius: 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
   border: 1px solid #e2e9f0;
   background: #fbfcfd;
 }
@@ -4493,35 +4493,35 @@ body {
 .employee-analytics-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: 12px;
 }
 
 .employee-chart-shell {
-  height: 210px;
+  height: 170px;
 }
 
 .employee-mini-chart {
   width: 100%;
-  height: 180px;
+  height: 140px;
 }
 
 .employee-chart-legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 10px;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .employee-chart-legend-compact {
-  margin-top: 16px;
+  margin-top: 10px;
 }
 
 .employee-chart-legend-item {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 34px;
-  padding: 0 10px;
+  min-height: 30px;
+  padding: 0 8px;
   border-radius: 999px;
   border: 1px solid #dce4ec;
   background: #fff;
@@ -4548,12 +4548,12 @@ body {
 .employee-manager-card {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
 
 .employee-manager-avatar {
-  width: 72px;
-  height: 72px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
   position: relative;
   flex: 0 0 auto;
@@ -4562,7 +4562,7 @@ body {
   justify-content: center;
   background: linear-gradient(135deg, #0a6ed1, #35516e);
   color: #fff;
-  font-size: 1.75rem;
+  font-size: 1.25rem;
   font-weight: 700;
 }
 
@@ -4575,7 +4575,7 @@ body {
 .employee-manager-copy {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 .employee-manager-copy strong {
@@ -4592,7 +4592,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
 }
 
 .employee-holiday-card div {
@@ -4614,9 +4614,9 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 16px 18px;
-  border-radius: 14px;
+  gap: 12px;
+  padding: 11px 12px;
+  border-radius: 10px;
   border: 1px solid #dce4ec;
   background: #fbfcfd;
   text-align: left;
@@ -4726,18 +4726,18 @@ body {
 }
 
 .employee-balance-card {
-  padding: 24px 28px;
+  padding: 14px;
 }
 
 .employee-balance-card .fiori-stat-label {
   display: block;
-  margin-bottom: 14px;
+  margin-bottom: 8px;
   line-height: 1.4;
 }
 
 .employee-balance-card .fiori-stat-value {
-  margin-bottom: 14px;
-  font-size: 2.3rem;
+  margin-bottom: 8px;
+  font-size: 1.6rem;
   line-height: 1.05;
 }
 
@@ -4823,8 +4823,8 @@ body {
 }
 
 .employee-history-table td {
-  padding-top: 24px;
-  padding-bottom: 24px;
+  padding-top: 14px;
+  padding-bottom: 14px;
 }
 
 .employee-history-table .fiori-button {
@@ -5149,30 +5149,30 @@ body {
 ======================================== */
 .panel {
   background: var(--card);
-  border-radius: 12px;
-  padding: 20px;
+  border-radius: 10px;
+  padding: 14px;
   box-shadow: var(--shadow);
-  margin-bottom: 18px;
+  margin-bottom: 12px;
 }
 
 .welcome {
-  padding: 28px;
+  padding: 16px;
 }
 
 .grid {
   display: grid;
-  gap: 16px;
+  gap: 12px;
   width: 100%;
 }
 
 .quick-cards {
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  margin-top: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  margin-top: 8px;
 }
 
 .card {
-  padding: 18px;
-  border-radius: 10px;
+  padding: 12px;
+  border-radius: 8px;
   background: linear-gradient(180deg, #fff, #fcfdff);
   border: 1px solid #f0f6ff;
   width: 100%;
@@ -5181,7 +5181,7 @@ body {
 .card.small {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   align-items: flex-start;
 }
 
@@ -5191,7 +5191,7 @@ body {
 }
 
 .card-value {
-  font-size: 20px;
+  font-size: 17px;
   font-weight: 700;
   color: var(--text);
 }
@@ -6445,5 +6445,1434 @@ body {
   
   [style*="fontSize: 48px"] {
     font-size: 36px !important;
+  }
+}
+
+/* ========================================
+   PORTAL-WIDE COMPACT PASS
+======================================== */
+.fiori-button,
+.fiori-inline-button {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+}
+
+.fiori-inline-button {
+  min-height: 24px;
+  padding: 0;
+}
+
+.fiori-table-shell {
+  border-radius: 10px;
+}
+
+.fiori-table th {
+  padding: 9px 12px;
+}
+
+.fiori-table td {
+  padding: 10px 12px;
+}
+
+.admin-hero-brief-grid,
+.policy-summary-grid,
+.policy-filter-grid,
+.policy-card-grid,
+.policy-detail-meta-grid,
+.projects-summary-grid,
+.projects-filter-grid,
+.projects-card-grid,
+.projects-visual-grid,
+.apply-behalf-summary,
+.setup-summary-grid,
+.holiday-summary-grid,
+.calendar-summary-grid,
+.tea-summary-grid,
+.tea-employee-summary,
+.enterprise-calendar-grid,
+.employee-directory-grid {
+  gap: 12px;
+}
+
+.policy-workspace,
+.projects-workspace,
+.apply-behalf-workspace,
+.audit-workspace,
+.setup-workspace,
+.holiday-admin-workspace,
+.enterprise-calendar-workspace,
+.tea-workspace,
+.profile-workspace {
+  gap: 14px;
+}
+
+.admin-hero-brief-card,
+.policy-library-card,
+.projects-card,
+.apply-behalf-employee-card,
+.apply-behalf-selected-card,
+.calendar-list-card,
+.tea-day-card,
+.tea-admin-day-card,
+.tea-slot-section,
+.tea-bulk-panel,
+.employee-directory-card,
+.profile-info-card,
+.profile-project-card,
+.profile-balance-card,
+.audit-log-diff-card,
+.leave-static-card,
+.escalation-owner-card,
+.manager-approval-card,
+.manager-member-card,
+.manager-balance-mini-card {
+  padding: 12px;
+  border-radius: 10px;
+  gap: 10px;
+}
+
+.policy-library-card:hover,
+.projects-card:hover,
+.tea-day-card:hover:not(:disabled),
+.employee-directory-card:hover,
+.apply-behalf-employee-card:hover {
+  transform: translateY(-1px);
+}
+
+.admin-hero-brief-card h3,
+.policy-library-card h3,
+.projects-card h3,
+.tea-admin-day-top h3 {
+  font-size: 1rem;
+}
+
+.policy-library-card p,
+.projects-card p,
+.projects-overview-copy,
+.policy-document-content,
+.admin-priority-item p {
+  line-height: 1.45;
+}
+
+.policy-detail-layout,
+.projects-detail-grid,
+.apply-behalf-layout,
+.holiday-admin-grid,
+.enterprise-calendar-details-grid,
+.leave-modal-grid {
+  gap: 14px;
+}
+
+.policy-detail-main,
+.projects-detail-main,
+.projects-detail-side,
+.employee-team-history-layout {
+  gap: 14px;
+}
+
+.policy-outline-item,
+.page-subtab-button,
+.leave-tab-button {
+  min-height: 32px;
+  padding: 7px 10px;
+  border-radius: 8px;
+}
+
+.policy-library-id,
+.projects-card-id {
+  margin-bottom: 6px;
+}
+
+.policy-library-meta span,
+.admin-approval-metadata span,
+.fiori-status-pill,
+.tea-beverage-pill {
+  min-height: 24px;
+  padding: 0 8px;
+}
+
+.policy-document-content h2 {
+  margin: 20px 0 10px;
+  font-size: 1.3rem;
+}
+
+.policy-document-content h3 {
+  margin: 16px 0 8px;
+  font-size: 1.05rem;
+}
+
+.policy-document-content p,
+.policy-document-content ul {
+  margin-bottom: 10px;
+}
+
+.policy-document-content li {
+  margin-bottom: 6px;
+}
+
+.enterprise-calendar-grid {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.enterprise-calendar-month-card {
+  border-radius: 10px;
+}
+
+.enterprise-calendar-month-header {
+  padding: 10px 12px;
+}
+
+.enterprise-calendar-month-body {
+  padding: 10px;
+}
+
+.enterprise-calendar-weekdays,
+.enterprise-calendar-days {
+  gap: 4px;
+}
+
+.enterprise-calendar-day {
+  min-height: 34px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.calendar-list,
+.manager-team-list,
+.admin-priority-list,
+.employee-recent-leave-list,
+.employee-holiday-list,
+.employee-quick-action-list {
+  gap: 8px;
+}
+
+.calendar-list-card,
+.admin-priority-item,
+.manager-team-member {
+  padding: 10px 12px;
+  border-radius: 10px;
+}
+
+.manager-team-avatar,
+.manager-team-avatar img {
+  width: 38px;
+  height: 38px;
+  flex-basis: 38px;
+}
+
+.calendar-legend {
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.tea-bulk-footer {
+  margin-top: 12px;
+  gap: 10px;
+}
+
+.tea-option-chip {
+  min-height: 34px;
+  padding: 0 10px;
+}
+
+.tea-admin-total strong {
+  font-size: 1.45rem;
+}
+
+.tea-admin-day-card.is-large {
+  padding: 14px;
+}
+
+.tea-admin-slot-card {
+  padding: 10px;
+  border-radius: 10px;
+}
+
+.employee-directory-grid,
+.policy-card-grid {
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.projects-card-grid,
+.tea-admin-grid {
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.employee-card-details,
+.profile-info-grid,
+.profile-summary-grid,
+.profile-balance-grid,
+.leave-analytics-grid,
+.leave-escalation-grid {
+  gap: 10px;
+}
+
+.profile-hero {
+  gap: 18px;
+  padding: 20px 24px;
+  border-radius: 12px;
+}
+
+.profile-hero-avatar {
+  width: 76px;
+  height: 76px;
+}
+
+.profile-layout {
+  gap: 14px;
+}
+
+.leave-filter-grid,
+.projects-modal-grid,
+.tea-bulk-grid,
+.tea-modal-content,
+.employee-form-grid,
+.employee-edit-grid,
+.profile-edit-grid {
+  gap: 12px;
+}
+
+.leave-results-bar,
+.leave-record-toolbar,
+.calendar-toolbar,
+.audit-toolbar {
+  gap: 10px;
+  padding: 10px 0;
+}
+
+.leave-record-list,
+.manager-request-list {
+  gap: 10px;
+}
+
+/* Explicit compaction for requested workspaces */
+.leave-workspace,
+.manager-leave-layout,
+.employee-leave-layout,
+.enterprise-calendar-workspace,
+.policy-workspace,
+.tea-workspace {
+  gap: 12px;
+}
+
+.leave-tab-strip {
+  gap: 6px;
+}
+
+.leave-tab-button {
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+}
+
+.leave-filter-grid,
+.manager-filter-grid {
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.manager-leave-layout {
+  grid-template-columns: minmax(280px, 0.85fr) minmax(0, 1.55fr);
+}
+
+.manager-team-balance-grid {
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 10px;
+}
+
+.manager-member-header {
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.manager-member-avatar {
+  width: 36px;
+  height: 36px;
+}
+
+.manager-balance-mini-grid,
+.leave-escalation-summary,
+.leave-escalation-grid,
+.leave-analytics-grid {
+  gap: 8px;
+}
+
+.manager-balance-mini-card,
+.leave-escalation-summary div,
+.leave-escalation-history-compact,
+.leave-static-card {
+  padding: 10px;
+  border-radius: 8px;
+}
+
+.manager-balance-mini-card strong {
+  font-size: 1rem;
+}
+
+.manager-reject-textarea,
+.leave-textarea {
+  min-height: 92px;
+}
+
+.leave-results-bar {
+  margin-top: 10px;
+}
+
+.enterprise-calendar-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.calendar-summary-grid,
+.holiday-summary-grid {
+  gap: 10px;
+}
+
+.calendar-toolbar,
+.calendar-year-controls,
+.calendar-toolbar-actions {
+  gap: 8px;
+}
+
+.enterprise-calendar-month-header {
+  padding: 8px 10px;
+}
+
+.enterprise-calendar-month-body {
+  padding: 8px;
+}
+
+.enterprise-calendar-day {
+  min-height: 30px;
+  border-radius: 6px;
+}
+
+.enterprise-calendar-weekdays {
+  margin-bottom: 6px;
+}
+
+.calendar-list-card {
+  gap: 10px;
+  padding: 9px 10px;
+}
+
+.calendar-list-meta {
+  gap: 6px;
+}
+
+.policy-summary-grid,
+.policy-filter-grid,
+.policy-card-grid,
+.policy-detail-meta-grid {
+  gap: 10px;
+}
+
+.policy-card-grid {
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+
+.policy-library-card {
+  padding: 10px 12px;
+  gap: 8px;
+}
+
+.policy-library-card-top {
+  gap: 10px;
+}
+
+.policy-library-card h3 {
+  font-size: 0.98rem;
+}
+
+.policy-library-meta {
+  gap: 6px;
+}
+
+.policy-library-meta span {
+  min-height: 22px;
+}
+
+.policy-detail-layout {
+  grid-template-columns: minmax(210px, 260px) minmax(0, 1fr);
+}
+
+.policy-outline-panel {
+  top: 16px;
+}
+
+.policy-outline-list {
+  gap: 6px;
+}
+
+.policy-outline-item {
+  padding: 8px 10px;
+}
+
+.policy-document-content {
+  line-height: 1.45;
+}
+
+.policy-document-content p,
+.policy-document-content li {
+  font-size: 14px;
+}
+
+.tea-summary-grid,
+.tea-employee-summary,
+.tea-employee-grid,
+.tea-admin-grid,
+.tea-admin-slot-grid,
+.tea-block-month-grid,
+.tea-bulk-grid,
+.tea-modal-content {
+  gap: 10px;
+}
+
+.tea-employee-grid {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.tea-admin-grid {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.tea-day-card,
+.tea-admin-day-card {
+  padding: 10px 12px;
+  border-radius: 10px;
+  gap: 8px;
+}
+
+.tea-day-top,
+.tea-admin-day-top,
+.tea-admin-total {
+  gap: 8px;
+}
+
+.tea-day-orders {
+  gap: 6px;
+}
+
+.tea-slot-section,
+.tea-bulk-panel,
+.tea-block-month,
+.tea-admin-block-reason,
+.tea-admin-slot-card,
+.tea-admin-metric-grid div {
+  padding: 10px;
+  border-radius: 8px;
+}
+
+.tea-slot-header {
+  margin-bottom: 8px;
+}
+
+.tea-option-row {
+  gap: 8px;
+}
+
+.tea-option-chip {
+  min-height: 32px;
+  padding: 0 9px;
+  font-size: 13px;
+}
+
+.tea-beverage-pill {
+  min-height: 26px;
+}
+
+.tea-block-month h4 {
+  margin-bottom: 8px;
+}
+
+.tea-block-cell {
+  min-height: 28px;
+  border-radius: 6px;
+}
+
+/* Final card-density layer for all HRMS workspaces */
+.admin-hero,
+.profile-hero,
+.employee-dashboard-hero {
+  padding: 16px 18px;
+}
+
+.admin-hero h1,
+.profile-hero h1 {
+  font-size: 1.45rem;
+}
+
+.admin-hero p,
+.profile-hero p {
+  line-height: 1.45;
+}
+
+.admin-hero-brief-grid {
+  margin-top: 12px;
+}
+
+.admin-hero-brief-card,
+.admin-hero-kpi-card,
+.admin-hero-meta-item,
+.fiori-stat-card,
+.fiori-panel,
+.panel,
+.card,
+.employee-balance-card,
+.employee-recent-leave-card,
+.employee-holiday-card,
+.employee-quick-action,
+.employee-manager-card,
+.admin-approval-card,
+.admin-priority-item,
+.manager-team-member,
+.manager-approval-card,
+.manager-member-card,
+.manager-balance-mini-card,
+.apply-behalf-employee-card,
+.apply-behalf-selected-card,
+.apply-behalf-note,
+.audit-log-event,
+.audit-log-diff-card,
+.audit-detail-panel,
+.audit-detail-empty,
+.holiday-toggle-row,
+.calendar-birthday-toggle,
+.calendar-inline-error,
+.calendar-list-card,
+.enterprise-calendar-month-card,
+.policy-library-card,
+.policy-outline-item,
+.projects-card,
+.tea-bulk-panel,
+.tea-slot-section,
+.tea-day-card,
+.tea-admin-day-card,
+.tea-admin-slot-card,
+.tea-admin-metric-grid div,
+.tea-block-month,
+.employee-directory-card,
+.profile-info-card,
+.profile-project-card,
+.profile-balance-card,
+.leave-static-card,
+.leave-escalation-summary div,
+.leave-escalation-history-compact,
+.escalation-owner-card {
+  border-radius: 8px;
+}
+
+.admin-hero-brief-card,
+.fiori-stat-card,
+.panel,
+.card,
+.employee-balance-card,
+.employee-recent-leave-card,
+.employee-holiday-card,
+.employee-quick-action,
+.admin-approval-card,
+.admin-priority-item,
+.manager-team-member,
+.manager-approval-card,
+.manager-member-card,
+.apply-behalf-employee-card,
+.apply-behalf-selected-card,
+.apply-behalf-note,
+.audit-log-event,
+.audit-log-diff-card,
+.audit-detail-empty,
+.holiday-toggle-row,
+.calendar-birthday-toggle,
+.calendar-inline-error,
+.calendar-list-card,
+.policy-library-card,
+.projects-card,
+.tea-bulk-panel,
+.tea-slot-section,
+.tea-day-card,
+.tea-admin-day-card,
+.tea-admin-slot-card,
+.tea-block-month,
+.employee-directory-card,
+.profile-info-card,
+.profile-project-card,
+.profile-balance-card,
+.leave-static-card,
+.leave-escalation-summary div,
+.leave-escalation-history-compact,
+.escalation-owner-card {
+  padding: 10px;
+}
+
+.fiori-panel {
+  padding: 12px 14px;
+}
+
+.admin-dashboard,
+.employee-workspace,
+.leave-workspace,
+.policy-workspace,
+.projects-workspace,
+.apply-behalf-workspace,
+.audit-workspace,
+.setup-workspace,
+.holiday-admin-workspace,
+.enterprise-calendar-workspace,
+.tea-workspace,
+.profile-workspace {
+  gap: 10px;
+}
+
+.admin-dashboard-grid,
+.admin-dashboard-grid-compact,
+.admin-analytics-grid,
+.admin-dashboard-layout,
+.admin-dashboard-primary,
+.admin-dashboard-secondary,
+.employee-dashboard-layout,
+.employee-dashboard-primary,
+.employee-dashboard-secondary,
+.employee-recent-leave-grid,
+.employee-analytics-grid,
+.policy-summary-grid,
+.policy-filter-grid,
+.policy-card-grid,
+.policy-detail-layout,
+.policy-detail-main,
+.policy-detail-meta-grid,
+.projects-summary-grid,
+.projects-filter-grid,
+.projects-card-grid,
+.projects-visual-grid,
+.projects-detail-grid,
+.projects-detail-main,
+.projects-detail-side,
+.apply-behalf-summary,
+.apply-behalf-layout,
+.apply-behalf-main,
+.apply-behalf-balance-grid,
+.apply-behalf-form-grid,
+.holiday-summary-grid,
+.holiday-admin-grid,
+.holiday-form-grid,
+.calendar-summary-grid,
+.enterprise-calendar-grid,
+.enterprise-calendar-details-grid,
+.tea-summary-grid,
+.tea-employee-summary,
+.tea-employee-grid,
+.tea-admin-grid,
+.tea-admin-slot-grid,
+.tea-admin-metric-grid,
+.tea-block-month-grid,
+.tea-bulk-grid,
+.tea-modal-content,
+.employee-directory-grid,
+.profile-summary-grid,
+.profile-layout,
+.profile-main,
+.profile-side,
+.profile-info-grid,
+.profile-project-list,
+.profile-balance-grid,
+.profile-edit-grid,
+.leave-filter-grid,
+.manager-filter-grid,
+.manager-leave-layout,
+.manager-team-balance-grid,
+.manager-balance-mini-grid,
+.leave-analytics-grid,
+.leave-escalation-grid,
+.leave-modal-grid,
+.leave-escalation-summary {
+  gap: 8px;
+}
+
+.fiori-panel-header {
+  margin-bottom: 8px;
+}
+
+.fiori-panel-header h3 {
+  font-size: 1rem;
+}
+
+.fiori-panel-header p,
+.fiori-stat-note,
+.fiori-inline-link,
+.admin-approval-card-header p,
+.calendar-list-card p,
+.policy-library-card p,
+.projects-card p,
+.employee-quick-action span,
+.profile-project-meta,
+.profile-project-duration {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.fiori-stat-topline {
+  margin-bottom: 6px;
+}
+
+.fiori-stat-value,
+.employee-balance-card .fiori-stat-value,
+.profile-balance-card strong {
+  font-size: 1.25rem;
+  margin-bottom: 4px;
+}
+
+.fiori-table th,
+.fiori-table td,
+.audit-table td {
+  padding: 8px 10px;
+}
+
+.fiori-status-pill,
+.policy-library-meta span,
+.admin-approval-metadata span,
+.audit-chip,
+.tea-beverage-pill,
+.badge {
+  min-height: 22px;
+  padding: 0 7px;
+  font-size: 11px;
+}
+
+.input,
+.leave-search-field .input,
+.value-help-search-field,
+.mte-select-shell,
+.mte-date-select-shell {
+  min-height: 34px;
+}
+
+.employee-card-avatar,
+.employee-card-avatar-fallback {
+  width: 42px;
+  height: 42px;
+  font-size: 16px;
+}
+
+.employee-card-header,
+.employee-card-identity,
+.employee-card-details,
+.employee-card-footer,
+.profile-hero-main,
+.audit-log-header,
+.audit-log-identity,
+.audit-log-event-top,
+.calendar-toolbar,
+.calendar-year-controls,
+.calendar-toolbar-actions,
+.tea-toolbar,
+.tea-modal-topbar,
+.leave-results-bar,
+.leave-record-toolbar {
+  gap: 8px;
+}
+
+.employee-card-header,
+.employee-card-details,
+.employee-card-footer,
+.profile-hero-meta,
+.audit-log-meta,
+.audit-log-events,
+.audit-log-diff-grid,
+.tea-block-legend {
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+
+.enterprise-calendar-day,
+.tea-block-cell {
+  min-height: 26px;
+}
+
+.enterprise-calendar-month-header {
+  padding: 7px 8px;
+}
+
+.enterprise-calendar-month-body {
+  padding: 7px;
+}
+
+.tea-option-chip {
+  min-height: 30px;
+}
+
+/* Hard compact mode for Leave, Calendar, Policy, and Tea/Coffee pages */
+.leave-workspace .admin-hero,
+.enterprise-calendar-workspace .admin-hero,
+.policy-workspace .admin-hero,
+.tea-workspace .admin-hero,
+.manager-leave-workspace .admin-hero {
+  align-items: center;
+  padding: 12px 14px;
+}
+
+.leave-workspace .admin-hero p,
+.enterprise-calendar-workspace .admin-hero p,
+.policy-workspace .admin-hero p,
+.tea-workspace .admin-hero p,
+.manager-leave-workspace .admin-hero p {
+  display: none;
+}
+
+.leave-workspace .admin-hero-meta,
+.enterprise-calendar-workspace .admin-hero-meta,
+.policy-workspace .admin-hero-meta,
+.tea-workspace .admin-hero-meta,
+.manager-leave-workspace .admin-hero-meta {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
+  gap: 6px;
+}
+
+.tea-workspace .admin-hero-meta {
+  grid-template-columns: repeat(4, minmax(100px, 1fr));
+}
+
+.leave-workspace .admin-hero-meta-item,
+.enterprise-calendar-workspace .admin-hero-meta-item,
+.policy-workspace .admin-hero-meta-item,
+.tea-workspace .admin-hero-meta-item,
+.manager-leave-workspace .admin-hero-meta-item {
+  padding: 7px 8px;
+}
+
+.leave-workspace .admin-hero-meta-item span,
+.enterprise-calendar-workspace .admin-hero-meta-item span,
+.policy-workspace .admin-hero-meta-item span,
+.tea-workspace .admin-hero-meta-item span,
+.manager-leave-workspace .admin-hero-meta-item span {
+  font-size: 10px;
+  margin-bottom: 2px;
+}
+
+.leave-workspace .admin-hero-meta-item strong,
+.enterprise-calendar-workspace .admin-hero-meta-item strong,
+.policy-workspace .admin-hero-meta-item strong,
+.tea-workspace .admin-hero-meta-item strong,
+.manager-leave-workspace .admin-hero-meta-item strong {
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.leave-workspace .admin-dashboard-grid,
+.leave-workspace .admin-dashboard-grid-compact,
+.calendar-summary-grid,
+.policy-summary-grid,
+.tea-summary-grid,
+.tea-employee-summary {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 6px;
+}
+
+.leave-workspace .fiori-stat-card,
+.calendar-summary-grid .fiori-stat-card,
+.policy-summary-grid .fiori-stat-card,
+.tea-summary-grid .fiori-stat-card,
+.tea-employee-summary .fiori-stat-card {
+  min-height: 0;
+  padding: 8px;
+}
+
+.leave-workspace .fiori-stat-card .fiori-stat-note,
+.calendar-summary-grid .fiori-stat-card .fiori-stat-note,
+.policy-summary-grid .fiori-stat-card .fiori-stat-note,
+.tea-summary-grid .fiori-stat-card .fiori-stat-note,
+.tea-employee-summary .fiori-stat-card .fiori-stat-note,
+.calendar-summary-grid .fiori-inline-link,
+.policy-summary-grid .fiori-inline-link,
+.tea-summary-grid .fiori-inline-link {
+  display: none;
+}
+
+.leave-workspace .fiori-stat-topline,
+.calendar-summary-grid .fiori-stat-topline,
+.policy-summary-grid .fiori-stat-topline,
+.tea-summary-grid .fiori-stat-topline,
+.tea-employee-summary .fiori-stat-topline {
+  margin-bottom: 4px;
+}
+
+.leave-workspace .fiori-stat-value,
+.calendar-summary-grid .fiori-stat-value,
+.policy-summary-grid .fiori-stat-value,
+.tea-summary-grid .fiori-stat-value,
+.tea-employee-summary .fiori-stat-value {
+  font-size: 1.1rem;
+}
+
+.leave-workspace .fiori-stat-label,
+.calendar-summary-grid .fiori-stat-label,
+.policy-summary-grid .fiori-stat-label,
+.tea-summary-grid .fiori-stat-label,
+.tea-employee-summary .fiori-stat-label {
+  font-size: 10px;
+}
+
+.leave-workspace .fiori-stat-topline svg,
+.calendar-summary-grid .fiori-stat-topline svg,
+.policy-summary-grid .fiori-stat-topline svg,
+.tea-summary-grid .fiori-stat-topline svg,
+.tea-employee-summary .fiori-stat-topline svg {
+  width: 14px;
+  height: 14px;
+}
+
+.leave-workspace .fiori-panel,
+.enterprise-calendar-workspace .fiori-panel,
+.policy-workspace .fiori-panel,
+.tea-workspace .fiori-panel {
+  padding: 10px;
+}
+
+.leave-workspace .fiori-panel-header p,
+.enterprise-calendar-workspace .fiori-panel-header p,
+.policy-workspace .fiori-panel-header p,
+.tea-workspace .fiori-panel-header p {
+  display: none;
+}
+
+.policy-library-card,
+.tea-day-card,
+.tea-admin-day-card,
+.calendar-list-card,
+.employee-balance-card,
+.manager-approval-card,
+.admin-approval-card {
+  min-height: 0;
+}
+
+.policy-card-grid,
+.tea-admin-grid,
+.tea-employee-grid {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+.enterprise-calendar-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.enterprise-calendar-day {
+  min-height: 24px;
+  font-size: 11px;
+}
+
+.enterprise-calendar-day-number {
+  font-size: 11px;
+}
+
+.tea-day-top strong,
+.tea-admin-day-top h3,
+.policy-library-card h3 {
+  font-size: 0.9rem;
+}
+
+.tea-day-state,
+.tea-day-top span,
+.policy-library-card p,
+.calendar-list-card p {
+  font-size: 11px;
+}
+
+.tea-beverage-pill,
+.tea-option-chip,
+.fiori-status-pill {
+  min-height: 20px;
+}
+
+/* Employee Leave Management: compact apply + history workspace */
+.employee-workspace .employee-leave-layout {
+  grid-template-columns: minmax(360px, 0.86fr) minmax(620px, 1.14fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.employee-apply-panel,
+.employee-history-panel {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.employee-apply-panel .fiori-panel-header,
+.employee-history-panel .fiori-panel-header {
+  margin-bottom: 8px;
+}
+
+.employee-apply-panel .employee-form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.employee-apply-panel .fiori-form-field,
+.employee-history-panel .fiori-form-field {
+  gap: 4px;
+}
+
+.employee-apply-panel .fiori-form-field label,
+.employee-history-panel .fiori-form-field label,
+.employee-history-panel .leave-field-label {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.employee-apply-panel .input,
+.employee-apply-panel textarea,
+.employee-history-panel .input,
+.employee-history-panel .value-help-search-field {
+  min-height: 30px;
+  padding: 7px 9px;
+  font-size: 12px;
+  border-radius: 7px;
+}
+
+.employee-apply-panel textarea {
+  min-height: 58px;
+  resize: vertical;
+}
+
+.employee-apply-panel .employee-policy-callout {
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  gap: 8px;
+  border-radius: 8px;
+}
+
+.employee-apply-panel .employee-policy-callout strong {
+  margin-bottom: 2px;
+  font-size: 12px;
+}
+
+.employee-apply-panel .employee-policy-callout p {
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.employee-apply-panel .employee-halfday-panel {
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+.employee-apply-panel .employee-checkbox-row,
+.employee-apply-panel .employee-radio-row label {
+  gap: 6px;
+  font-size: 12px;
+}
+
+.employee-apply-panel .employee-radio-row {
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.employee-apply-panel .admin-modal-actions {
+  margin-top: 8px;
+  padding-top: 0;
+}
+
+.employee-apply-panel .fiori-button.full-width {
+  min-height: 32px;
+}
+
+.employee-history-panel .leave-filter-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  align-items: end;
+}
+
+.employee-history-panel .employee-history-search {
+  grid-column: 1 / -1;
+}
+
+.employee-history-panel .leave-filter-grid > .fiori-form-field:nth-child(2),
+.employee-history-panel .leave-filter-grid > .fiori-form-field:nth-child(3),
+.employee-history-panel .leave-filter-grid > .fiori-form-field:nth-child(4) {
+  grid-column: span 2;
+}
+
+.employee-history-panel .leave-filter-grid > .fiori-form-field:nth-child(5),
+.employee-history-panel .leave-filter-grid > .fiori-form-field:nth-child(6) {
+  grid-column: span 3;
+}
+
+.employee-history-panel .employee-history-toolbar {
+  margin: 6px 0 8px;
+  padding-bottom: 6px;
+}
+
+.employee-history-panel .leave-results-meta {
+  font-size: 11px;
+}
+
+.employee-history-panel .fiori-table-shell {
+  border-radius: 8px;
+  max-height: none;
+  overflow: hidden;
+}
+
+.employee-history-panel .employee-history-table {
+  font-size: 12px;
+  min-width: 0;
+  width: 100%;
+  table-layout: fixed;
+}
+
+.employee-history-panel .employee-history-table th {
+  padding: 7px 10px;
+  font-size: 10px;
+}
+
+.employee-history-panel .employee-history-table td {
+  padding: 8px 10px;
+  font-size: 12px;
+  vertical-align: top;
+}
+
+.employee-history-panel .employee-history-primary {
+  gap: 2px;
+}
+
+.employee-history-panel .employee-history-primary strong,
+.employee-history-panel .employee-history-period strong {
+  font-size: 12px;
+}
+
+.employee-history-panel .employee-history-reason {
+  -webkit-line-clamp: 1;
+  font-size: 11px;
+}
+
+.employee-history-panel .employee-history-period {
+  gap: 1px;
+}
+
+.employee-history-panel .employee-history-period span {
+  display: none;
+}
+
+.employee-history-panel .employee-table-actions {
+  gap: 4px;
+}
+
+.employee-history-panel .employee-history-table .fiori-button {
+  min-width: 0;
+  min-height: 26px;
+  padding: 0 9px;
+  font-size: 11px;
+}
+
+.employee-history-panel .employee-history-table th:nth-child(1),
+.employee-history-panel .employee-history-table td:nth-child(1) {
+  width: 32%;
+}
+
+.employee-history-panel .employee-history-table th:nth-child(2),
+.employee-history-panel .employee-history-table td:nth-child(2) {
+  width: 20%;
+}
+
+.employee-history-panel .employee-history-table th:nth-child(3),
+.employee-history-panel .employee-history-table td:nth-child(3) {
+  width: 8%;
+}
+
+.employee-history-panel .employee-history-table th:nth-child(4),
+.employee-history-panel .employee-history-table td:nth-child(4) {
+  width: 14%;
+}
+
+.employee-history-panel .employee-history-table th:nth-child(5),
+.employee-history-panel .employee-history-table td:nth-child(5) {
+  width: 14%;
+}
+
+.employee-history-panel .employee-history-table th:nth-child(6),
+.employee-history-panel .employee-history-table td:nth-child(6) {
+  width: 12%;
+}
+
+.employee-history-panel .employee-history-type-cell,
+.employee-history-panel .employee-history-period-cell {
+  overflow-wrap: anywhere;
+}
+
+.employee-history-panel .employee-history-actions-cell .fiori-stat-note {
+  white-space: normal;
+}
+
+.leave-history-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid #edf1f5;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.leave-history-page-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.leave-history-page-controls .fiori-button {
+  min-height: 28px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+.leave-history-page-number {
+  min-width: 28px;
+  height: 28px;
+  border: 1px solid #d9dfe6;
+  border-radius: 7px;
+  background: #fff;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.leave-history-page-number.is-active {
+  background: #0a6ed1;
+  border-color: #0a6ed1;
+  color: #fff;
+}
+
+.leave-history-page-gap {
+  padding: 0 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tea-history-shell {
+  max-height: 285px;
+  overflow: auto;
+}
+
+.tea-history-table {
+  table-layout: fixed;
+}
+
+.tea-history-table th,
+.tea-history-table td {
+  padding: 7px 8px;
+  font-size: 12px;
+}
+
+.tea-history-table th {
+  font-size: 10px;
+}
+
+.tea-history-table .tea-beverage-pill {
+  min-height: 20px;
+  padding: 0 7px;
+  font-size: 11px;
+}
+
+.tea-history-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #edf1f5;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tea-history-pagination div {
+  display: flex;
+  gap: 6px;
+}
+
+.tea-history-pagination .fiori-button {
+  min-height: 28px;
+  padding: 0 9px;
+  font-size: 11px;
+}
+
+.tea-workspace .employee-directory-filters.employee-directory-filters-extended {
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+@media (max-width: 1100px) {
+  .employee-workspace .employee-leave-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .employee-apply-panel,
+  .employee-history-panel {
+    min-height: 0;
+  }
+
+  .employee-history-panel .leave-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .employee-history-panel .leave-filter-grid > .fiori-form-field:nth-child(n) {
+    grid-column: auto;
+  }
+
+  .employee-history-panel .employee-history-search {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 720px) {
+  .leave-history-pagination {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .leave-history-page-controls {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 700px) {
+  .tea-history-pagination {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .tea-history-pagination div,
+  .tea-history-pagination .fiori-button {
+    width: 100%;
+  }
+
+  .tea-workspace .employee-directory-filters.employee-directory-filters-extended {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1200px) {
+  .enterprise-calendar-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .enterprise-calendar-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .enterprise-calendar-grid {
+    grid-template-columns: 1fr;
   }
 }

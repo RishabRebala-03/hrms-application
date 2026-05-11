@@ -47,13 +47,13 @@
 }
 
 .mte-portal-content {
-  padding: 8px 0 20px;
+  padding: 6px 0 14px;
 }
 
 .mte-module-stack {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 12px;
 }
 
 .mte-subtabs {
@@ -72,8 +72,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 8px 0 6px;
+  gap: 10px;
+  padding: 6px 0;
 }
 
 .mte-date-picker-group,
@@ -206,7 +206,7 @@
   margin: 0;
   border: 1px solid #dcdfe5;
   background: #fff;
-  border-radius: 14px;
+  border-radius: 10px;
   box-shadow: 0 8px 18px rgba(15, 39, 66, 0.04);
 }
 
@@ -221,24 +221,24 @@
 .mte-module-toolbar {
   justify-content: space-between;
   flex-wrap: wrap;
-  padding: 16px 18px;
+  padding: 12px 14px;
   border-bottom: 1px solid #e4e4e4;
 }
 
 .mte-module-card-header h3 {
   margin: 0;
-  font-size: 22px;
+  font-size: 18px;
   font-weight: 400;
 }
 
 .mte-empty-state {
-  min-height: 280px;
+  min-height: 180px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  padding: 24px;
+  padding: 16px;
   text-align: center;
   color: #7d838a;
   background: #fff;
@@ -336,7 +336,7 @@
 .mte-simple-table td,
 .mte-locations-grid th,
 .mte-locations-grid td {
-  padding: 14px 10px;
+  padding: 9px 8px;
   border-bottom: 1px solid #e5e5e5;
   text-align: left;
   font-size: 13px;
@@ -434,11 +434,11 @@
 
 .mte-sheet-meta-cell,
 .mte-sheet-meta-total {
-  padding: 10px 8px;
+  padding: 8px 6px;
 }
 
 .mte-sheet-spacer-row td {
-  height: 34px;
+  height: 24px;
   border-left: 1px solid #ececec;
   border-bottom: 2px solid #222;
   background: #fff;
@@ -488,7 +488,7 @@
 
 .mte-sheet-static-value-cell,
 .mte-sheet-static-total-cell {
-  padding: 10px 8px;
+  padding: 8px 6px;
   text-align: center;
   font-size: 13px;
   color: #343434;
@@ -499,7 +499,7 @@
 }
 
 .mte-sheet-checkbox-cell {
-  padding: 10px 8px;
+  padding: 8px 6px;
   text-align: center;
 }
 
@@ -522,14 +522,14 @@
 
 .mte-adjustments-list {
   display: grid;
-  gap: 14px;
-  padding: 18px;
+  gap: 10px;
+  padding: 12px;
 }
 
 .mte-adjustments-list article {
   border: 1px solid #ece8f6;
   background: #faf8ff;
-  padding: 16px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -543,8 +543,8 @@
 .mte-preferences-grid {
   display: grid;
   grid-template-columns: minmax(220px, 1fr) 24px minmax(220px, 1fr) minmax(220px, 0.8fr);
-  gap: 18px 14px;
-  padding: 20px;
+  gap: 12px;
+  padding: 14px;
 }
 
 .mte-pref-field {
@@ -843,10 +843,10 @@
 }
 
 .mte-locations-actions {
-  min-height: 70px;
+  min-height: 52px;
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 12px;
   padding: 10px 14px;
   border-bottom: 1px solid #d9d9d9;
 }
@@ -896,7 +896,7 @@
 }
 
 .mte-locations-date-strip > div {
-  min-height: 58px;
+  min-height: 44px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -908,7 +908,7 @@
 
 .mte-locations-date-strip > div:first-child {
   align-items: flex-start;
-  padding-left: 18px;
+  padding-left: 12px;
 }
 
 .mte-locations-date-strip > div.is-weekend {
@@ -933,7 +933,7 @@
 
 .mte-locations-add-row label {
   grid-column: 1 / -1;
-  min-height: 42px;
+  min-height: 34px;
   display: flex;
   align-items: center;
   padding: 0 14px;
@@ -943,7 +943,7 @@
 }
 
 .mte-locations-add-row button {
-  min-height: 48px;
+  min-height: 40px;
   border: none;
   border-right: 1px solid #1f1f1f;
   background: #fff;
@@ -958,10 +958,10 @@
 
 .mte-locations-add-row p {
   margin: 0;
-  min-height: 48px;
+  min-height: 40px;
   display: flex;
   align-items: center;
-  padding: 0 28px;
+  padding: 0 16px;
   color: #555;
 }
 
@@ -974,8 +974,8 @@
 .mte-locations-card {
   border-right: 1px solid #d3d3d3;
   border-bottom: 1px solid #d3d3d3;
-  padding: 18px 18px 28px;
-  min-height: 280px;
+  padding: 12px 14px 16px;
+  min-height: 190px;
   background: #fdfdfd;
 }
 
@@ -983,7 +983,7 @@
   display: flex;
   flex-direction: column;
   gap: 7px;
-  margin-bottom: 18px;
+  margin-bottom: 12px;
   color: #606060;
   font-size: 14px;
 }
@@ -1016,19 +1016,19 @@
 }
 
 .mte-locations-info {
-  padding: 16px 24px;
+  padding: 12px 14px;
 }
 
 .mte-locations-info p {
-  margin: 0 0 18px;
-  min-height: 82px;
+  margin: 0 0 12px;
+  min-height: 54px;
   display: flex;
   align-items: center;
-  padding: 0 20px;
+  padding: 0 14px;
   border-radius: 7px;
   background: #d9eef2;
   color: #2f4f58;
-  font-size: 18px;
+  font-size: 14px;
   line-height: 1.55;
 }
 
@@ -1116,7 +1116,7 @@
 }
 
 .mte-summary-actions {
-  min-height: 58px;
+  min-height: 46px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -1157,7 +1157,7 @@
 .mte-summary-table td {
   border-right: 1px solid #d0d0d0;
   border-bottom: 1px solid #d0d0d0;
-  padding: 11px 10px;
+  padding: 8px;
   color: #2a2a2a;
   font-size: 13px;
   background: #fff;
@@ -1205,7 +1205,7 @@
 
 .mte-summary-location-table {
   width: min(620px, calc(100% - 28px));
-  margin: 18px 14px 0;
+  margin: 12px 14px 0;
   border-collapse: collapse;
   table-layout: fixed;
 }
@@ -1213,7 +1213,7 @@
 .mte-summary-location-table th,
 .mte-summary-location-table td {
   border: 1px solid #cfcfcf;
-  padding: 12px 14px;
+  padding: 9px 10px;
   font-size: 13px;
   color: #242424;
 }
@@ -1234,14 +1234,14 @@
 }
 
 .mte-summary-leave-copy {
-  margin: 18px 14px 0;
+  margin: 12px 14px 0;
   color: #222;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.45;
 }
 
 .mte-summary-leave-copy p {
-  margin: 0 0 11px;
+  margin: 0 0 8px;
 }
 
 .mte-summary-leave-copy strong {
@@ -1249,7 +1249,7 @@
 }
 
 .mte-summary-group {
-  margin: 18px 14px 0;
+  margin: 12px 14px 0;
   border: 1px solid #dcdfe5;
   background: #fff;
 }
@@ -1259,13 +1259,13 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 16px;
+  padding: 10px 12px;
   border-bottom: 1px solid #e5e7ec;
 }
 
 .mte-summary-group-header h3 {
   margin: 0;
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 600;
   color: #24272c;
 }

@@ -24,7 +24,6 @@ import {
 } from "recharts";
 import OrganizationHierarchy from "./OrganizationHierarchy";
 import LeaveStatusDot from "./LeaveStatusDot";
-import BannerImage from "../assets/banner.jpg";
 
 const CHART_COLORS = ["#0a6ed1", "#188918", "#d97706", "#bb0000", "#7c3aed"];
 
@@ -329,35 +328,33 @@ const EmployeeDashboard = ({ user, setSection }) => {
   const overviewCards = useMemo(
     () => [
       {
-        label: "Requests raised",
-        value: stats.totalLeaves,
-        note: "Open complete leave history",
+        label: "Balance",
+        value: totalBalance,
+        note: `${leaveBalanceCards.length} leave categories tracked`,
         icon: CalendarDays,
-        payload: { source: "dashboard-overview" },
       },
       {
         label: "Pending review",
         value: stats.pendingLeaves,
-        note: "Check requests awaiting approval",
+        note: stats.pendingLeaves ? "Awaiting approval action" : "No action needed",
         icon: Clock3,
-        payload: { source: "dashboard-overview", historyFilterStatus: "pending" },
       },
       {
-        label: "Approved",
-        value: stats.approvedLeaves,
-        note: "Review approved leave records",
+        label: "Next holiday",
+        value: upcomingHolidays.length
+          ? formatDate(upcomingHolidays[0].date).split(" ").slice(0, 2).join(" ")
+          : "-",
+        note: upcomingHolidays.length ? upcomingHolidays[0].name || "Upcoming holiday" : "No upcoming holidays listed",
         icon: ShieldCheck,
-        payload: { source: "dashboard-overview", historyFilterStatus: "approved" },
       },
       {
-        label: "Rejected",
-        value: stats.rejectedLeaves,
-        note: "See requests that need changes",
+        label: "Team view",
+        value: stats.totalTeamMembers,
+        note: stats.totalTeamMembers ? "Direct reportees visible" : "Individual contributor",
         icon: Users,
-        payload: { source: "dashboard-overview", historyFilterStatus: "rejected" },
       },
     ],
-    [stats]
+    [leaveBalanceCards.length, stats, totalBalance, upcomingHolidays]
   );
 
   if (loading) {
@@ -405,15 +402,14 @@ const EmployeeDashboard = ({ user, setSection }) => {
           </h1>
 
           <div className="employee-hero-actions">
-            <button className="fiori-button primary employee-apply-button" onClick={() => openLeaves()}>
-              Apply for leave
-              <ArrowRight size={16} />
-            </button>
             <button
-              className="fiori-button secondary"
+              className="fiori-button primary"
               onClick={() => openSection("calendar", { focusYear: new Date().getFullYear() })}
             >
               Open calendar
+            </button>
+            <button className="fiori-button secondary" onClick={() => openSection("profile")}>
+              View profile
             </button>
           </div>
         </div>
@@ -438,38 +434,12 @@ const EmployeeDashboard = ({ user, setSection }) => {
         </div>
       </header>
 
-      <section className="fiori-panel employee-banner-panel" tabIndex={0}>
-        <div className="employee-banner-shell">
-          <img src={BannerImage} alt="Employee workspace welcome banner" className="employee-banner-image" />
-          <div className="employee-banner-overlay">
-            <div className="employee-banner-copy">
-              <div className="admin-section-overline">Employee workspace</div>
-              <h3>Approvals, balances, and dates in one cleaner view</h3>
-              <p>
-                Jump into leave actions, analytics, and calendar details from a workspace that
-                feels lighter, friendlier, and easier to use every day.
-              </p>
-
-              <div className="employee-banner-points">
-                <span>{totalBalance} days available</span>
-                <span>{stats.pendingLeaves} pending requests</span>
-                <span>{upcomingHolidays.length} upcoming holidays</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <div className="admin-dashboard-grid admin-dashboard-grid-compact">
         {overviewCards.map((card) => {
           const Icon = card.icon;
 
           return (
-            <article
-              key={card.label}
-              className="fiori-stat-card is-actionable"
-              onClick={() => openLeaves(card.payload)}
-            >
+            <article key={card.label} className="fiori-stat-card">
               <div className="fiori-stat-topline">
                 <span className="fiori-stat-label">{card.label}</span>
                 <Icon size={18} />

@@ -83,6 +83,8 @@ const messageTone = (message) =>
     ? "is-error"
     : "is-success";
 
+const HISTORY_PAGE_SIZE = 6;
+
 const handleCardKeyDown = (event, action) => {
   if (event.key === "Enter" || event.key === " ") {
     event.preventDefault();
@@ -118,6 +120,7 @@ const EmployeeLeaves = ({ user, navigationState }) => {
   const [historyFilterType, setHistoryFilterType] = useState("all");
   const [historyDateRange, setHistoryDateRange] = useState({ start: "", end: "" });
   const [historySortBy, setHistorySortBy] = useState("newest");
+  const [historyPage, setHistoryPage] = useState(1);
   const [activeTab, setActiveTab] = useState("my-leaves");
   const [calendarFocusDate, setCalendarFocusDate] = useState("");
 
@@ -590,6 +593,18 @@ const EmployeeLeaves = ({ user, navigationState }) => {
   );
 
   const displayHistory = useMemo(() => getFilteredAndSortedHistory(history), [getFilteredAndSortedHistory, history]);
+  useEffect(() => {
+    setHistoryPage(1);
+  }, [calendarFocusDate, historyDateRange, historyFilterStatus, historyFilterType, historySearchTerm, historySortBy]);
+
+  const historyPageCount = Math.max(1, Math.ceil(displayHistory.length / HISTORY_PAGE_SIZE));
+  const visibleHistory = displayHistory.slice(
+    (historyPage - 1) * HISTORY_PAGE_SIZE,
+    historyPage * HISTORY_PAGE_SIZE
+  );
+  const historyPageNumbers = Array.from({ length: historyPageCount }, (_, index) => index + 1).filter(
+    (page) => page === 1 || page === historyPageCount || Math.abs(page - historyPage) <= 1
+  );
   const historySearchSuggestions = useMemo(
     () => buildSuggestions(history, ["leave_type", "reason", "status"]),
     [history]
@@ -735,7 +750,7 @@ const EmployeeLeaves = ({ user, navigationState }) => {
 
       {activeTab === "my-leaves" ? (
         <div className="employee-leave-layout">
-          <section className="fiori-panel" id="employee-leave-history">
+          <section className="fiori-panel employee-apply-panel">
             <div className="fiori-panel-header">
               <div>
                 <h3>Apply for leave</h3>
@@ -874,7 +889,7 @@ const EmployeeLeaves = ({ user, navigationState }) => {
             <div className="fiori-form-field">
               <label>Reason</label>
               <textarea
-                rows={4}
+                rows={2}
                 value={leave.reason}
                 onChange={(event) => setLeave((previous) => ({ ...previous, reason: event.target.value }))}
                 placeholder="Share the context for your request"
@@ -892,7 +907,7 @@ const EmployeeLeaves = ({ user, navigationState }) => {
             </div>
           </section>
 
-          <section className="fiori-panel">
+          <section className="fiori-panel employee-history-panel" id="employee-leave-history">
             <div className="fiori-panel-header">
               <div>
                 <h3>Leave history</h3>
@@ -1033,7 +1048,7 @@ const EmployeeLeaves = ({ user, navigationState }) => {
                     </tr>
                   </thead>
                   <tbody>
-                    {displayHistory.map((item) => (
+                    {visibleHistory.map((item) => (
                       <tr
                         key={item._id}
                         className={
@@ -1090,6 +1105,50 @@ const EmployeeLeaves = ({ user, navigationState }) => {
                 </table>
               </div>
             )}
+
+            {displayHistory.length > HISTORY_PAGE_SIZE ? (
+              <div className="leave-history-pagination">
+                <span>
+                  Showing {(historyPage - 1) * HISTORY_PAGE_SIZE + 1}-
+                  {Math.min(historyPage * HISTORY_PAGE_SIZE, displayHistory.length)} of {displayHistory.length}
+                </span>
+                <div className="leave-history-page-controls">
+                  <button
+                    type="button"
+                    className="fiori-button secondary"
+                    onClick={() => setHistoryPage((page) => Math.max(1, page - 1))}
+                    disabled={historyPage === 1}
+                  >
+                    Prev
+                  </button>
+                  {historyPageNumbers.map((page, index) => {
+                    const previousPage = historyPageNumbers[index - 1];
+                    return (
+                      <React.Fragment key={page}>
+                        {previousPage && page - previousPage > 1 ? (
+                          <span className="leave-history-page-gap">...</span>
+                        ) : null}
+                        <button
+                          type="button"
+                          className={`leave-history-page-number ${historyPage === page ? "is-active" : ""}`}
+                          onClick={() => setHistoryPage(page)}
+                        >
+                          {page}
+                        </button>
+                      </React.Fragment>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    className="fiori-button secondary"
+                    onClick={() => setHistoryPage((page) => Math.min(historyPageCount, page + 1))}
+                    disabled={historyPage === historyPageCount}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </section>
         </div>
       ) : (

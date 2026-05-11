@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import OrganizationHierarchy from "./OrganizationHierarchy";
 import LeaveStatusDot from "./LeaveStatusDot";
-import BannerImage from "../assets/banner.jpg";
 
 const statusToneMap = {
   Approved: "is-approved",
@@ -256,19 +255,6 @@ const ManagerDashboard = ({ user, onNavigateToProfile }) => {
           </div>
         </div>
       </header>
-
-      <section className="fiori-panel employee-banner-panel" tabIndex={0}>
-        <div className="employee-banner-shell">
-          <img src={BannerImage} alt="Manager workspace banner" className="employee-banner-image" />
-          <div className="employee-banner-overlay">
-            <div className="employee-banner-copy">
-              <div className="admin-section-overline">Team overview</div>
-              <h3>Approvals, availability, and reportees in one compact view</h3>
-              <p>Use the dashboard sections below to keep daily team operations moving.</p>
-            </div>
-          </div>
-        </div>
-      </section>
 
       <div className="admin-dashboard-grid">
         {summaryCards.map((card) => {

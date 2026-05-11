@@ -21,6 +21,7 @@ import "../App.css";
 const API_BASE = `${process.env.REACT_APP_BACKEND_URL}/api/tea_coffee`;
 const MORNING_CUTOFF = "10:30";
 const EVENING_CUTOFF = "14:30";
+const EMPLOYEE_HISTORY_PAGE_SIZE = 6;
 const BEVERAGE_OPTIONS = ["tea", "coffee", "milk"];
 const ADMIN_TABS = [
   { key: "daily", label: "Daily demand" },
@@ -685,26 +686,6 @@ const AdminView = ({
           <p>
             Manage employee orders, guest requests, and service availability from a clean hospitality workspace.
           </p>
-          <div className="admin-hero-brief-grid">
-            <article className="admin-hero-brief-card">
-              <h3>Daily Service</h3>
-              <div className="admin-hero-note" style={{ marginTop: 0 }}>
-                Use the daily tab to review upcoming order demand and open employee lists by date when needed.
-              </div>
-            </article>
-            <article className="admin-hero-brief-card">
-              <h3>Guest Orders</h3>
-              <div className="admin-hero-note" style={{ marginTop: 0 }}>
-                The guest section is meant for ad hoc catering requests including tea, coffee, milk, and custom snack entries.
-              </div>
-            </article>
-            <article className="admin-hero-brief-card">
-              <h3>Availability Control</h3>
-              <div className="admin-hero-note" style={{ marginTop: 0 }}>
-                Use blocked dates and history together to keep pantry operations predictable without cluttering the header with counts.
-              </div>
-            </article>
-          </div>
         </div>
 
         <div className="admin-hero-meta">
@@ -1199,6 +1180,7 @@ const TeaCoffee = ({ user }) => {
       dateTo: today,
     };
   });
+  const [employeeHistoryPage, setEmployeeHistoryPage] = useState(1);
 
   const isAdmin = ["Admin", "admin", "System Administrator", "Administrator", "system-admin"].includes(
     (user?.role || "").trim()
@@ -1558,6 +1540,20 @@ const TeaCoffee = ({ user }) => {
     });
   }, [employeeHistoryFilters, historyOrders]);
 
+  useEffect(() => {
+    setEmployeeHistoryPage(1);
+  }, [employeeHistoryFilters]);
+
+  const employeeHistoryPageCount = Math.max(
+    1,
+    Math.ceil(filteredEmployeeHistoryOrders.length / EMPLOYEE_HISTORY_PAGE_SIZE)
+  );
+
+  const visibleEmployeeHistoryOrders = filteredEmployeeHistoryOrders.slice(
+    (employeeHistoryPage - 1) * EMPLOYEE_HISTORY_PAGE_SIZE,
+    employeeHistoryPage * EMPLOYEE_HISTORY_PAGE_SIZE
+  );
+
   const filteredAdminHistoryOrders = useMemo(() => {
     const search = (adminHistoryFilters.search || "").trim().toLowerCase();
 
@@ -1844,7 +1840,7 @@ const TeaCoffee = ({ user }) => {
         <div className="fiori-panel-header">
           <div>
             <h3>My Past Orders</h3>
-            <p>Historical beverage orders you have already placed.</p>
+            <p>{filteredEmployeeHistoryOrders.length} historical beverage orders found.</p>
           </div>
           <button className="fiori-button secondary" onClick={exportEmployeeHistory} disabled={!historyOrders.length}>
             <Download size={16} />
@@ -1898,8 +1894,8 @@ const TeaCoffee = ({ user }) => {
             </div>
           </div>
         ) : (
-          <div className="fiori-table-shell">
-            <table className="fiori-table">
+          <div className="fiori-table-shell tea-history-shell">
+            <table className="fiori-table tea-history-table">
               <thead>
                 <tr>
                   <th>Date</th>
@@ -1908,7 +1904,7 @@ const TeaCoffee = ({ user }) => {
                 </tr>
               </thead>
               <tbody>
-                {filteredEmployeeHistoryOrders.map((order) => (
+                {visibleEmployeeHistoryOrders.map((order) => (
                   <tr key={`${order.date}-${order._id || "history"}`}>
                     <td>{formatDateLabel(order.date).full}</td>
                     <td>{order.morning ? <BeveragePill beverage={order.morning} /> : "—"}</td>
@@ -1919,6 +1915,34 @@ const TeaCoffee = ({ user }) => {
             </table>
           </div>
         )}
+
+        {filteredEmployeeHistoryOrders.length > EMPLOYEE_HISTORY_PAGE_SIZE ? (
+          <div className="tea-history-pagination">
+            <span>
+              Showing {(employeeHistoryPage - 1) * EMPLOYEE_HISTORY_PAGE_SIZE + 1}-
+              {Math.min(employeeHistoryPage * EMPLOYEE_HISTORY_PAGE_SIZE, filteredEmployeeHistoryOrders.length)} of{" "}
+              {filteredEmployeeHistoryOrders.length}
+            </span>
+            <div>
+              <button
+                type="button"
+                className="fiori-button secondary"
+                onClick={() => setEmployeeHistoryPage((page) => Math.max(1, page - 1))}
+                disabled={employeeHistoryPage === 1}
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                className="fiori-button secondary"
+                onClick={() => setEmployeeHistoryPage((page) => Math.min(employeeHistoryPageCount, page + 1))}
+                disabled={employeeHistoryPage === employeeHistoryPageCount}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        ) : null}
       </section>
 
       {selectedDate ? (

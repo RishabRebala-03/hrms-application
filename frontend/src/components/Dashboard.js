@@ -327,11 +327,6 @@ const AdminDashboard = ({ user, onNavigate }) => {
       .slice(0, 6);
   }, [allEmployees]);
 
-  const topDepartment = useMemo(() => {
-    if (!departmentHeadcountData.length) return null;
-    return departmentHeadcountData[0];
-  }, [departmentHeadcountData]);
-
   const leaveStatusData = useMemo(() => {
     const statusOrder = ["Pending", "Approved", "Rejected", "Cancelled"];
     const counts = allLeaves.reduce((accumulator, leave) => {
@@ -542,81 +537,6 @@ const AdminDashboard = ({ user, onNavigate }) => {
           </div>
         </div>
       </header>
-
-      <section className="fiori-panel admin-command-center">
-        <div className="admin-command-center-shell">
-          <div className="admin-command-center-overlay">
-            <div className="admin-command-center-copy">
-              <div className="admin-section-overline">Operational command center</div>
-              <h3>Welcome back. Keep decisions, capacity, and governance in motion.</h3>
-
-              <div className="admin-command-center-points">
-                <span>{stats.totalEmployees} employee records in scope</span>
-                <span>{approvalRate}% overall approval rate</span>
-                <span>{topDepartment ? `${topDepartment.fullName} leads headcount` : "Department mix available"}</span>
-              </div>
-
-              <div className="admin-command-center-actions">
-                <button className="fiori-button primary" onClick={() => handleNavigate("leaves")}>
-                  Review leave queue
-                </button>
-                <button className="fiori-button secondary" onClick={() => handleNavigate("logs")}>
-                  Open audit logs
-                </button>
-              </div>
-            </div>
-
-            <div className="admin-command-center-side">
-              <article className="admin-command-side-card is-primary">
-                <div className="admin-command-side-top">
-                  <span>Today at a glance</span>
-                  <Building2 size={18} />
-                </div>
-                <div className="admin-command-side-value">{stats.workingToday}</div>
-                <p>Employees currently available for active business operations.</p>
-              </article>
-
-              <div className="admin-command-mini-grid">
-                <button className="admin-command-mini-card" onClick={() => handleNavigate("leaves")}>
-                  <div className="admin-command-mini-top">
-                    <span>Approval queue</span>
-                    <Clock3 size={16} />
-                  </div>
-                  <strong>{stats.pendingLeaves}</strong>
-                  <small>Awaiting review</small>
-                </button>
-
-                <button className="admin-command-mini-card" onClick={() => setShowOnLeaveModal(true)}>
-                  <div className="admin-command-mini-top">
-                    <span>Absences</span>
-                    <CalendarRange size={16} />
-                  </div>
-                  <strong>{stats.onLeaveToday}</strong>
-                  <small>On approved leave today</small>
-                </button>
-
-                <button className="admin-command-mini-card" onClick={() => handleNavigate("employees")}>
-                  <div className="admin-command-mini-top">
-                    <span>Headcount</span>
-                    <Users size={16} />
-                  </div>
-                  <strong>{stats.totalEmployees}</strong>
-                  <small>People in HRMS</small>
-                </button>
-
-                <button className="admin-command-mini-card" onClick={() => setShowHierarchy(true)}>
-                  <div className="admin-command-mini-top">
-                    <span>Governance</span>
-                    <GitBranch size={16} />
-                  </div>
-                  <strong>{departmentCoverage}</strong>
-                  <small>Departments covered</small>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
 
       <div className="admin-dashboard-grid">
         {summaryCards.map((card) => {

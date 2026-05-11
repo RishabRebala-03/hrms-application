@@ -699,26 +699,6 @@ const AdminLeaves = ({ user }) => {
           <p>
             Handle requests, review employee context, and move through approvals without the page feeling overloaded.
           </p>
-          <div className="admin-hero-brief-grid">
-            <article className="admin-hero-brief-card">
-              <h3>Approval Workspace</h3>
-              <div className="admin-hero-note" style={{ marginTop: 0 }}>
-                Review pending requests, open employee history, and act from one place without jumping between views.
-              </div>
-            </article>
-            <article className="admin-hero-brief-card">
-              <h3>What Lives Here</h3>
-              <div className="admin-hero-note" style={{ marginTop: 0 }}>
-                Filters, history, employee details, and approval actions stay grouped below so the flow remains easy to scan.
-              </div>
-            </article>
-            <article className="admin-hero-brief-card">
-              <h3>Admin Intent</h3>
-              <div className="admin-hero-note" style={{ marginTop: 0 }}>
-                Use this section to process leave cleanly, keep records consistent, and resolve cases with full context visible.
-              </div>
-            </article>
-          </div>
         </div>
 
         <div className="admin-hero-meta">

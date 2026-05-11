@@ -58,35 +58,35 @@ const C = {
 // ─── Shared style objects ────────────────────────────────────────────────────
 const S = {
   page:        { background: C.bg, width: '100%', boxSizing: 'border-box', minWidth: 0 },
-  inner:       { padding: '20px 16px' },
+  inner:       { padding: '14px 12px' },
   maxW:        { maxWidth: '100%', margin: '0 auto', boxSizing: 'border-box' },
-  pageHeader:  { marginBottom: '24px' },
-  pageTitle:   { fontSize: '28px', fontWeight: '400', color: C.text, margin: '0 0 6px 0' },
-  pageSub:     { fontSize: '14px', color: C.textMid, margin: 0 },
+  pageHeader:  { marginBottom: '14px' },
+  pageTitle:   { fontSize: '22px', fontWeight: '400', color: C.text, margin: '0 0 4px 0' },
+  pageSub:     { fontSize: '13px', color: C.textMid, margin: 0 },
 
   card: {
     background: C.white, borderRadius: '6px',
     boxShadow: '0 1px 3px rgba(0,0,0,0.06)', border: `1px solid ${C.border}`,
   },
-  cardPad:   { padding: '20px' },
-  cardPadSm: { padding: '16px' },
+  cardPad:   { padding: '14px' },
+  cardPadSm: { padding: '12px' },
 
-  statsGrid:  { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' },
-  statsGrid5: { display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px', marginBottom: '24px' },
+  statsGrid:  { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '14px' },
+  statsGrid5: { display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px', marginBottom: '14px' },
 
   statCard: {
     background: C.white, borderRadius: '6px',
     boxShadow: '0 1px 3px rgba(0,0,0,0.06)', border: `1px solid ${C.border}`,
-    padding: '20px',
+    padding: '12px',
   },
-  statLabel: { fontSize: '13px', color: C.textMid, margin: '0 0 8px 0', fontWeight: '500' },
-  statValue: { fontSize: '30px', fontWeight: '600', color: C.text, margin: '0 0 4px 0' },
+  statLabel: { fontSize: '12px', color: C.textMid, margin: '0 0 6px 0', fontWeight: '500' },
+  statValue: { fontSize: '22px', fontWeight: '600', color: C.text, margin: '0 0 3px 0' },
   statSub:   { fontSize: '12px', color: C.textMid, margin: 0 },
-  statRow:   { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' },
+  statRow:   { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' },
 
   row:        { display: 'flex', alignItems: 'center' },
   rowBetween: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' },
-  rowGap4:    { display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' },
+  rowGap4:    { display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' },
   rowGap2:    { display: 'flex', alignItems: 'center', gap: '8px' },
 
   select: {
@@ -134,13 +134,13 @@ const S = {
 
   table:    { width: '100%', borderCollapse: 'collapse' },
   thead:    { background: C.headerBg, borderBottom: `1px solid ${C.border}` },
-  th:       { padding: '12px 16px', textAlign: 'left', fontSize: '13px', fontWeight: '600', color: C.text, whiteSpace: 'nowrap' },
-  thRight:  { padding: '12px 16px', textAlign: 'right', fontSize: '13px', fontWeight: '600', color: C.text },
-  thCenter: { padding: '12px 16px', textAlign: 'center', fontSize: '13px', fontWeight: '600', color: C.text },
-  td:       { padding: '14px 16px', fontSize: '14px', color: C.text, borderBottom: `1px solid ${C.borderLight}` },
-  tdMid:    { padding: '14px 16px', fontSize: '14px', color: C.textMid, borderBottom: `1px solid ${C.borderLight}` },
-  tdRight:  { padding: '14px 16px', fontSize: '14px', color: C.text, textAlign: 'right', borderBottom: `1px solid ${C.borderLight}` },
-  tdCenter: { padding: '14px 16px', textAlign: 'center', borderBottom: `1px solid ${C.borderLight}` },
+  th:       { padding: '9px 12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: C.text, whiteSpace: 'nowrap' },
+  thRight:  { padding: '9px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600', color: C.text },
+  thCenter: { padding: '9px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', color: C.text },
+  td:       { padding: '10px 12px', fontSize: '13px', color: C.text, borderBottom: `1px solid ${C.borderLight}` },
+  tdMid:    { padding: '10px 12px', fontSize: '13px', color: C.textMid, borderBottom: `1px solid ${C.borderLight}` },
+  tdRight:  { padding: '10px 12px', fontSize: '13px', color: C.text, textAlign: 'right', borderBottom: `1px solid ${C.borderLight}` },
+  tdCenter: { padding: '10px 12px', textAlign: 'center', borderBottom: `1px solid ${C.borderLight}` },
   trEven:   { background: C.white },
   trOdd:    { background: C.rowAlt },
 
@@ -155,10 +155,10 @@ const S = {
   },
 
   infoBox: {
-    padding: '14px 16px', borderRadius: '6px',
-    border: `1px solid ${C.totalBorder}`, background: C.totalBg, marginTop: '20px',
+    padding: '10px 12px', borderRadius: '6px',
+    border: `1px solid ${C.totalBorder}`, background: C.totalBg, marginTop: '12px',
   },
-  infoTitle: { fontSize: '13px', fontWeight: '600', color: C.purple, margin: '0 0 8px 0' },
+  infoTitle: { fontSize: '13px', fontWeight: '600', color: C.purple, margin: '0 0 6px 0' },
   infoList:  { listStyle: 'none', margin: 0, padding: 0 },
   infoItem:  { fontSize: '13px', color: C.textMid, marginBottom: '4px' },
 

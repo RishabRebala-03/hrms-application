@@ -375,26 +375,6 @@ const Policy = () => {
           <p>
             Keep the policy library easy to manage, easy to browse, and easy to read without crowding the page with summary stats.
           </p>
-          <div className="admin-hero-brief-grid">
-            <article className="admin-hero-brief-card">
-              <h3>Library Purpose</h3>
-              <div className="admin-hero-note" style={{ marginTop: 0 }}>
-                This page is for maintaining policy records and opening the exact document people need without extra noise.
-              </div>
-            </article>
-            <article className="admin-hero-brief-card">
-              <h3>Reading Flow</h3>
-              <div className="admin-hero-note" style={{ marginTop: 0 }}>
-                Filter the library, select a document, and inspect the full content below in a more focused reading workspace.
-              </div>
-            </article>
-            <article className="admin-hero-brief-card">
-              <h3>Admin Intent</h3>
-              <div className="admin-hero-note" style={{ marginTop: 0 }}>
-                The top section stays plain so the actual policy list and document detail area do the real work.
-              </div>
-            </article>
-          </div>
         </div>
 
         <div className="admin-hero-meta">
