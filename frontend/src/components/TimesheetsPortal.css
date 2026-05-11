@@ -271,6 +271,56 @@
   cursor: pointer;
 }
 
+.mte-expense-upload {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.mte-expense-upload input {
+  display: none;
+}
+
+.mte-expense-upload > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #5d6470;
+  font-size: 13px;
+}
+
+.mte-document-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 280px;
+}
+
+.mte-document-cell a,
+.mte-summary-document-link {
+  color: #4f3f99;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.mte-document-cell a:first-of-type {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mte-document-view {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
 .mte-simple-table-wrap,
 .mte-locations-grid-wrap {
   overflow-x: auto;
@@ -1009,6 +1059,55 @@
   font-weight: 600;
 }
 
+.mte-locations-date-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.mte-locations-date-grid article {
+  border: 1px solid #dddfe5;
+  background: #fff;
+  padding: 10px;
+  display: grid;
+  gap: 9px;
+}
+
+.mte-locations-date-grid article.is-selected {
+  border-color: #6f54b6;
+  box-shadow: 0 0 0 2px rgba(111, 84, 182, 0.12);
+}
+
+.mte-locations-date-grid button {
+  border: none;
+  background: #f7f7f9;
+  color: #2f3338;
+  min-height: 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.mte-locations-date-grid button span {
+  color: #68707a;
+  font-size: 12px;
+}
+
+.mte-locations-date-grid button strong {
+  color: #24272c;
+  font-size: 14px;
+}
+
+.mte-locations-date-grid select {
+  min-height: 38px;
+  width: 100%;
+  border: 1px solid #cfd3dc;
+  background: #fff;
+  color: #30343a;
+  padding: 0 10px;
+}
+
 .mte-summary-shell {
   background: #fff;
   border-top: 1px solid #d5d5d5;
@@ -1147,6 +1246,38 @@
 
 .mte-summary-leave-copy strong {
   font-weight: 700;
+}
+
+.mte-summary-group {
+  margin: 18px 14px 0;
+  border: 1px solid #dcdfe5;
+  background: #fff;
+}
+
+.mte-summary-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e5e7ec;
+}
+
+.mte-summary-group-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #24272c;
+}
+
+.mte-summary-group-header span {
+  color: #667085;
+  font-size: 13px;
+}
+
+.mte-summary-document-link {
+  display: inline-block;
+  margin: 0 10px 6px 0;
 }
 
 @media (max-width: 960px) {

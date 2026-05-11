@@ -1,5 +1,5 @@
 // Timesheets.js — Production-grade, matches the existing codebase architecture
-import { Children, useState, useMemo, useEffect, useCallback } from 'react';
+import { Children, useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
   format, startOfMonth, endOfMonth, eachDayOfInterval,
   parseISO, subMonths,
@@ -9,7 +9,7 @@ import {
   CheckCircle, CheckCircle2, XCircle, Clock, Eye,
   Download, TrendingUp, BarChart3, UserCheck,
   FileText, Calendar, RefreshCw, CircleHelp, Users, Building2,
-  LayoutGrid, ChevronLeft, ChevronRight,
+  LayoutGrid, ChevronLeft, ChevronRight, Upload, Paperclip,
   Save,
 } from 'lucide-react';
 import {
@@ -173,6 +173,19 @@ const fetchAPI = async (endpoint, options = {}) => {
   });
   if (!response.ok) {
     let errMsg = 'API request failed';
+    try { const e = await response.json(); errMsg = e.error || errMsg; } catch (_) {}
+    throw new Error(errMsg);
+  }
+  return response.json();
+};
+
+const uploadAPI = async (endpoint, formData) => {
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!response.ok) {
+    let errMsg = 'Upload failed';
     try { const e = await response.json(); errMsg = e.error || errMsg; } catch (_) {}
     throw new Error(errMsg);
   }
@@ -3948,12 +3961,30 @@ function ExpensesPanel({ user }) {
   const isAdmin = user?.role === 'Admin';
   const userId = getUserId(user);
   const today = format(new Date(), 'yyyy-MM-dd');
+  const fileInputRef = useRef(null);
+  const expenseCategories = [
+    'Travel',
+    'Meals',
+    'Lodging',
+    'Laptop / Desktop Hardware',
+    'Software Subscription',
+    'Cloud / Hosting',
+    'Internet / Mobile Reimbursement',
+    'Office Supplies',
+    'IT Accessories',
+    'Training / Certification',
+    'Client Meeting',
+    'Courier / Shipping',
+    'Parking / Cab',
+    'Other',
+  ];
   const [expenses, setExpenses] = useState([]);
   const [form, setForm] = useState({
     expense_date: today,
     category: 'Travel',
     amount: '',
     description: '',
+    documentFile: null,
   });
   const [editingId, setEditingId] = useState('');
   const [loading, setLoading] = useState(false);
@@ -3973,7 +4004,8 @@ function ExpensesPanel({ user }) {
 
   const resetForm = () => {
     setEditingId('');
-    setForm({ expense_date: today, category: 'Travel', amount: '', description: '' });
+    setForm({ expense_date: today, category: 'Travel', amount: '', description: '', documentFile: null });
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleSaveExpense = async () => {
@@ -3995,10 +4027,16 @@ function ExpensesPanel({ user }) {
         amount: Number(form.amount),
         description: form.description,
       };
+      let savedExpense = null;
       if (editingId) {
-        await fetchAPI(`/expenses/${editingId}`, { method: 'PUT', body: JSON.stringify(payload) });
+        savedExpense = await fetchAPI(`/expenses/${editingId}`, { method: 'PUT', body: JSON.stringify(payload) });
       } else {
-        await fetchAPI('/expenses', { method: 'POST', body: JSON.stringify(payload) });
+        savedExpense = await fetchAPI('/expenses', { method: 'POST', body: JSON.stringify(payload) });
+      }
+      if (form.documentFile && savedExpense?._id) {
+        const documentData = new FormData();
+        documentData.append('document', form.documentFile);
+        await uploadAPI(`/expenses/${savedExpense._id}/document`, documentData);
       }
       resetForm();
       loadExpenses();
@@ -4016,7 +4054,9 @@ function ExpensesPanel({ user }) {
       category: expense.category || 'Travel',
       amount: String(expense.amount || ''),
       description: expense.description || '',
+      documentFile: null,
     });
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleDeleteExpense = async (expenseId) => {
@@ -4062,11 +4102,7 @@ function ExpensesPanel({ user }) {
           value={form.category}
           onChange={(event) => setForm({ ...form, category: event.target.value })}
         >
-          <option>Travel</option>
-          <option>Meals</option>
-          <option>Lodging</option>
-          <option>Supplies</option>
-          <option>Other</option>
+          {expenseCategories.map((category) => <option key={category}>{category}</option>)}
         </select>
         <input
           className="input"
@@ -4083,6 +4119,23 @@ function ExpensesPanel({ user }) {
           value={form.description}
           onChange={(event) => setForm({ ...form, description: event.target.value })}
         />
+        <div className="mte-expense-upload">
+          <button
+            type="button"
+            className="mte-icon-text-button"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <Upload size={16} />
+            <span>{form.documentFile ? 'Change Document' : 'Upload Document'}</span>
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.jpg,.jpeg,.png,.gif,.webp,.ppt,.pptx,.zip,.msg,.eml"
+            onChange={(event) => setForm({ ...form, documentFile: event.target.files?.[0] || null })}
+          />
+          {form.documentFile ? <span title={form.documentFile.name}>{form.documentFile.name}</span> : null}
+        </div>
         <button type="button" className="mte-submit-button" onClick={handleSaveExpense} disabled={loading}>
           <Save size={16} />
           <span>{editingId ? 'Update Expense' : 'Save Expense'}</span>
@@ -4092,16 +4145,16 @@ function ExpensesPanel({ user }) {
         <table className="mte-simple-table">
           <thead>
             <tr>
-              {['Date', ...(isAdmin ? ['Employee'] : []), 'Category', 'Description', 'Amount', 'Action'].map((header) => (
+              {['Date', ...(isAdmin ? ['Employee'] : []), 'Category', 'Description', 'Amount', 'Document', 'Action'].map((header) => (
                 <th key={header}>{header}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading && expenses.length === 0 ? (
-              <tr><td colSpan={isAdmin ? 6 : 5}>Loading expenses...</td></tr>
+              <tr><td colSpan={isAdmin ? 7 : 6}>Loading expenses...</td></tr>
             ) : expenses.length === 0 ? (
-              <tr><td colSpan={isAdmin ? 6 : 5}>No expenses added yet.</td></tr>
+              <tr><td colSpan={isAdmin ? 7 : 6}>No expenses added yet.</td></tr>
             ) : expenses.map((expense) => (
               <tr key={expense._id}>
                 <td>{expense.expense_date}</td>
@@ -4109,6 +4162,19 @@ function ExpensesPanel({ user }) {
                 <td>{expense.category}</td>
                 <td>{expense.description || '-'}</td>
                 <td>{Number(expense.amount || 0).toFixed(2)}</td>
+                <td>
+                  {expense.document?.url ? (
+                    <span className="mte-document-cell">
+                      <Paperclip size={14} />
+                      <a href={expense.document.url} target="_blank" rel="noreferrer">
+                        {expense.document.name || 'Document'}
+                      </a>
+                      <a className="mte-document-view" href={expense.document.url} target="_blank" rel="noreferrer" title="View document">
+                        <Eye size={14} />
+                      </a>
+                    </span>
+                  ) : '-'}
+                </td>
                 <td>
                   <button type="button" style={S.btnIcon} onClick={() => handleEditExpense(expense)} title="Edit expense">
                     <FileText size={14} />
@@ -4133,6 +4199,7 @@ function LocationsPanel({ selectedPeriod, periods, user }) {
   const [locationOne, setLocationOne] = useState(user?.workLocation || '');
   const [locationTwo, setLocationTwo] = useState(user?.assignedLocation || user?.costCenter || '');
   const [dailyLocations, setDailyLocations] = useState({});
+  const [selectedDates, setSelectedDates] = useState([]);
   const [loading, setLoading] = useState(false);
   const period = periods.find((item) => item.value === selectedPeriod) || periods[0];
   const dates = period
@@ -4157,6 +4224,7 @@ function LocationsPanel({ selectedPeriod, periods, user }) {
     try {
       const saved = JSON.parse(localStorage.getItem(`mte_locations_${userId}_${period.value}`) || '{}');
       setDailyLocations(saved.dailyLocations || {});
+      setSelectedDates([]);
       if (saved.country) setCountry(saved.country);
       if (saved.locationOne) setLocationOne(saved.locationOne);
       if (saved.locationTwo) setLocationTwo(saved.locationTwo);
@@ -4231,11 +4299,30 @@ function LocationsPanel({ selectedPeriod, periods, user }) {
       alert('Select country/region and location one');
       return;
     }
-    const nextDailyLocations = dates.reduce((acc, day) => {
-      acc[format(day, 'yyyy-MM-dd')] = locationOne;
-      return acc;
-    }, {});
+    const targetDates = selectedDates.length
+      ? selectedDates
+      : dates.map((day) => format(day, 'yyyy-MM-dd'));
+    const nextDailyLocations = {
+      ...dailyLocations,
+      ...targetDates.reduce((acc, dateKey) => {
+        acc[dateKey] = locationOne;
+        return acc;
+      }, {}),
+    };
     setDailyLocations(nextDailyLocations);
+    setSelectedDates([]);
+  };
+
+  const toggleSelectedDate = (dateKey) => {
+    setSelectedDates((previous) => (
+      previous.includes(dateKey)
+        ? previous.filter((item) => item !== dateKey)
+        : [...previous, dateKey]
+    ));
+  };
+
+  const updateDailyLocation = (dateKey, value) => {
+    setDailyLocations((previous) => ({ ...previous, [dateKey]: value }));
   };
 
   return (
@@ -4274,12 +4361,12 @@ function LocationsPanel({ selectedPeriod, periods, user }) {
       </div>
 
       <div className="mte-locations-add-row">
-        <label>Locations</label>
+        <label>Datewise Locations</label>
         <button type="button" onClick={handleAddLocation}>
-          <span>Add Location</span>
+          <span>{selectedDates.length ? `Apply to ${selectedDates.length} date${selectedDates.length === 1 ? '' : 's'}` : 'Apply to All Dates'}</span>
           <ChevronRight size={15} />
         </button>
-        <p>Location by Day information must be completed</p>
+        <p>Select dates below, choose a location, then apply it to those dates.</p>
       </div>
 
       <div className="mte-locations-body">
@@ -4316,19 +4403,24 @@ function LocationsPanel({ selectedPeriod, periods, user }) {
         </aside>
 
         <section className="mte-locations-info">
-          <p>
-            For business, you must accurately reflect your work location. When traveling outside your
-            home country/region, you must record locations for all business days. For non-working days
-            in your home country/region, leave your default home office location for non-workdays.
-          </p>
-          <div className="mte-locations-preview">
+          <div className="mte-locations-date-grid">
             {dates.map((day) => {
               const key = format(day, 'yyyy-MM-dd');
+              const isSelected = selectedDates.includes(key);
               return (
-                <div key={key}>
-                  <span>{format(day, 'dd')}</span>
-                  <strong>{dailyLocations[key] || assignmentMeta.workLocation}</strong>
-                </div>
+                <article key={key} className={isSelected ? 'is-selected' : ''}>
+                  <button type="button" onClick={() => toggleSelectedDate(key)}>
+                    <span>{format(day, 'EEE')}</span>
+                    <strong>{format(day, 'dd MMM')}</strong>
+                  </button>
+                  <select
+                    value={dailyLocations[key] || assignmentMeta.workLocation || ''}
+                    onChange={(event) => updateDailyLocation(key, event.target.value)}
+                  >
+                    <option value="">Select location</option>
+                    {locationOptions.map((option) => <option key={option}>{option}</option>)}
+                  </select>
+                </article>
               );
             })}
           </div>
@@ -4477,8 +4569,10 @@ function PortalTimeWorkspace({ user, selectedPeriod, onSelectedPeriodChange }) {
 
 function MyTimeSummaryWorkspace({ user, selectedPeriod, periods }) {
   const userId = getUserId(user);
+  const isAdmin = user?.role === 'Admin';
   const period = periods.find((item) => item.value === selectedPeriod) || periods[0];
   const [timesheet, setTimesheet] = useState(null);
+  const [allTimesheets, setAllTimesheets] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [profile, setProfile] = useState(user || {});
   const [loading, setLoading] = useState(false);
@@ -4491,6 +4585,27 @@ function MyTimeSummaryWorkspace({ user, selectedPeriod, periods }) {
   const loadSummary = useCallback(() => {
     if (!userId || !period) return;
     setLoading(true);
+    if (isAdmin) {
+      Promise.allSettled([
+        fetchAPI('/timesheets/all'),
+        fetchAPI('/expenses?role=Admin'),
+      ])
+        .then(([timesheetResult, expenseResult]) => {
+          const periodTimesheets = timesheetResult.status === 'fulfilled' && Array.isArray(timesheetResult.value)
+            ? timesheetResult.value.filter((item) => item.period_start === period.start && item.period_end === period.end)
+            : [];
+          setAllTimesheets(periodTimesheets);
+          setTimesheet(null);
+          setExpenses(expenseResult.status === 'fulfilled' && Array.isArray(expenseResult.value)
+            ? expenseResult.value.filter((expense) =>
+                !expense.expense_date || (expense.expense_date >= period.start && expense.expense_date <= period.end)
+              )
+            : []);
+          setProfile(user || {});
+        })
+        .finally(() => setLoading(false));
+      return;
+    }
     Promise.allSettled([
       fetchAPI(`/timesheets/employee/${userId}`),
       fetchAPI(`/expenses?employee_id=${userId}&role=${encodeURIComponent(user?.role || '')}`),
@@ -4513,7 +4628,7 @@ function MyTimeSummaryWorkspace({ user, selectedPeriod, periods }) {
         if (profileResult.status === 'fulfilled') setProfile(profileResult.value);
       })
       .finally(() => setLoading(false));
-  }, [period, user?.role, userId]);
+  }, [isAdmin, period, user, userId]);
 
   useEffect(() => {
     loadSummary();
@@ -4579,6 +4694,141 @@ function MyTimeSummaryWorkspace({ user, selectedPeriod, periods }) {
     const numberValue = Number(value);
     return Number.isFinite(numberValue) ? numberValue.toFixed(decimals) : value;
   };
+
+  const adminEmployeeRows = useMemo(() => {
+    if (!isAdmin) return [];
+    const grouped = {};
+    allTimesheets.forEach((item) => {
+      const key = item.employee_id || item.employee_email || item.employee_name || 'unknown';
+      if (!grouped[key]) {
+        grouped[key] = {
+          employee: item.employee_name || 'Employee',
+          email: item.employee_email || '',
+          department: item.employee_department || 'Unassigned',
+          hours: 0,
+          expenses: 0,
+          documents: [],
+        };
+      }
+      grouped[key].hours += Number(item.total_hours || 0);
+    });
+    expenses.forEach((expense) => {
+      const key = expense.employee_id || expense.employee_email || expense.employee_name || 'unknown';
+      if (!grouped[key]) {
+        grouped[key] = {
+          employee: expense.employee_name || 'Employee',
+          email: expense.employee_email || '',
+          department: expense.employee_department || 'Unassigned',
+          hours: 0,
+          expenses: 0,
+          documents: [],
+        };
+      }
+      grouped[key].expenses += Number(expense.amount || 0);
+      if (expense.document?.url) grouped[key].documents.push(expense.document);
+    });
+    return Object.values(grouped).sort((a, b) => a.employee.localeCompare(b.employee));
+  }, [allTimesheets, expenses, isAdmin]);
+
+  const adminDepartmentRows = useMemo(() => {
+    if (!isAdmin) return [];
+    const grouped = {};
+    adminEmployeeRows.forEach((row) => {
+      const key = row.department || 'Unassigned';
+      if (!grouped[key]) grouped[key] = { department: key, employees: 0, hours: 0, expenses: 0, documents: [] };
+      grouped[key].employees += 1;
+      grouped[key].hours += row.hours;
+      grouped[key].expenses += row.expenses;
+      grouped[key].documents.push(...row.documents);
+    });
+    return Object.values(grouped).sort((a, b) => a.department.localeCompare(b.department));
+  }, [adminEmployeeRows, isAdmin]);
+
+  if (isAdmin) {
+    return (
+      <div className="mte-summary-shell">
+        <div className="mte-summary-actions">
+          <button type="button" onClick={loadSummary}>Refresh</button>
+          <button type="button" className="is-primary" onClick={() => alert('Summary submitted successfully')} disabled={loading}>
+            Submit
+          </button>
+        </div>
+
+        <section className="mte-summary-group">
+          <div className="mte-summary-group-header">
+            <h3>Employee Wise Summary</h3>
+            <span>{period?.label}</span>
+          </div>
+          <div className="mte-summary-table-wrap">
+            <table className="mte-simple-table">
+              <thead>
+                <tr>
+                  {['Employee', 'Email', 'Department', 'Hours', 'Expenses', 'Documents'].map((header) => <th key={header}>{header}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan={6}>Loading summary...</td></tr>
+                ) : adminEmployeeRows.length === 0 ? (
+                  <tr><td colSpan={6}>No employee data found for this period.</td></tr>
+                ) : adminEmployeeRows.map((row) => (
+                  <tr key={`${row.employee}-${row.email}`}>
+                    <td>{row.employee}</td>
+                    <td>{row.email || '-'}</td>
+                    <td>{row.department}</td>
+                    <td>{row.hours.toFixed(2)}</td>
+                    <td>{row.expenses.toFixed(2)}</td>
+                    <td>
+                      {row.documents.length ? row.documents.map((document) => (
+                        <a key={document.url} className="mte-summary-document-link" href={document.url} target="_blank" rel="noreferrer">
+                          {document.name || 'Document'}
+                        </a>
+                      )) : '-'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="mte-summary-group">
+          <div className="mte-summary-group-header">
+            <h3>Department Wise Summary</h3>
+            <span>Includes uploaded expense documents</span>
+          </div>
+          <div className="mte-summary-table-wrap">
+            <table className="mte-simple-table">
+              <thead>
+                <tr>
+                  {['Department', 'Employees', 'Hours', 'Expenses', 'Documents'].map((header) => <th key={header}>{header}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {adminDepartmentRows.length === 0 ? (
+                  <tr><td colSpan={5}>No department data found for this period.</td></tr>
+                ) : adminDepartmentRows.map((row) => (
+                  <tr key={row.department}>
+                    <td>{row.department}</td>
+                    <td>{row.employees}</td>
+                    <td>{row.hours.toFixed(2)}</td>
+                    <td>{row.expenses.toFixed(2)}</td>
+                    <td>
+                      {row.documents.length ? row.documents.map((document) => (
+                        <a key={document.url} className="mte-summary-document-link" href={document.url} target="_blank" rel="noreferrer">
+                          {document.name || 'Document'}
+                        </a>
+                      )) : '-'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="mte-summary-shell">
