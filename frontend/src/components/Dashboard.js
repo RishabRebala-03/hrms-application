@@ -8,7 +8,6 @@ import {
   Clock3,
   GitBranch,
   ShieldCheck,
-  Users,
 } from "lucide-react";
 import {
   Area,
@@ -279,14 +278,6 @@ const AdminDashboard = ({ user, onNavigate }) => {
   const summaryCards = useMemo(
     () => [
       {
-        title: "Total Headcount",
-        value: stats.totalEmployees,
-        note: "Employees registered in the HRMS",
-        icon: Users,
-        linkLabel: "Open employee directory",
-        action: () => handleNavigate("employees"),
-      },
-      {
         title: "Working Today",
         value: stats.workingToday,
         note: "Available workforce for current operations",
@@ -347,16 +338,6 @@ const AdminDashboard = ({ user, onNavigate }) => {
   const approvedLeavesCount = useMemo(
     () => allLeaves.filter((leave) => leave.status === "Approved").length,
     [allLeaves]
-  );
-
-  const approvalRate = useMemo(() => {
-    if (!allLeaves.length) return 0;
-    return Math.round((approvedLeavesCount / allLeaves.length) * 100);
-  }, [allLeaves.length, approvedLeavesCount]);
-
-  const departmentCoverage = useMemo(
-    () => new Set(allEmployees.map((employee) => employee.department).filter(Boolean)).size,
-    [allEmployees]
   );
 
   const monthlyTrendData = useMemo(() => {
@@ -498,24 +479,6 @@ const AdminDashboard = ({ user, onNavigate }) => {
               View organization hierarchy
             </button>
           </div>
-
-          <div className="admin-hero-kpi-row">
-            <article className="admin-hero-kpi-card">
-              <span>Total headcount</span>
-              <strong>{stats.totalEmployees}</strong>
-              <small>Registered employee records</small>
-            </article>
-            <article className="admin-hero-kpi-card">
-              <span>Approval rate</span>
-              <strong>{approvalRate}%</strong>
-              <small>{approvedLeavesCount} approved requests on record</small>
-            </article>
-            <article className="admin-hero-kpi-card">
-              <span>Department coverage</span>
-              <strong>{departmentCoverage}</strong>
-              <small>Active departments represented</small>
-            </article>
-          </div>
         </div>
 
         <div className="admin-hero-meta">
@@ -538,7 +501,7 @@ const AdminDashboard = ({ user, onNavigate }) => {
         </div>
       </header>
 
-      <div className="admin-dashboard-grid">
+      <div className="admin-dashboard-grid admin-overview-grid">
         {summaryCards.map((card) => {
           const Icon = card.icon;
           return (
@@ -577,7 +540,7 @@ const AdminDashboard = ({ user, onNavigate }) => {
             <div className="fiori-card-link">Open employee directory</div>
           </div>
           <div className="fiori-chart-shell">
-            <ResponsiveContainer width="100%" height={260}>
+            <ResponsiveContainer width="100%" height="100%">
               <BarChart data={departmentHeadcountData} barCategoryGap={18}>
                 <CartesianGrid stroke="#e8edf3" vertical={false} />
                 <XAxis dataKey="name" tickLine={false} axisLine={false} />
@@ -598,7 +561,7 @@ const AdminDashboard = ({ user, onNavigate }) => {
             <div className="fiori-card-link">Open leave workspace</div>
           </div>
           <div className="fiori-chart-shell">
-            <ResponsiveContainer width="100%" height={260}>
+            <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={leaveStatusData}
@@ -627,7 +590,7 @@ const AdminDashboard = ({ user, onNavigate }) => {
             <div className="fiori-card-link">Open audit logs</div>
           </div>
           <div className="fiori-chart-shell">
-            <ResponsiveContainer width="100%" height={260}>
+            <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={monthlyTrendData}>
                 <CartesianGrid stroke="#e8edf3" vertical={false} />
                 <XAxis dataKey="name" tickLine={false} axisLine={false} />

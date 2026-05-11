@@ -1151,6 +1151,10 @@ body {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.admin-overview-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .admin-dashboard-grid-compact {
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   margin-bottom: 0;
@@ -1224,10 +1228,36 @@ body {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
+  align-items: stretch;
 }
 
 .fiori-chart-card {
   cursor: pointer;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.fiori-chart-card .fiori-panel-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(86px, max-content);
+  align-items: start;
+}
+
+.fiori-chart-card .fiori-panel-header > div:first-child {
+  min-width: 0;
+}
+
+.fiori-chart-card .fiori-panel-header h3,
+.fiori-chart-card .fiori-panel-header p {
+  overflow-wrap: anywhere;
+}
+
+.fiori-chart-card .fiori-card-link {
+  max-width: 126px;
+  justify-self: end;
+  text-align: right;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
 }
 
 .fiori-chart-card:hover,
@@ -1241,6 +1271,8 @@ body {
 .fiori-chart-shell {
   height: 210px;
   width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .fiori-chart-tooltip {
