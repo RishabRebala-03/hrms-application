@@ -129,6 +129,8 @@ const Profile = ({ user, role, viewEmployeeId = null, onUserUpdate, onBack }) =>
       dateOfBirth: dateToInputFormat(data.dateOfBirth),
       reportsToEmail: data.reportsToEmail || "",
       workLocation: data.workLocation || "",
+      companyCode: data.companyCode || "",
+      costCenter: data.costCenter || "",
       peopleLeadEmail: data.peopleLeadEmail || "",
     });
   };
@@ -304,6 +306,8 @@ const Profile = ({ user, role, viewEmployeeId = null, onUserUpdate, onBack }) =>
         shiftTimings: editForm.shiftTimings,
         reportsToEmail: editForm.reportsToEmail || "",
         workLocation: editForm.workLocation || "",
+        companyCode: editForm.companyCode || "",
+        costCenter: editForm.costCenter || "",
         peopleLeadEmail: editForm.peopleLeadEmail || "",
       };
 
@@ -635,6 +639,16 @@ const Profile = ({ user, role, viewEmployeeId = null, onUserUpdate, onBack }) =>
                   </div>
 
                   <div className="profile-info-card">
+                    <div className="profile-info-label">Company Code</div>
+                    <div className="profile-info-value">{profile.companyCode || "Not set"}</div>
+                  </div>
+
+                  <div className="profile-info-card">
+                    <div className="profile-info-label">Cost Center</div>
+                    <div className="profile-info-value">{profile.costCenter || "Not set"}</div>
+                  </div>
+
+                  <div className="profile-info-card">
                     <div className="profile-info-label">Shift Timings</div>
                     <div className="profile-info-value">{profile.shiftTimings || "Not set"}</div>
                   </div>
@@ -837,6 +851,8 @@ const Profile = ({ user, role, viewEmployeeId = null, onUserUpdate, onBack }) =>
               ["dateOfJoining", "Date of Joining", "date", ""],
               ["dateOfBirth", "Date of Birth", "date", ""],
               ["workLocation", "Work Location", "text", "e.g. Hyderabad Office"],
+              ["companyCode", "Company Code", "text", "Assigned by admin"],
+              ["costCenter", "Cost Center", "text", "Assigned by admin"],
             ].map(([field, label, type, placeholder]) => (
               <label key={field} className="profile-edit-field">
                 <span>{label}</span>

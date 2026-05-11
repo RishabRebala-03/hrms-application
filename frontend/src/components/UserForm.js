@@ -15,6 +15,8 @@ const emptyForm = {
   dateOfJoining: "",
   dateOfBirth: "",
   workLocation: "",
+  companyCode: "",
+  costCenter: "",
   peopleLeadEmail: "",
 };
 
@@ -48,6 +50,8 @@ const UserForm = ({ onSaved }) => {
         : new Date().toISOString(),
       dateOfBirth: form.dateOfBirth ? new Date(form.dateOfBirth).toISOString() : null,
       workLocation: form.workLocation || "",
+      companyCode: form.companyCode || "",
+      costCenter: form.costCenter || "",
       peopleLeadEmail: form.peopleLeadEmail || null,
     };
 
@@ -322,6 +326,28 @@ const UserForm = ({ onSaved }) => {
                 name="workLocation"
                 placeholder="Hyderabad office or remote"
                 value={form.workLocation}
+                onChange={change}
+              />
+            </label>
+
+            <label className="fiori-form-field">
+              <label>Company Code</label>
+              <input
+                className="input"
+                name="companyCode"
+                placeholder="Company code assigned by admin"
+                value={form.companyCode}
+                onChange={change}
+              />
+            </label>
+
+            <label className="fiori-form-field">
+              <label>Cost Center</label>
+              <input
+                className="input"
+                name="costCenter"
+                placeholder="Cost center assigned by admin"
+                value={form.costCenter}
                 onChange={change}
               />
             </label>

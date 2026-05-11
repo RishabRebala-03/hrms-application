@@ -8,7 +8,7 @@ import {
   Plus, Trash2, AlertCircle,
   CheckCircle, CheckCircle2, XCircle, Clock, Eye,
   Download, TrendingUp, BarChart3, UserCheck,
-  FileText, Calendar, RefreshCw, CircleHelp,
+  FileText, Calendar, RefreshCw, CircleHelp, Users, Building2,
   LayoutGrid, ChevronLeft, ChevronRight,
   Save,
 } from 'lucide-react';
@@ -310,10 +310,26 @@ const uniqSuggestions = (items, fields) => {
   );
 };
 
+const getTimesheetAssignmentMeta = (source = {}) => {
+  const assignedLocation = source.employee_work_location || source.workLocation || '';
+  const companyCode = source.employee_company_code || source.companyCode || '';
+  const costCenter = source.employee_cost_center || source.costCenter || '';
+  const companyCostCenter = [companyCode, costCenter].filter(Boolean).join(' / ');
+
+  return {
+    workLocation: assignedLocation || 'Not assigned',
+    assignedLocation: assignedLocation || 'Not assigned',
+    companyCode,
+    costCenter,
+    companyCostCenter: companyCostCenter || 'Not assigned',
+  };
+};
+
 // ─── TimesheetGrid ────────────────────────────────────────────────────────────
 function TimesheetGrid({
   dates, rows, chargeCodes, onRowUpdate, onRowAdd, onRowDelete,
   readOnly = false, approvedLeaves = [], holidays = [],
+  assignmentMeta = {},
 }) {
   const WORKDAY_HOURS = 9;
   const getEntry = (row, dateStr) =>
@@ -369,8 +385,11 @@ function TimesheetGrid({
     boxShadow: '2px 0 4px rgba(0,0,0,0.06)',
   };
 
-  const locationCode = '15';
-  const costCenterCode = '8134';
+  const {
+    workLocation = 'Not assigned',
+    assignedLocation = 'Not assigned',
+    companyCostCenter = 'Not assigned',
+  } = assignmentMeta;
 
   return (
     <div className="mte-sheet-card" style={{ ...S.card, overflow: 'visible' }}>
@@ -426,7 +445,7 @@ function TimesheetGrid({
                 <span className="mte-sheet-meta-link">Work Location</span>
               </td>
               {dates.map((d) => (
-                <td key={`work-location-${d}`} className="mte-sheet-meta-cell">▼</td>
+                <td key={`work-location-${d}`} className="mte-sheet-meta-cell">{workLocation}</td>
               ))}
               <td className="mte-sheet-meta-total" />
               {!readOnly && <td className="mte-sheet-sticky-end" />}
@@ -443,9 +462,9 @@ function TimesheetGrid({
                 Assigned Location
               </td>
               {dates.map((d) => (
-                <td key={`assigned-location-${d}`} className="mte-sheet-meta-cell">{locationCode}</td>
+                <td key={`assigned-location-${d}`} className="mte-sheet-meta-cell">{assignedLocation}</td>
               ))}
-              <td className="mte-sheet-meta-total">{locationCode}</td>
+              <td className="mte-sheet-meta-total">{assignedLocation}</td>
               {!readOnly && <td className="mte-sheet-sticky-end" />}
             </tr>
 
@@ -460,9 +479,9 @@ function TimesheetGrid({
                 Company Code/Cost Center
               </td>
               {dates.map((d) => (
-                <td key={`cost-center-${d}`} className="mte-sheet-meta-cell">{costCenterCode}</td>
+                <td key={`cost-center-${d}`} className="mte-sheet-meta-cell">{companyCostCenter}</td>
               ))}
-              <td className="mte-sheet-meta-total">{costCenterCode}</td>
+              <td className="mte-sheet-meta-total">{companyCostCenter}</td>
               {!readOnly && <td className="mte-sheet-sticky-end" />}
             </tr>
 
@@ -717,6 +736,7 @@ function TimesheetPage({ user, selectedPeriod, onSelectedPeriodChange, embedded 
   const activePeriod = selectedPeriod ?? internalSelectedPeriod;
   const setActivePeriod = onSelectedPeriodChange ?? setInternalSelectedPeriod;
   const selectedPeriodOption = availablePeriods.find((period) => period.value === activePeriod) || availablePeriods[0];
+  const assignmentMeta = useMemo(() => getTimesheetAssignmentMeta(user), [user]);
 
   const dates = useMemo(() => {
     const period = availablePeriods.find((p) => p.value === activePeriod);
@@ -1067,6 +1087,7 @@ function TimesheetPage({ user, selectedPeriod, onSelectedPeriodChange, embedded 
         readOnly={isReadOnly}
         approvedLeaves={approvedLeaves}
         holidays={holidays}
+        assignmentMeta={assignmentMeta}
       />
 
       <div className="mte-bottom-note">
@@ -1157,6 +1178,7 @@ function TimesheetDetailModal({ timesheet, onClose, ccLookup = {} }) {
 
   const { chargeCodeMap, holidaysByDate } = buildChargeCodeMap(timesheet.entries, ccLookup);
   const chargeCodeRows = Object.entries(chargeCodeMap);
+  const assignmentMeta = getTimesheetAssignmentMeta(timesheet);
 
   const getDateTotal = (date) =>
     chargeCodeRows.reduce((s, [, cc]) => s + (cc.byDate[date]?.hours || 0), 0);
@@ -1273,6 +1295,33 @@ function TimesheetDetailModal({ timesheet, onClose, ccLookup = {} }) {
                 </tr>
               </thead>
               <tbody>
+                <tr className="mte-sheet-meta-row">
+                  <td style={{ ...stickyLeft, padding: '10px 16px', background: C.white, borderRight: `1px solid ${C.borderLight}` }}>
+                    <span className="mte-sheet-meta-link">Work Location</span>
+                  </td>
+                  {allDates.map((date) => (
+                    <td key={`detail-work-location-${date}`} className="mte-sheet-meta-cell">{assignmentMeta.workLocation}</td>
+                  ))}
+                  <td className="mte-sheet-meta-total" />
+                </tr>
+                <tr className="mte-sheet-meta-row">
+                  <td style={{ ...stickyLeft, padding: '10px 16px', background: C.white, borderRight: `1px solid ${C.borderLight}` }}>
+                    Assigned Location
+                  </td>
+                  {allDates.map((date) => (
+                    <td key={`detail-assigned-location-${date}`} className="mte-sheet-meta-cell">{assignmentMeta.assignedLocation}</td>
+                  ))}
+                  <td className="mte-sheet-meta-total">{assignmentMeta.assignedLocation}</td>
+                </tr>
+                <tr className="mte-sheet-meta-row mte-sheet-meta-row-last">
+                  <td style={{ ...stickyLeft, padding: '10px 16px', background: C.white, borderRight: `1px solid ${C.borderLight}` }}>
+                    Company Code/Cost Center
+                  </td>
+                  {allDates.map((date) => (
+                    <td key={`detail-cost-center-${date}`} className="mte-sheet-meta-cell">{assignmentMeta.companyCostCenter}</td>
+                  ))}
+                  <td className="mte-sheet-meta-total">{assignmentMeta.companyCostCenter}</td>
+                </tr>
                 {chargeCodeRows.length === 0 ? (
                   <tr>
                     <td colSpan={allDates.length + 2} style={{ padding: '32px', textAlign: 'center', color: C.textMid }}>
@@ -1413,6 +1462,7 @@ function TimesheetFullPageView({ timesheet, onClose, onApprove, onReject, user, 
   // use shared helper with ccLookup for old records missing charge_code_name
   const { chargeCodeMap, holidaysByDate } = buildChargeCodeMap(timesheet.entries, ccLookup);
   const chargeCodeRows = Object.entries(chargeCodeMap);
+  const assignmentMeta = getTimesheetAssignmentMeta(timesheet);
 
   const getDateTotal = (date) =>
     chargeCodeRows.reduce((s, [, cc]) => s + (cc.byDate[date]?.hours || 0), 0);
@@ -1531,6 +1581,33 @@ function TimesheetFullPageView({ timesheet, onClose, onApprove, onReject, user, 
                   </tr>
                 </thead>
                 <tbody>
+                  <tr className="mte-sheet-meta-row">
+                    <td style={{ ...stickyLeft, padding: '10px 16px', background: C.white, borderRight: `1px solid ${C.borderLight}` }}>
+                      <span className="mte-sheet-meta-link">Work Location</span>
+                    </td>
+                    {allDates.map((date) => (
+                      <td key={`full-work-location-${date}`} className="mte-sheet-meta-cell">{assignmentMeta.workLocation}</td>
+                    ))}
+                    <td className="mte-sheet-meta-total" />
+                  </tr>
+                  <tr className="mte-sheet-meta-row">
+                    <td style={{ ...stickyLeft, padding: '10px 16px', background: C.white, borderRight: `1px solid ${C.borderLight}` }}>
+                      Assigned Location
+                    </td>
+                    {allDates.map((date) => (
+                      <td key={`full-assigned-location-${date}`} className="mte-sheet-meta-cell">{assignmentMeta.assignedLocation}</td>
+                    ))}
+                    <td className="mte-sheet-meta-total">{assignmentMeta.assignedLocation}</td>
+                  </tr>
+                  <tr className="mte-sheet-meta-row mte-sheet-meta-row-last">
+                    <td style={{ ...stickyLeft, padding: '10px 16px', background: C.white, borderRight: `1px solid ${C.borderLight}` }}>
+                      Company Code/Cost Center
+                    </td>
+                    {allDates.map((date) => (
+                      <td key={`full-cost-center-${date}`} className="mte-sheet-meta-cell">{assignmentMeta.companyCostCenter}</td>
+                    ))}
+                    <td className="mte-sheet-meta-total">{assignmentMeta.companyCostCenter}</td>
+                  </tr>
                   {chargeCodeRows.length === 0 ? (
                     <tr>
                       <td colSpan={allDates.length + 2} style={{ padding: '40px', textAlign: 'center', color: C.textMid }}>
@@ -3149,6 +3226,281 @@ function ChargeCodeAdmin({ user }) {
   );
 }
 
+function AssignmentAdmin({ user }) {
+  const [employees, setEmployees] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [savingEmployeeId, setSavingEmployeeId] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [drafts, setDrafts] = useState({});
+
+  const loadEmployees = useCallback(() => {
+    setLoading(true);
+    fetchAPI('/users/get_all_employees')
+      .then((data) => {
+        const items = Array.isArray(data) ? data : [];
+        setEmployees(items);
+        setDrafts(
+          items.reduce((acc, employee) => {
+            acc[employee._id] = {
+              workLocation: employee.workLocation || '',
+              companyCode: employee.companyCode || '',
+              costCenter: employee.costCenter || '',
+            };
+            return acc;
+          }, {})
+        );
+      })
+      .catch((err) => {
+        console.error(err);
+        alert(`Failed to load employees: ${err.message}`);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    loadEmployees();
+  }, [loadEmployees]);
+
+  const filteredEmployees = employees.filter((employee) => {
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return true;
+
+    return [
+      employee.name,
+      employee.email,
+      employee.employeeId,
+      employee.department,
+      employee.workLocation,
+      employee.companyCode,
+      employee.costCenter,
+    ]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(q));
+  });
+
+  const searchSuggestions = useMemo(
+    () => uniqSuggestions(employees, [
+      'name',
+      'email',
+      'employeeId',
+      'department',
+      'workLocation',
+      'companyCode',
+      'costCenter',
+    ]),
+    [employees]
+  );
+
+  const assignedCount = employees.filter(
+    (employee) => employee.workLocation || employee.companyCode || employee.costCenter
+  ).length;
+
+  const handleDraftChange = (employeeId, field, value) => {
+    setDrafts((previous) => ({
+      ...previous,
+      [employeeId]: {
+        ...previous[employeeId],
+        [field]: value,
+      },
+    }));
+  };
+
+  const handleSaveAssignment = async (employee) => {
+    const employeeId = employee._id;
+    const draft = drafts[employeeId] || {
+      workLocation: '',
+      companyCode: '',
+      costCenter: '',
+    };
+
+    setSavingEmployeeId(employeeId);
+    try {
+      await fetchAPI(`/users/update_user/${employeeId}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          workLocation: draft.workLocation.trim(),
+          companyCode: draft.companyCode.trim(),
+          costCenter: draft.costCenter.trim(),
+        }),
+      });
+
+      setEmployees((previous) =>
+        previous.map((item) =>
+          item._id === employeeId
+            ? {
+                ...item,
+                workLocation: draft.workLocation.trim(),
+                companyCode: draft.companyCode.trim(),
+                costCenter: draft.costCenter.trim(),
+              }
+            : item
+        )
+      );
+    } catch (err) {
+      alert(`Failed to save assignment for ${employee.name}: ${err.message}`);
+    } finally {
+      setSavingEmployeeId('');
+    }
+  };
+
+  return (
+    <div style={S.page}>
+      <div style={S.inner}>
+        <div style={S.maxW}>
+          <div style={S.pageHeader}>
+            <h1 style={S.pageTitle}>Employee Assignments</h1>
+            <p style={S.pageSub}>Assign work location, company code, and cost center for timesheet use</p>
+          </div>
+
+          <div style={S.statsGrid}>
+            {[
+              { label: 'Employees', value: employees.length, sub: 'Available for assignment', Icon: Users, color: C.text },
+              { label: 'Assigned', value: assignedCount, sub: 'Have at least one value set', Icon: CheckCircle2, color: C.green },
+              { label: 'Missing', value: Math.max(employees.length - assignedCount, 0), sub: 'Need admin review', Icon: AlertCircle, color: C.red },
+              { label: 'Visible In Time', value: '3 fields', sub: 'Location, code, cost center', Icon: Building2, color: C.text },
+            ].map(({ label, value, sub, Icon, color }) => (
+              <div key={label} style={S.statCard}>
+                <div style={S.statRow}>
+                  <span style={S.statLabel}>{label}</span>
+                  <Icon size={18} style={{ color: C.purpleMid }} />
+                </div>
+                <div style={{ ...S.statValue, color }}>{value}</div>
+                <div style={S.statSub}>{sub}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ ...S.card, ...S.cardPadSm, marginBottom: '20px' }}>
+            <div style={S.rowBetween}>
+              <ValueHelpSearch
+                value={searchTerm}
+                onChange={setSearchTerm}
+                suggestions={searchSuggestions}
+                placeholder="Search by employee, email, department, or assignment..."
+                style={{ flex: 1, minWidth: '260px' }}
+              />
+              <button type="button" onClick={loadEmployees} style={S.btnSecondary}>
+                <RefreshCw size={14} /> Refresh
+              </button>
+            </div>
+          </div>
+
+          <div style={{ ...S.card, overflow: 'hidden' }}>
+            <div style={S.tableScroll}>
+              <table style={{ ...S.table, minWidth: '1120px' }}>
+                <thead style={S.thead}>
+                  <tr>
+                    {['Employee', 'Department', 'Work Location', 'Company Code', 'Cost Center', 'Status', 'Action'].map((header) => (
+                      <th
+                        key={header}
+                        style={header === 'Status' || header === 'Action' ? S.thCenter : S.th}
+                      >
+                        {header}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr>
+                      <td colSpan={7} style={{ ...S.tdMid, textAlign: 'center', padding: '40px' }}>Loading employees…</td>
+                    </tr>
+                  ) : filteredEmployees.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} style={{ ...S.tdMid, textAlign: 'center', padding: '40px' }}>No employees match the current search</td>
+                    </tr>
+                  ) : filteredEmployees.map((employee, index) => {
+                    const draft = drafts[employee._id] || {
+                      workLocation: '',
+                      companyCode: '',
+                      costCenter: '',
+                    };
+                    const isComplete = draft.workLocation.trim() && draft.companyCode.trim() && draft.costCenter.trim();
+                    const isSaving = savingEmployeeId === employee._id;
+
+                    return (
+                      <tr key={employee._id} style={index % 2 === 0 ? S.trEven : S.trOdd}>
+                        <td style={S.td}>
+                          <div style={{ fontWeight: '600' }}>{employee.name}</div>
+                          <div style={{ fontSize: '12px', color: C.textMid }}>{employee.email}</div>
+                          <div style={{ fontSize: '12px', color: C.textMid }}>{employee.employeeId || 'No employee ID'}</div>
+                        </td>
+                        <td style={S.td}>{employee.department || 'Not assigned'}</td>
+                        <td style={S.td}>
+                          <input
+                            className="input"
+                            value={draft.workLocation}
+                            onChange={(event) => handleDraftChange(employee._id, 'workLocation', event.target.value)}
+                            placeholder="Assign location"
+                            style={{ ...S.input, width: '100%' }}
+                          />
+                        </td>
+                        <td style={S.td}>
+                          <input
+                            className="input"
+                            value={draft.companyCode}
+                            onChange={(event) => handleDraftChange(employee._id, 'companyCode', event.target.value)}
+                            placeholder="Assign company code"
+                            style={{ ...S.input, width: '100%' }}
+                          />
+                        </td>
+                        <td style={S.td}>
+                          <input
+                            className="input"
+                            value={draft.costCenter}
+                            onChange={(event) => handleDraftChange(employee._id, 'costCenter', event.target.value)}
+                            placeholder="Assign cost center"
+                            style={{ ...S.input, width: '100%' }}
+                          />
+                        </td>
+                        <td style={S.tdCenter}>
+                          <span
+                            style={{
+                              ...S.badge,
+                              background: isComplete ? C.greenLight : C.amberLight,
+                              color: isComplete ? C.green : C.amber,
+                              borderColor: isComplete ? C.greenBorder : C.amberBorder,
+                            }}
+                          >
+                            {isComplete ? 'Complete' : 'Incomplete'}
+                          </span>
+                        </td>
+                        <td style={S.tdCenter}>
+                          <button
+                            type="button"
+                            onClick={() => handleSaveAssignment(employee)}
+                            disabled={isSaving}
+                            style={isSaving ? S.btnDisabled : S.btnPrimary}
+                          >
+                            {isSaving ? 'Saving' : 'Save'}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div style={S.infoBox}>
+            <p style={S.infoTitle}>Assignment Rules</p>
+            <ul style={S.infoList}>
+              {[
+                'These values are maintained by admin and are reused by employee and lead timesheet views.',
+                'New submissions snapshot the current assignment values onto the timesheet for approval history consistency.',
+                'Employees with incomplete assignments will still save, but the timesheet UI will show missing metadata until completed.',
+              ].map((item, index) => (
+                <li key={index} style={S.infoItem}>• {item}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EmptyModuleState({ title, message, actionLabel = '', icon: Icon = FileText }) {
   return (
     <div className="mte-empty-state">
@@ -3243,11 +3595,12 @@ function ExpensesPanel({ user }) {
   );
 }
 
-function LocationsPanel({ selectedPeriod, periods }) {
+function LocationsPanel({ selectedPeriod, periods, user }) {
   const period = periods.find((item) => item.value === selectedPeriod) || periods[0];
   const dates = period
     ? eachDayOfInterval({ start: parseISO(period.start), end: parseISO(period.end) })
     : [];
+  const assignmentMeta = getTimesheetAssignmentMeta(user);
 
   return (
     <div className="mte-module-card mte-module-card-flat">
@@ -3268,18 +3621,18 @@ function LocationsPanel({ selectedPeriod, periods }) {
           <tbody>
             <tr>
               <td><span className="mte-sheet-meta-link">Work Location</span></td>
-              {dates.map((day) => <td key={`location-${day.toISOString()}`}>▼</td>)}
+              {dates.map((day) => <td key={`location-${day.toISOString()}`}>{assignmentMeta.workLocation}</td>)}
               <td />
             </tr>
             <tr>
               <td>Assigned Location</td>
-              {dates.map((day) => <td key={`assigned-${day.toISOString()}`}>15</td>)}
-              <td>15</td>
+              {dates.map((day) => <td key={`assigned-${day.toISOString()}`}>{assignmentMeta.assignedLocation}</td>)}
+              <td>{assignmentMeta.assignedLocation}</td>
             </tr>
             <tr>
               <td>Company Code/Cost Center</td>
-              {dates.map((day) => <td key={`cost-${day.toISOString()}`}>8134</td>)}
-              <td>8134</td>
+              {dates.map((day) => <td key={`cost-${day.toISOString()}`}>{assignmentMeta.companyCostCenter}</td>)}
+              <td>{assignmentMeta.companyCostCenter}</td>
             </tr>
           </tbody>
         </table>
@@ -3377,7 +3730,7 @@ function PreferencesPanel({ user }) {
 }
 
 function PortalTimeWorkspace({ user, selectedPeriod, onSelectedPeriodChange }) {
-  const hasTeamScope = Boolean(user?.reportsTo || user?.role === 'Manager');
+  const hasTeamScope = Boolean(user?.role === 'Lead' || user?.role === 'Manager' || user?.reportsTo);
   const isAdmin = user?.role === 'Admin';
   const defaultView = isAdmin ? 'all' : 'entry';
   const [activeView, setActiveView] = useState(defaultView);
@@ -3443,6 +3796,7 @@ export default function Timesheets({ user }) {
     { key: 'expenses', label: 'EXPENSES' },
     { key: 'locations', label: 'LOCATIONS' },
     { key: 'charge_codes', label: 'CHARGE CODES' },
+    ...(user?.role === 'Admin' ? [{ key: 'assignments', label: 'ASSIGNMENTS' }] : []),
     { key: 'adjustments', label: 'ADJUSTMENTS' },
     { key: 'summary', label: 'SUMMARY' },
     { key: 'preferences', label: 'PREFERENCES' },
@@ -3461,9 +3815,11 @@ export default function Timesheets({ user }) {
       case 'expenses':
         return <ExpensesPanel user={user} />;
       case 'locations':
-        return <LocationsPanel selectedPeriod={selectedPeriod} periods={periods} />;
+        return <LocationsPanel selectedPeriod={selectedPeriod} periods={periods} user={user} />;
       case 'charge_codes':
         return user?.role === 'Admin' ? <ChargeCodeAdmin user={user} /> : <AssignedChargeCodesPanel user={user} />;
+      case 'assignments':
+        return user?.role === 'Admin' ? <AssignmentAdmin user={user} /> : <PortalTimeWorkspace user={user} selectedPeriod={selectedPeriod} onSelectedPeriodChange={setSelectedPeriod} />;
       case 'adjustments':
         return <AdjustmentsPanel user={user} />;
       case 'summary':

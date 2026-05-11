@@ -197,6 +197,9 @@ def _serialize_directory_employee(user, base_url, leave_summary, period_start, p
         "shiftTimings": user.get("shiftTimings", ""),
         "employment_type": user.get("employment_type", "Employee"),
         "is_active": user.get("is_active", True),
+        "workLocation": user.get("workLocation", ""),
+        "companyCode": user.get("companyCode", ""),
+        "costCenter": user.get("costCenter", ""),
         "dateOfJoining": joining_date.isoformat() if isinstance(joining_date, datetime) else joining_date,
         "reportsTo": reports_to,
         "reportsToEmail": user.get("reportsToEmail") or manager_email,
@@ -1014,7 +1017,7 @@ def update_user(user_id):
         # Fields that can be updated (REMOVED dateOfJoining and dateOfBirth from here)
         allowed_fields = [
             "name", "email", "designation", "department", "shiftTimings",
-            "projects", "role", "leaveBalance", "workLocation", "employment_type"
+            "projects", "role", "leaveBalance", "workLocation", "companyCode", "costCenter", "employment_type"
         ]
 
         for field in allowed_fields:

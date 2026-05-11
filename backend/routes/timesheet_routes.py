@@ -49,6 +49,44 @@ def create_notification(user_id, notification_type, message, related_timesheet_i
         print(f"❌ Error creating timesheet notification: {str(e)}")
 
 
+def apply_employee_assignment_snapshot(timesheet_doc, employee):
+    """Copy admin-managed assignment fields onto a timesheet document."""
+    if not isinstance(timesheet_doc, dict) or not isinstance(employee, dict):
+        return timesheet_doc
+
+    timesheet_doc["employee_work_location"] = employee.get("workLocation", "") or ""
+    timesheet_doc["employee_company_code"] = employee.get("companyCode", "") or ""
+    timesheet_doc["employee_cost_center"] = employee.get("costCenter", "") or ""
+    return timesheet_doc
+
+
+def enrich_timesheet_with_employee_assignments(timesheet_doc):
+    """Backfill assignment metadata for older timesheets when reading."""
+    if not isinstance(timesheet_doc, dict):
+        return timesheet_doc
+
+    employee_id = timesheet_doc.get("employee_id")
+    if not employee_id:
+        return timesheet_doc
+
+    if (
+        timesheet_doc.get("employee_work_location")
+        and timesheet_doc.get("employee_company_code")
+        and timesheet_doc.get("employee_cost_center")
+    ):
+        return timesheet_doc
+
+    try:
+        employee_lookup_id = employee_id if isinstance(employee_id, ObjectId) else ObjectId(employee_id)
+        employee = mongo.db.users.find_one({"_id": employee_lookup_id})
+        if employee:
+            apply_employee_assignment_snapshot(timesheet_doc, employee)
+    except Exception:
+        pass
+
+    return timesheet_doc
+
+
 # ========================================
 # CREATE / SUBMIT TIMESHEET
 # ========================================
@@ -189,6 +227,7 @@ def create_timesheet():
             "submitted_at":        now,
             "approval_history":    [],
         }
+        apply_employee_assignment_snapshot(timesheet, employee)
 
         if existing:
             mongo.db.timesheets.update_one({"_id": existing["_id"]}, {"$set": timesheet})
@@ -361,6 +400,7 @@ def get_employee_timesheets(employee_id):
         timesheets = list(
             mongo.db.timesheets.find({"employee_id": ObjectId(employee_id)}).sort("period_start", -1)
         )
+        timesheets = [enrich_timesheet_with_employee_assignments(ts) for ts in timesheets]
         return jsonify(serialize_all(timesheets)), 200
 
     except Exception as e:
@@ -381,6 +421,7 @@ def get_pending_for_lead(user_id):
                 "status": "pending_lead",
             }).sort("submitted_at", -1)
         )
+        timesheets = [enrich_timesheet_with_employee_assignments(ts) for ts in timesheets]
         return jsonify(serialize_all(timesheets)), 200
 
     except Exception as e:
@@ -675,6 +716,7 @@ def get_all_timesheets():
 
         result = []
         for ts in timesheets:
+            ts = enrich_timesheet_with_employee_assignments(ts)
             ts = serialize_all(ts)
             employee_id = ts.get("employee_id")
             if employee_id and (not ts.get("employee_name") or not ts.get("employee_department")):
@@ -753,6 +795,7 @@ def get_team_timesheets(manager_email):
             ts_list = list(mongo.db.timesheets.find({"employee_id": emp["_id"]}).sort("period_start", -1))
             all_ts.extend(ts_list)
 
+        all_ts = [enrich_timesheet_with_employee_assignments(ts) for ts in all_ts]
         return jsonify(serialize_all(all_ts)), 200
 
     except Exception as e:
@@ -770,6 +813,7 @@ def get_timesheet(timesheet_id):
         ts = mongo.db.timesheets.find_one({"_id": ObjectId(timesheet_id)})
         if not ts:
             return jsonify({"error": "Timesheet not found"}), 404
+        ts = enrich_timesheet_with_employee_assignments(ts)
         return jsonify(serialize_all(ts)), 200
 
     except Exception as e:
