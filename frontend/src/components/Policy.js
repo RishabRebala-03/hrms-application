@@ -3,15 +3,19 @@ import {
   ArrowLeft,
   BookOpenText,
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Edit3,
   FileText,
   Filter,
   ShieldCheck,
   Sparkles,
+  X,
 } from "lucide-react";
 import ValueHelpSelect from "./ValueHelpSelect";
 import ValueHelpSearch from "./ValueHelpSearch";
 
-const policies = [
+const initialPolicies = [
   {
     id: "1001",
     title: "Leave Policy Guidelines",
@@ -113,17 +117,30 @@ const policies = [
 
 const categories = ["All", "HR", "Finance", "Operations", "General", "Compliance", "Security"];
 const statuses = ["All", "Active", "Draft", "Review"];
-const policySearchSuggestions = policies.flatMap((policy) => [
-  { value: policy.id, label: policy.id, description: policy.title },
-  { value: policy.title, label: policy.title, description: policy.category },
-  { value: policy.category, label: policy.category, description: "Category" },
-  { value: policy.status, label: policy.status, description: "Status" },
-]);
 
 const statusToneMap = {
   Active: "is-approved",
   Draft: "is-neutral",
   Review: "is-pending",
+};
+
+const POLICY_SCROLL_OFFSET = 118;
+
+const getPolicyScrollContainer = () =>
+  document.querySelector(".main") || document.scrollingElement || document.documentElement;
+
+const isWindowScrollContainer = (container) =>
+  container === document.scrollingElement ||
+  container === document.documentElement ||
+  container === document.body;
+
+const getSectionTopWithinContainer = (element, container) => {
+  if (isWindowScrollContainer(container)) {
+    return element.getBoundingClientRect().top + window.scrollY;
+  }
+
+  const containerRect = container.getBoundingClientRect();
+  return element.getBoundingClientRect().top - containerRect.top + container.scrollTop;
 };
 
 const categoryDescriptions = {
@@ -136,13 +153,28 @@ const categoryDescriptions = {
 };
 
 const Policy = () => {
+  const [policies, setPolicies] = useState(initialPolicies);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedStatus, setSelectedStatus] = useState("All");
   const [expandedPolicy, setExpandedPolicy] = useState(null);
   const [activeSection, setActiveSection] = useState(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isOutlineCollapsed, setIsOutlineCollapsed] = useState(false);
+  const [editForm, setEditForm] = useState(null);
   const contentRootRef = useRef(null);
   const contentRefs = useRef({});
+
+  const policySearchSuggestions = useMemo(
+    () =>
+      policies.flatMap((policy) => [
+        { value: policy.id, label: policy.id, description: policy.title },
+        { value: policy.title, label: policy.title, description: policy.category },
+        { value: policy.category, label: policy.category, description: "Category" },
+        { value: policy.status, label: policy.status, description: "Status" },
+      ]),
+    [policies]
+  );
 
   const filteredPolicies = useMemo(() => {
     return policies.filter((policy) => {
@@ -158,11 +190,11 @@ const Policy = () => {
 
       return matchesSearch && matchesCategory && matchesStatus;
     });
-  }, [searchQuery, selectedCategory, selectedStatus]);
+  }, [policies, searchQuery, selectedCategory, selectedStatus]);
 
   const selectedPolicy = useMemo(
     () => policies.find((policy) => policy.id === expandedPolicy) || null,
-    [expandedPolicy]
+    [expandedPolicy, policies]
   );
 
   const activePoliciesCount = policies.filter((policy) => policy.status === "Active").length;
@@ -183,7 +215,26 @@ const Policy = () => {
       });
 
       contentRefs.current = nextRefs;
-      setActiveSection(selectedPolicy.sections[0]?.id || null);
+      const hashSectionId = window.location.hash.replace("#", "");
+      const matchingHashSection = selectedPolicy.sections.find((section) => section.id === hashSectionId);
+
+      if (matchingHashSection && nextRefs[matchingHashSection.id]) {
+        setActiveSection(matchingHashSection.id);
+
+        window.requestAnimationFrame(() => {
+          const element = nextRefs[matchingHashSection.id];
+          const scrollContainer = getPolicyScrollContainer();
+          const targetTop = getSectionTopWithinContainer(element, scrollContainer) - POLICY_SCROLL_OFFSET;
+
+          if (isWindowScrollContainer(scrollContainer)) {
+            window.scrollTo({ top: Math.max(targetTop, 0), behavior: "auto" });
+          } else {
+            scrollContainer.scrollTo({ top: Math.max(targetTop, 0), behavior: "auto" });
+          }
+        });
+      } else {
+        setActiveSection(selectedPolicy.sections[0]?.id || null);
+      }
     });
 
     return () => window.cancelAnimationFrame(frameId);
@@ -194,13 +245,19 @@ const Policy = () => {
       return undefined;
     }
 
+    const scrollContainer = getPolicyScrollContainer();
+
     const handleScroll = () => {
-      const scrollPosition = 170;
+      const scrollPosition = POLICY_SCROLL_OFFSET + 24;
       let currentSection = selectedPolicy.sections[0]?.id || null;
 
       selectedPolicy.sections.forEach((section) => {
         const element = contentRefs.current[section.id];
-        const elementTop = element?.getBoundingClientRect().top;
+        const elementTop = element
+          ? isWindowScrollContainer(scrollContainer)
+            ? element.getBoundingClientRect().top
+            : element.getBoundingClientRect().top - scrollContainer.getBoundingClientRect().top
+          : null;
 
         if (element && typeof elementTop === "number" && elementTop <= scrollPosition) {
           currentSection = section.id;
@@ -210,10 +267,10 @@ const Policy = () => {
       setActiveSection(currentSection);
     };
 
-    window.addEventListener("scroll", handleScroll, { passive: true });
+    scrollContainer.addEventListener("scroll", handleScroll, { passive: true });
     handleScroll();
 
-    return () => window.removeEventListener("scroll", handleScroll);
+    return () => scrollContainer.removeEventListener("scroll", handleScroll);
   }, [selectedPolicy]);
 
   const openPolicy = (policyId) => {
@@ -243,14 +300,74 @@ const Policy = () => {
     window.history.replaceState(null, "", `#${sectionId}`);
     element.setAttribute("tabindex", "-1");
     element.focus({ preventScroll: true });
-    element.scrollIntoView({ behavior: "smooth", block: "start" });
+
+    const scrollContainer = getPolicyScrollContainer();
+    const targetTop = getSectionTopWithinContainer(element, scrollContainer) - POLICY_SCROLL_OFFSET;
+
+    if (isWindowScrollContainer(scrollContainer)) {
+      window.scrollTo({ top: Math.max(targetTop, 0), behavior: "smooth" });
+    } else {
+      scrollContainer.scrollTo({ top: Math.max(targetTop, 0), behavior: "smooth" });
+    }
+  };
+
+  const openEditModal = () => {
+    if (!selectedPolicy) {
+      return;
+    }
+
+    setEditForm({
+      title: selectedPolicy.title,
+      description: selectedPolicy.description,
+      category: selectedPolicy.category,
+      status: selectedPolicy.status,
+      updated: selectedPolicy.updated,
+      dateAdded: selectedPolicy.dateAdded,
+      dateAmended: selectedPolicy.dateAmended,
+      content: selectedPolicy.content.trim(),
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const closeEditModal = () => {
+    setIsEditModalOpen(false);
+    setEditForm(null);
+  };
+
+  const updateEditField = (field, value) => {
+    setEditForm((previous) => ({ ...previous, [field]: value }));
+  };
+
+  const savePolicyUpdates = () => {
+    if (!selectedPolicy || !editForm) {
+      return;
+    }
+
+    setPolicies((currentPolicies) =>
+      currentPolicies.map((policy) =>
+        policy.id === selectedPolicy.id
+          ? {
+              ...policy,
+              title: editForm.title.trim() || policy.title,
+              description: editForm.description.trim() || policy.description,
+              category: editForm.category,
+              status: editForm.status,
+              updated: editForm.updated,
+              dateAdded: editForm.dateAdded,
+              dateAmended: editForm.dateAmended,
+              content: editForm.content.trim() || policy.content,
+            }
+          : policy
+      )
+    );
+    closeEditModal();
   };
 
   if (selectedPolicy) {
     return (
       <section className="policy-workspace">
         <header className="admin-hero policy-detail-hero">
-          <div>
+          <div className="policy-hero-copy">
             <button className="fiori-button secondary policy-back-button" onClick={closePolicy}>
               <ArrowLeft size={16} />
               <span>Back to policies</span>
@@ -258,6 +375,13 @@ const Policy = () => {
             <div className="admin-section-overline">Policy Library</div>
             <h1>{selectedPolicy.title}</h1>
             <p>{selectedPolicy.description}</p>
+
+            <div className="policy-detail-actions">
+              <button className="fiori-button primary" onClick={openEditModal}>
+                <Edit3 size={16} />
+                <span>Update policy</span>
+              </button>
+            </div>
           </div>
 
           <div className="admin-hero-meta">
@@ -276,74 +400,85 @@ const Policy = () => {
           </div>
         </header>
 
-        <div className="policy-detail-layout">
-          <aside className="fiori-panel policy-outline-panel">
-            <div className="fiori-panel-header">
-              <div>
-                <h3>Document Outline</h3>
-                <p>Jump between sections in the active policy</p>
+        <div className="policy-detail-main">
+          <section className="policy-detail-meta-grid">
+            <article className="fiori-stat-card">
+              <div className="fiori-stat-topline">
+                <span className="fiori-stat-label">Category</span>
+                <ShieldCheck size={18} />
               </div>
-            </div>
+              <div className="fiori-stat-value policy-detail-stat-value">
+                {selectedPolicy.category}
+              </div>
+              <div className="fiori-stat-note">
+                {categoryDescriptions[selectedPolicy.category] || "Reference documentation"}
+              </div>
+            </article>
 
-            <div className="policy-outline-list">
-              {selectedPolicy.sections.map((section) => (
-                <a
-                  key={section.id}
-                  href={`#${section.id}`}
-                  className={`policy-outline-item ${
-                    activeSection === section.id ? "is-active" : ""
-                  }`}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    scrollToSection(section.id);
-                  }}
-                  aria-current={activeSection === section.id ? "location" : undefined}
+            <article className="fiori-stat-card">
+              <div className="fiori-stat-topline">
+                <span className="fiori-stat-label">Published</span>
+                <CalendarDays size={18} />
+              </div>
+              <div className="fiori-stat-value policy-detail-stat-value">
+                {selectedPolicy.dateAdded}
+              </div>
+              <div className="fiori-stat-note">Initial publication date</div>
+            </article>
+
+            <article className="fiori-stat-card">
+              <div className="fiori-stat-topline">
+                <span className="fiori-stat-label">Amended</span>
+                <Sparkles size={18} />
+              </div>
+              <div className="fiori-stat-value policy-detail-stat-value">
+                {selectedPolicy.dateAmended}
+              </div>
+              <div className="fiori-stat-note">Most recent revision date</div>
+            </article>
+          </section>
+
+          <div className={`policy-detail-layout ${isOutlineCollapsed ? "is-outline-collapsed" : ""}`}>
+            <aside className={`fiori-panel policy-outline-panel ${isOutlineCollapsed ? "is-collapsed" : ""}`}>
+              <div className="fiori-panel-header">
+                <div>
+                  <h3>Document Outline</h3>
+                  <p>Jump between sections in the active policy</p>
+                </div>
+                <button
+                  type="button"
+                  className="policy-outline-toggle"
+                  onClick={() => setIsOutlineCollapsed((previous) => !previous)}
+                  aria-label={isOutlineCollapsed ? "Expand document outline" : "Collapse document outline"}
+                  title={isOutlineCollapsed ? "Expand document outline" : "Collapse document outline"}
                 >
-                  {section.title}
-                </a>
-              ))}
-            </div>
-          </aside>
+                  {isOutlineCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+                </button>
+              </div>
 
-          <div className="policy-detail-main">
-            <section className="policy-detail-meta-grid">
-              <article className="fiori-stat-card">
-                <div className="fiori-stat-topline">
-                  <span className="fiori-stat-label">Category</span>
-                  <ShieldCheck size={18} />
+              {!isOutlineCollapsed ? (
+                <div className="policy-outline-list">
+                  {selectedPolicy.sections.map((section) => (
+                    <a
+                      key={section.id}
+                      href={`#${section.id}`}
+                      className={`policy-outline-item ${
+                        activeSection === section.id ? "is-active" : ""
+                      }`}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        scrollToSection(section.id);
+                      }}
+                      aria-current={activeSection === section.id ? "location" : undefined}
+                    >
+                      {section.title}
+                    </a>
+                  ))}
                 </div>
-                <div className="fiori-stat-value policy-detail-stat-value">
-                  {selectedPolicy.category}
-                </div>
-                <div className="fiori-stat-note">
-                  {categoryDescriptions[selectedPolicy.category] || "Reference documentation"}
-                </div>
-              </article>
+              ) : null}
+            </aside>
 
-              <article className="fiori-stat-card">
-                <div className="fiori-stat-topline">
-                  <span className="fiori-stat-label">Published</span>
-                  <CalendarDays size={18} />
-                </div>
-                <div className="fiori-stat-value policy-detail-stat-value">
-                  {selectedPolicy.dateAdded}
-                </div>
-                <div className="fiori-stat-note">Initial publication date</div>
-              </article>
-
-              <article className="fiori-stat-card">
-                <div className="fiori-stat-topline">
-                  <span className="fiori-stat-label">Amended</span>
-                  <Sparkles size={18} />
-                </div>
-                <div className="fiori-stat-value policy-detail-stat-value">
-                  {selectedPolicy.dateAmended}
-                </div>
-                <div className="fiori-stat-note">Most recent revision date</div>
-              </article>
-            </section>
-
-            <section className="fiori-panel">
+            <section className="fiori-panel policy-document-panel">
               <div className="fiori-panel-header">
                 <div>
                   <h3>Policy Document</h3>
@@ -362,6 +497,112 @@ const Policy = () => {
             </section>
           </div>
         </div>
+
+        {isEditModalOpen && editForm ? (
+          <div className="admin-modal-overlay" onClick={closeEditModal}>
+            <div className="admin-modal admin-modal-wide" onClick={(event) => event.stopPropagation()}>
+              <div className="admin-modal-header">
+                <div>
+                  <h2>Update Policy</h2>
+                  <p>Edit the policy summary and published document content in one place.</p>
+                </div>
+                <button className="fiori-button secondary danger" onClick={closeEditModal}>
+                  <X size={16} />
+                  <span>Close</span>
+                </button>
+              </div>
+
+              <div className="policy-edit-grid">
+                <label className="fiori-form-field">
+                  <label>Policy Title</label>
+                  <input
+                    className="input"
+                    value={editForm.title}
+                    onChange={(event) => updateEditField("title", event.target.value)}
+                  />
+                </label>
+
+                <label className="fiori-form-field">
+                  <label>Category</label>
+                  <ValueHelpSelect
+                    value={editForm.category}
+                    onChange={(value) => updateEditField("category", value)}
+                    searchPlaceholder="Search categories"
+                    options={categories
+                      .filter((category) => category !== "All")
+                      .map((category) => ({ value: category, label: category }))}
+                  />
+                </label>
+
+                <label className="fiori-form-field">
+                  <label>Status</label>
+                  <ValueHelpSelect
+                    value={editForm.status}
+                    onChange={(value) => updateEditField("status", value)}
+                    searchPlaceholder="Search status"
+                    options={statuses
+                      .filter((status) => status !== "All")
+                      .map((status) => ({ value: status, label: status }))}
+                  />
+                </label>
+
+                <label className="fiori-form-field">
+                  <label>Updated</label>
+                  <input
+                    className="input"
+                    value={editForm.updated}
+                    onChange={(event) => updateEditField("updated", event.target.value)}
+                  />
+                </label>
+
+                <label className="fiori-form-field">
+                  <label>Published</label>
+                  <input
+                    className="input"
+                    value={editForm.dateAdded}
+                    onChange={(event) => updateEditField("dateAdded", event.target.value)}
+                  />
+                </label>
+
+                <label className="fiori-form-field">
+                  <label>Amended</label>
+                  <input
+                    className="input"
+                    value={editForm.dateAmended}
+                    onChange={(event) => updateEditField("dateAmended", event.target.value)}
+                  />
+                </label>
+
+                <label className="fiori-form-field policy-edit-field-wide">
+                  <label>Description</label>
+                  <textarea
+                    value={editForm.description}
+                    onChange={(event) => updateEditField("description", event.target.value)}
+                    rows={3}
+                  />
+                </label>
+
+                <label className="fiori-form-field policy-edit-field-wide">
+                  <label>Policy Content (HTML)</label>
+                  <textarea
+                    value={editForm.content}
+                    onChange={(event) => updateEditField("content", event.target.value)}
+                    rows={18}
+                  />
+                </label>
+              </div>
+
+              <div className="admin-modal-actions">
+                <button className="fiori-button secondary" onClick={closeEditModal}>
+                  Cancel
+                </button>
+                <button className="fiori-button primary" onClick={savePolicyUpdates}>
+                  Save changes
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </section>
     );
   }
