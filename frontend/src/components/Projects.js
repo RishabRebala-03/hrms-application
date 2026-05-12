@@ -411,28 +411,8 @@ const Projects = () => {
           <div className="admin-section-overline">Project Portfolio</div>
           <h1>Projects</h1>
           <p>
-            Manage project records, staffing context, and oversight views from one place without turning the header into another dashboard.
+            Manage project records, staffing context, and oversight views from one place.
           </p>
-          <div className="admin-hero-brief-grid">
-            <article className="admin-hero-brief-card">
-              <h3>Portfolio View</h3>
-              <div className="admin-hero-note" style={{ marginTop: 0 }}>
-                This workspace brings together project setup, staffing, leave overlap, and logged time in one admin flow.
-              </div>
-            </article>
-            <article className="admin-hero-brief-card">
-              <h3>Oversight Tools</h3>
-              <div className="admin-hero-note" style={{ marginTop: 0 }}>
-                Use the tabs and filters below to move between planning, raw table detail, leave collision review, and visual summaries.
-              </div>
-            </article>
-            <article className="admin-hero-brief-card">
-              <h3>Admin Intent</h3>
-              <div className="admin-hero-note" style={{ marginTop: 0 }}>
-                The header stays simple so the project tables and oversight sections below remain the center of attention.
-              </div>
-            </article>
-          </div>
         </div>
         <div className="admin-hero-meta">
           <div className="admin-hero-meta-item"><span>Primary View</span><strong>Portfolio workspace</strong></div>

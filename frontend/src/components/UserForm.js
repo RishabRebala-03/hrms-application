@@ -87,28 +87,8 @@ const UserForm = ({ onSaved }) => {
           <div className="admin-section-overline">Workforce Setup</div>
           <h1>Employee Setup</h1>
           <p>
-            Capture the baseline identity, reporting, and assignment data needed to create a complete workforce record that scales cleanly.
+            Add identity, access, reporting, and assignment details for a new employee.
           </p>
-          <div className="admin-hero-brief-grid">
-            <article className="admin-hero-brief-card">
-              <h3>Form Flow</h3>
-              <div className="admin-hero-note" style={{ marginTop: 0 }}>
-                Start with identity and access details, then add reporting and assignment information to complete the record.
-              </div>
-            </article>
-            <article className="admin-hero-brief-card">
-              <h3>Data Domains</h3>
-              <div className="admin-hero-note" style={{ marginTop: 0 }}>
-                The form covers identity, reporting structure, work location, projects, and employee lifecycle details.
-              </div>
-            </article>
-            <article className="admin-hero-brief-card">
-              <h3>Workflow Note</h3>
-              <div className="admin-hero-note" style={{ marginTop: 0 }}>
-                Keep this area plain so the form itself stays the main focus while you create a new workforce record.
-              </div>
-            </article>
-          </div>
         </div>
 
         <div className="admin-hero-meta">

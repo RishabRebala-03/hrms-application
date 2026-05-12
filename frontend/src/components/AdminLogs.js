@@ -409,28 +409,8 @@ export default function AdminLogs() {
           <div className="admin-section-overline">Audit Trail</div>
           <h1>Audit Logs</h1>
           <p>
-            Use this section as the system record for tracing actions, reviewing history, and exporting audit evidence when needed.
+            Trace actions, review history, and export audit evidence when needed.
           </p>
-          <div className="admin-hero-brief-grid">
-            <article className="admin-hero-brief-card">
-              <h3>Audit Source</h3>
-              <div className="admin-hero-note" style={{ marginTop: 0 }}>
-                Every row is meant to be readable, filterable, and exportable so investigations can stay grounded in the table itself.
-              </div>
-            </article>
-            <article className="admin-hero-brief-card">
-              <h3>How To Use It</h3>
-              <div className="admin-hero-note" style={{ marginTop: 0 }}>
-                Narrow the table with filters, sort the result set, and export the same view when you need a reproducible log extract.
-              </div>
-            </article>
-            <article className="admin-hero-brief-card">
-              <h3>Design Intent</h3>
-              <div className="admin-hero-note" style={{ marginTop: 0 }}>
-                This area stays plain on purpose so the detailed audit table below remains the real working surface.
-              </div>
-            </article>
-          </div>
         </div>
 
         <div className="admin-hero-meta">

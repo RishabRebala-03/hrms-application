@@ -614,7 +614,7 @@ const Policy = () => {
           <div className="admin-section-overline">Knowledge Hub</div>
           <h1>Policies</h1>
           <p>
-            Keep the policy library easy to manage, easy to browse, and easy to read without crowding the page with summary stats.
+            Manage, browse, and read policy documents from one clear workspace.
           </p>
         </div>
 

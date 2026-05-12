@@ -7238,11 +7238,15 @@ body {
 .leave-escalation-summary div,
 .leave-escalation-history-compact,
 .escalation-owner-card {
-  padding: 10px;
+  padding: 14px;
+  border: 1px solid rgba(213, 219, 225, 0.92);
+  box-shadow: 0 8px 20px rgba(34, 53, 72, 0.06);
 }
 
 .fiori-panel {
-  padding: 12px 14px;
+  padding: 16px 18px;
+  border: 1px solid rgba(213, 219, 225, 0.92);
+  box-shadow: 0 10px 24px rgba(34, 53, 72, 0.06);
 }
 
 .admin-dashboard,
@@ -7257,7 +7261,7 @@ body {
 .enterprise-calendar-workspace,
 .tea-workspace,
 .profile-workspace {
-  gap: 10px;
+  gap: 16px;
 }
 
 .admin-dashboard-grid,
@@ -7322,11 +7326,11 @@ body {
 .leave-escalation-grid,
 .leave-modal-grid,
 .leave-escalation-summary {
-  gap: 8px;
+  gap: 14px;
 }
 
 .fiori-panel-header {
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 
 .fiori-panel-header h3 {
@@ -7439,7 +7443,13 @@ body {
 
 /* Hard compact mode for Leave, Calendar, Policy, and Tea/Coffee pages */
 .leave-workspace .admin-hero,
+.holiday-admin-workspace .admin-hero,
 .enterprise-calendar-workspace .admin-hero,
+.setup-workspace .admin-hero,
+.audit-workspace .admin-hero,
+.policy-workspace .admin-hero,
+.projects-workspace .admin-hero,
+.apply-behalf-workspace .admin-hero,
 .tea-workspace .admin-hero,
 .manager-leave-workspace .admin-hero {
   align-items: center;
@@ -7447,14 +7457,38 @@ body {
 }
 
 .leave-workspace .admin-hero p,
+.holiday-admin-workspace .admin-hero p,
 .enterprise-calendar-workspace .admin-hero p,
 .tea-workspace .admin-hero p,
 .manager-leave-workspace .admin-hero p {
   display: none;
 }
 
+.setup-workspace .admin-hero p {
+  margin-top: 4px;
+  line-height: 1.35;
+}
+
+.audit-workspace .admin-hero p {
+  margin-top: 4px;
+  line-height: 1.35;
+}
+
+.policy-workspace .admin-hero p,
+.projects-workspace .admin-hero p,
+.apply-behalf-workspace .admin-hero p {
+  margin-top: 4px;
+  line-height: 1.35;
+}
+
 .leave-workspace .admin-hero-meta,
+.holiday-admin-workspace .admin-hero-meta,
 .enterprise-calendar-workspace .admin-hero-meta,
+.setup-workspace .admin-hero-meta,
+.audit-workspace .admin-hero-meta,
+.policy-workspace .admin-hero-meta,
+.projects-workspace .admin-hero-meta,
+.apply-behalf-workspace .admin-hero-meta,
 .tea-workspace .admin-hero-meta,
 .manager-leave-workspace .admin-hero-meta {
   min-width: 0;
@@ -7468,14 +7502,26 @@ body {
 }
 
 .leave-workspace .admin-hero-meta-item,
+.holiday-admin-workspace .admin-hero-meta-item,
 .enterprise-calendar-workspace .admin-hero-meta-item,
+.setup-workspace .admin-hero-meta-item,
+.audit-workspace .admin-hero-meta-item,
+.policy-workspace .admin-hero-meta-item,
+.projects-workspace .admin-hero-meta-item,
+.apply-behalf-workspace .admin-hero-meta-item,
 .tea-workspace .admin-hero-meta-item,
 .manager-leave-workspace .admin-hero-meta-item {
   padding: 7px 8px;
 }
 
 .leave-workspace .admin-hero-meta-item span,
+.holiday-admin-workspace .admin-hero-meta-item span,
 .enterprise-calendar-workspace .admin-hero-meta-item span,
+.setup-workspace .admin-hero-meta-item span,
+.audit-workspace .admin-hero-meta-item span,
+.policy-workspace .admin-hero-meta-item span,
+.projects-workspace .admin-hero-meta-item span,
+.apply-behalf-workspace .admin-hero-meta-item span,
 .tea-workspace .admin-hero-meta-item span,
 .manager-leave-workspace .admin-hero-meta-item span {
   font-size: 10px;
@@ -7483,7 +7529,13 @@ body {
 }
 
 .leave-workspace .admin-hero-meta-item strong,
+.holiday-admin-workspace .admin-hero-meta-item strong,
 .enterprise-calendar-workspace .admin-hero-meta-item strong,
+.setup-workspace .admin-hero-meta-item strong,
+.audit-workspace .admin-hero-meta-item strong,
+.policy-workspace .admin-hero-meta-item strong,
+.projects-workspace .admin-hero-meta-item strong,
+.apply-behalf-workspace .admin-hero-meta-item strong,
 .tea-workspace .admin-hero-meta-item strong,
 .manager-leave-workspace .admin-hero-meta-item strong {
   font-size: 12px;
@@ -7492,31 +7544,36 @@ body {
 
 .leave-workspace .admin-dashboard-grid,
 .leave-workspace .admin-dashboard-grid-compact,
+.holiday-summary-grid,
 .calendar-summary-grid,
 .tea-summary-grid,
 .tea-employee-summary {
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 6px;
+  gap: 12px;
 }
 
 .leave-workspace .fiori-stat-card,
+.holiday-summary-grid .fiori-stat-card,
 .calendar-summary-grid .fiori-stat-card,
 .tea-summary-grid .fiori-stat-card,
 .tea-employee-summary .fiori-stat-card {
   min-height: 0;
-  padding: 8px;
+  padding: 12px;
 }
 
 .leave-workspace .fiori-stat-card .fiori-stat-note,
+.holiday-summary-grid .fiori-stat-card .fiori-stat-note,
 .calendar-summary-grid .fiori-stat-card .fiori-stat-note,
 .tea-summary-grid .fiori-stat-card .fiori-stat-note,
 .tea-employee-summary .fiori-stat-card .fiori-stat-note,
+.holiday-summary-grid .fiori-inline-link,
 .calendar-summary-grid .fiori-inline-link,
 .tea-summary-grid .fiori-inline-link {
   display: none;
 }
 
 .leave-workspace .fiori-stat-topline,
+.holiday-summary-grid .fiori-stat-topline,
 .calendar-summary-grid .fiori-stat-topline,
 .tea-summary-grid .fiori-stat-topline,
 .tea-employee-summary .fiori-stat-topline {
@@ -7524,6 +7581,7 @@ body {
 }
 
 .leave-workspace .fiori-stat-value,
+.holiday-summary-grid .fiori-stat-value,
 .calendar-summary-grid .fiori-stat-value,
 .tea-summary-grid .fiori-stat-value,
 .tea-employee-summary .fiori-stat-value {
@@ -7531,6 +7589,7 @@ body {
 }
 
 .leave-workspace .fiori-stat-label,
+.holiday-summary-grid .fiori-stat-label,
 .calendar-summary-grid .fiori-stat-label,
 .tea-summary-grid .fiori-stat-label,
 .tea-employee-summary .fiori-stat-label {
@@ -7538,6 +7597,7 @@ body {
 }
 
 .leave-workspace .fiori-stat-topline svg,
+.holiday-summary-grid .fiori-stat-topline svg,
 .calendar-summary-grid .fiori-stat-topline svg,
 .tea-summary-grid .fiori-stat-topline svg,
 .tea-employee-summary .fiori-stat-topline svg {
@@ -7548,7 +7608,7 @@ body {
 .leave-workspace .fiori-panel,
 .enterprise-calendar-workspace .fiori-panel,
 .tea-workspace .fiori-panel {
-  padding: 10px;
+  padding: 14px;
 }
 
 .leave-workspace .fiori-panel-header p,

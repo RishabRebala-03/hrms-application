@@ -165,28 +165,8 @@ const AdminApplyLeave = ({ user }) => {
           <div className="admin-section-overline">Leave Action</div>
           <h1>Apply on Behalf</h1>
           <p>
-            Create leave on behalf of an employee with the right balance, profile, and approval context kept close to the form.
+            Create leave for an employee with balance and profile context close to the form.
           </p>
-          <div className="admin-hero-brief-grid">
-            <article className="admin-hero-brief-card">
-              <h3>Employee Context</h3>
-              <div className="admin-hero-note" style={{ marginTop: 0 }}>
-                Start by choosing the employee, then use the balance and profile panels below before submitting the request.
-              </div>
-            </article>
-            <article className="admin-hero-brief-card">
-              <h3>Leave Check</h3>
-              <div className="admin-hero-note" style={{ marginTop: 0 }}>
-                Balance visibility stays in the workflow so entitlement checks happen before the request is submitted.
-              </div>
-            </article>
-            <article className="admin-hero-brief-card">
-              <h3>Submission Path</h3>
-              <div className="admin-hero-note" style={{ marginTop: 0 }}>
-                Pick the person, review their details, enter the leave, and let the record flow into the same admin system of record.
-              </div>
-            </article>
-          </div>
         </div>
 
         <div className="admin-hero-meta">

@@ -38,8 +38,8 @@ class EmailService:
             # Send email via Outlook SMTP (STARTTLS)
             with smtplib.SMTP(self.smtp_server, self.smtp_port, timeout=self.timeout) as server:
                 server.ehlo()
-                server.starttls()
                 server.ehlo()
+                server.starttls()
                 server.login(self.sender_email, self.sender_password)
                 server.sendmail(self.sender_email, recipients, msg.as_string())
             
