@@ -396,7 +396,11 @@ function App() {
 
       // ✅ Timesheets - available to all roles
       case "timesheets":
-        return <Timesheets user={currentUser} />;
+        return (
+          <div className="timesheets-page-shell">
+            <Timesheets user={currentUser} />
+          </div>
+        );
 
       default:
         if (role === "Admin") {

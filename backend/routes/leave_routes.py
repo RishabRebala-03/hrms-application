@@ -77,6 +77,28 @@ def normalize_half_day_period(period):
     return mapping.get(key, "")
 
 
+def is_weekend(date_value):
+    """Return True for Saturday/Sunday."""
+    return date_value.weekday() >= 5
+
+
+def calculate_working_leave_days(start, end):
+    """Count leave days from Monday to Friday only."""
+    if end < start:
+        return 0
+
+    day_count = 0
+    current = start.date()
+    end_date = end.date()
+
+    while current <= end_date:
+        if not is_weekend(current):
+            day_count += 1
+        current += timedelta(days=1)
+
+    return day_count
+
+
 # ========== ⭐ NEW ESCALATION FUNCTION (NO EMAIL) ⭐ ==========
 # FIXED escalate_leave_request function - Replace in leave_routes.py
 
@@ -665,6 +687,11 @@ def apply_leave():
         # Convert dates
         start = datetime.strptime(start_date, '%Y-%m-%d')
         end = datetime.strptime(end_date, '%Y-%m-%d')
+
+        if end < start:
+            return jsonify({
+                "error": "End date cannot be before start date."
+            }), 400
         
         # Calculate days with half-day support
         if is_half_day:
@@ -676,9 +703,17 @@ def apply_leave():
                 return jsonify({
                     "error": "Please select half-day period (morning or afternoon)"
                 }), 400
+            if is_weekend(start.date()):
+                return jsonify({
+                    "error": "Half-day leave cannot be applied on weekends."
+                }), 400
             days = 0.5
         else:
-            days = (end - start).days + 1
+            days = calculate_working_leave_days(start, end)
+            if days == 0:
+                return jsonify({
+                    "error": "Selected leave range has no working days. Weekends are not counted as leave."
+                }), 400
         
         today = datetime.now().date()
 
@@ -928,6 +963,11 @@ def update_leave(leave_id):
 
     start = datetime.strptime(data["start_date"], "%Y-%m-%d")
     end = datetime.strptime(data["end_date"], "%Y-%m-%d")
+
+    if end < start:
+        return jsonify({
+            "error": "End date cannot be before start date."
+        }), 400
     
     is_half_day = data.get("is_half_day", False)
     half_day_period = normalize_half_day_period(data.get("half_day_period", ""))
@@ -941,9 +981,17 @@ def update_leave(leave_id):
             return jsonify({
                 "error": "Please select half-day period (morning or afternoon)"
             }), 400
+        if is_weekend(start.date()):
+            return jsonify({
+                "error": "Half-day leave cannot be applied on weekends."
+            }), 400
         days = 0.5
     else:
-        days = (end - start).days + 1
+        days = calculate_working_leave_days(start, end)
+        if days == 0:
+            return jsonify({
+                "error": "Selected leave range has no working days. Weekends are not counted as leave."
+            }), 400
 
     today = datetime.now().date()
 
@@ -1266,7 +1314,13 @@ def update_leave_status(leave_id):
                 
                 approved_start = datetime.strptime(approved_start_date, '%Y-%m-%d')
                 approved_end = datetime.strptime(approved_end_date, '%Y-%m-%d')
-                approved_days = (approved_end - approved_start).days + 1
+                if approved_end < approved_start:
+                    return jsonify({"error": "Approved end date cannot be before approved start date"}), 400
+                approved_days = calculate_working_leave_days(approved_start, approved_end)
+                if approved_days == 0:
+                    return jsonify({
+                        "error": "Approved leave range has no working days. Weekends are not counted as leave."
+                    }), 400
                 update_data["approved_days"] = approved_days
             else:
                 update_data["is_partial_approval"] = False

@@ -27,7 +27,15 @@ const monthNames = [
   "December",
 ];
 
-const weekdayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const weekdayNames = [
+  { label: "Mon", isWeekend: false },
+  { label: "Tue", isWeekend: false },
+  { label: "Wed", isWeekend: false },
+  { label: "Thu", isWeekend: false },
+  { label: "Fri", isWeekend: false },
+  { label: "Sat", isWeekend: true },
+  { label: "Sun", isWeekend: true },
+];
 
 const toDateKey = (value) => {
   if (!value) return "";
@@ -212,7 +220,7 @@ const Calendar = ({ user, setSection, navigationState }) => {
 
   const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
 
-  const getFirstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
+  const getFirstDayOfMonth = (year, month) => (new Date(year, month, 1).getDay() + 6) % 7;
 
   const findHoliday = (year, month, day) => {
     const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
@@ -300,8 +308,10 @@ const Calendar = ({ user, setSection, navigationState }) => {
       const birthdayList = findBirthdays(selectedYear, monthIndex, day);
       const dayLeaves = findApprovedLeaves(dateStr);
       const today = isToday(selectedYear, monthIndex, day);
+      const isWeekend = [0, 6].includes(new Date(selectedYear, monthIndex, day).getDay());
 
       const classNames = ["enterprise-calendar-day"];
+      if (isWeekend) classNames.push("is-weekend");
       if (today) classNames.push("is-today");
       if (holiday) classNames.push(`is-holiday-${holiday.type}`);
       if (birthdayList.length > 0) classNames.push("has-birthday");
@@ -356,7 +366,9 @@ const Calendar = ({ user, setSection, navigationState }) => {
         <div className="enterprise-calendar-month-body">
           <div className="enterprise-calendar-weekdays">
             {weekdayNames.map((dayName) => (
-              <div key={dayName}>{dayName}</div>
+              <div key={dayName.label} className={dayName.isWeekend ? "is-weekend" : ""}>
+                {dayName.label}
+              </div>
             ))}
           </div>
           <div className="enterprise-calendar-days">{days}</div>

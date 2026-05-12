@@ -1,8 +1,9 @@
 .mte-portal-shell {
   width: 100%;
-  min-height: 100%;
-  background: transparent;
+  min-height: calc(100vh - 72px);
+  background: #f4f6f8;
   color: #2b2b2b;
+  padding: 20px 24px 28px;
 }
 
 .mte-ghost-icon {
@@ -20,22 +21,25 @@
 .mte-portal-tabs {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 0;
+  gap: 6px;
+  padding: 4px;
   overflow-x: auto;
-  border-bottom: 1px solid #dadada;
-  background: transparent;
+  border: 1px solid #d9dee7;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 20px rgba(15, 39, 66, 0.05);
 }
 
 .mte-portal-tabs button,
 .mte-subtabs button {
   border: none;
   border-bottom: 3px solid transparent;
+  border-radius: 6px;
   background: transparent;
   color: #474747;
   font-size: 13px;
   letter-spacing: 0.01em;
-  padding: 14px 10px 12px;
+  padding: 12px 14px 10px;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -44,10 +48,11 @@
 .mte-subtabs button.is-active {
   border-bottom-color: #6f54b6;
   color: #212121;
+  background: #f5f2fb;
 }
 
 .mte-portal-content {
-  padding: 6px 0 14px;
+  padding: 16px 0 0;
 }
 
 .mte-module-stack {
@@ -60,12 +65,13 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 10px 0 0;
+  padding: 0;
   overflow-x: auto;
 }
 
 .mte-embedded-shell {
   padding: 0 0 20px;
+  width: 100%;
 }
 
 .mte-date-toolbar {
@@ -391,14 +397,16 @@
 }
 
 .mte-sheet-card {
-  border-radius: 0 !important;
-  box-shadow: none !important;
-  border-left: none !important;
-  border-right: none !important;
+  width: 100%;
+  border-radius: 10px !important;
+  box-shadow: 0 10px 24px rgba(15, 39, 66, 0.06) !important;
+  border: 1px solid #dcdfe5 !important;
+  background: #fff;
 }
 
 .mte-sheet-scroll {
   border-top: 1px solid #d9d9d9;
+  border-radius: 0 0 10px 10px;
 }
 
 .mte-sheet-table thead th {
@@ -1311,6 +1319,10 @@
 }
 
 @media (max-width: 768px) {
+  .mte-portal-shell {
+    padding: 12px;
+  }
+
   .mte-portal-tabs,
   .mte-embedded-shell,
   .mte-module-card,

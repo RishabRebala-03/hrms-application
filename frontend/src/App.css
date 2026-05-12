@@ -49,6 +49,11 @@
     width: 100% !important;
     max-width: 100vw !important;
   }
+
+  .timesheets-page-shell {
+    margin: -12px !important;
+    min-height: calc(100vh - 72px) !important;
+  }
 }
 
 /* ========================================
@@ -373,6 +378,12 @@ body {
 ===================================================== */
 .content {
   padding: 24px;
+}
+
+.timesheets-page-shell {
+  min-height: calc(100vh - 72px);
+  margin: -24px;
+  background: #f4f6f8;
 }
 
 .profile-trigger {
@@ -3239,6 +3250,10 @@ body {
   letter-spacing: 0.04em;
 }
 
+.enterprise-calendar-weekdays div.is-weekend {
+  color: #94a3b8;
+}
+
 .enterprise-calendar-day {
   position: relative;
   width: 100%;
@@ -3255,6 +3270,12 @@ body {
   color: #35516e;
   font-family: inherit;
   cursor: default;
+}
+
+.enterprise-calendar-day.is-weekend {
+  background: #f3f4f6;
+  border-color: #e5e7eb;
+  color: #64748b;
 }
 
 .enterprise-calendar-day-number {

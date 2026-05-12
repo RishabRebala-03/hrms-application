@@ -51,6 +51,29 @@ const isDateWithinRange = (dateStr, startDate, endDate) => {
   return dateStr >= startDate && dateStr <= endDate;
 };
 
+const parseDateKey = (dateStr) => {
+  if (!dateStr) return null;
+  const [year, month, day] = dateStr.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+};
+
+const isWeekendDate = (date) => [0, 6].includes(date.getDay());
+
+const calculateWorkingLeaveDays = (startDate, endDate) => {
+  const start = parseDateKey(startDate);
+  const end = parseDateKey(endDate);
+  if (!start || !end || end < start) return 0;
+
+  let count = 0;
+  const current = new Date(start);
+  while (current <= end) {
+    if (!isWeekendDate(current)) count += 1;
+    current.setDate(current.getDate() + 1);
+  }
+  return count;
+};
+
 const leaveOverlapsRange = (item, dateRange) => {
   if (!dateRange.start && !dateRange.end) return true;
   const start = toDateKey(item.approved_start_date || item.start_date);
@@ -125,6 +148,11 @@ const EmployeeLeaves = ({ user, navigationState }) => {
   const [calendarFocusDate, setCalendarFocusDate] = useState("");
 
   const isIntern = user?.employment_type === "Intern";
+  const requestedLeaveDays = useMemo(() => {
+    if (!leave.start_date || !leave.end_date || leave.leave_type === "Early Logout") return null;
+    if (leave.is_half_day) return 0.5;
+    return calculateWorkingLeaveDays(leave.start_date, leave.end_date);
+  }, [leave.end_date, leave.is_half_day, leave.leave_type, leave.start_date]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -304,13 +332,15 @@ const EmployeeLeaves = ({ user, navigationState }) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const start = new Date(start_date);
+    const start = parseDateKey(start_date);
     start.setHours(0, 0, 0, 0);
 
-    const end = new Date(end_date);
+    const end = parseDateKey(end_date);
     end.setHours(0, 0, 0, 0);
 
     const daysDiff = Math.round((start - today) / (1000 * 60 * 60 * 24));
+
+    if (end < start) return "End date cannot be before start date.";
 
     if (type === "planned") {
       if (daysDiff < 7) return "Planned leave must be applied at least 7 days in advance.";
@@ -331,9 +361,12 @@ const EmployeeLeaves = ({ user, navigationState }) => {
 
     if (is_half_day) {
       if (start_date !== end_date) return "Half-day leave can only be applied for a single day.";
+      if (isWeekendDate(start)) return "Half-day leave cannot be applied on weekends.";
       if (!half_day_period || !["morning", "afternoon"].includes(half_day_period)) {
         return "Please select half-day period (morning or afternoon).";
       }
+    } else if (calculateWorkingLeaveDays(start_date, end_date) === 0) {
+      return "Selected leave range has no working days. Weekends are not counted as leave.";
     }
 
     return null;
@@ -357,6 +390,12 @@ const EmployeeLeaves = ({ user, navigationState }) => {
 
     if (leave.leave_type === "Early Logout" && !leave.logout_time) {
       setMessage("⚠️ Logout time is mandatory for early logout");
+      return;
+    }
+
+    const validationError = validateEditLeave(leave);
+    if (validationError) {
+      setMessage(`⚠️ ${validationError}`);
       return;
     }
 
@@ -840,6 +879,16 @@ const EmployeeLeaves = ({ user, navigationState }) => {
                 <div>
                   <strong>Sick leave policy</strong>
                   <p>Sick leave can only be raised for today or tomorrow. Leaves above 3 days require documentation.</p>
+                </div>
+              </div>
+            ) : null}
+
+            {requestedLeaveDays !== null ? (
+              <div className={`employee-policy-callout ${requestedLeaveDays > 0 ? "info" : "warning"}`}>
+                <CalendarCheck2 size={18} />
+                <div>
+                  <strong>{requestedLeaveDays} leave day{requestedLeaveDays === 1 ? "" : "s"}</strong>
+                  <p>Only Monday to Friday are counted. Saturday and Sunday are excluded automatically.</p>
                 </div>
               </div>
             ) : null}
