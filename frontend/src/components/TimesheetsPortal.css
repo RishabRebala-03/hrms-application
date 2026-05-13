@@ -585,7 +585,7 @@
 .mte-chargecodes-topbar {
   min-height: 52px;
   display: grid;
-  grid-template-columns: minmax(260px, 0.9fr) minmax(180px, auto) minmax(240px, 0.8fr) minmax(320px, auto);
+  grid-template-columns: minmax(520px, 1.4fr) minmax(180px, auto) minmax(240px, 0.8fr) minmax(320px, auto);
   align-items: center;
   gap: 14px;
   padding: 10px 12px;
@@ -594,8 +594,15 @@
 
 .mte-chargecodes-add {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
+}
+
+.mte-chargecodes-add-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(130px, 1fr));
+  gap: 6px;
+  width: 100%;
 }
 
 .mte-chargecodes-add input,
@@ -609,8 +616,8 @@
 }
 
 .mte-chargecodes-add input {
-  min-width: 180px;
-  width: min(100%, 240px);
+  min-width: 0;
+  width: 100%;
 }
 
 .mte-chargecodes-add button,
@@ -1302,6 +1309,10 @@
     align-items: stretch;
   }
 
+  .mte-chargecodes-add-grid {
+    grid-template-columns: repeat(2, minmax(140px, 1fr));
+  }
+
   .mte-chargecodes-actions {
     justify-content: flex-start;
     flex-wrap: wrap;
@@ -1321,6 +1332,14 @@
 @media (max-width: 768px) {
   .mte-portal-shell {
     padding: 12px;
+  }
+
+  .mte-chargecodes-add {
+    flex-direction: column;
+  }
+
+  .mte-chargecodes-add-grid {
+    grid-template-columns: 1fr;
   }
 
   .mte-portal-tabs,

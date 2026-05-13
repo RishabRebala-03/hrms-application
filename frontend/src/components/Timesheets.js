@@ -1753,15 +1753,16 @@ function TimesheetFullPageView({ timesheet, onClose, onApprove, onReject, user, 
   if (!timesheet) return null;
 
   const role = user?.role;
+  const roleKey = String(role || '').toLowerCase();
   const isPending  = timesheet.status === 'pending_lead';
-  const isApprover = role === 'Lead';
+  const isApprover = roleKey.includes('lead');
   const canAction  = isApprover && onApprove && isPending;
 
   const period = timesheet.period_start && timesheet.period_end
     ? `${format(new Date(timesheet.period_start), 'MMM d')} – ${format(new Date(timesheet.period_end), 'MMM d, yyyy')}`
     : '—';
 
-  const isLegacyManagerPending = role === 'Manager' && timesheet.status === 'pending_manager' && onApprove;
+  const isLegacyManagerPending = roleKey === 'manager' && timesheet.status === 'pending_manager' && onApprove;
 
   const allDates = (() => {
     if (!timesheet.period_start || !timesheet.period_end) return [];
@@ -2842,8 +2843,9 @@ function TeamTimesheets({ user }) {
 
   const ccLookup  = useCcLookup();
   const userEmail = user?.email;
+  const userId = getUserId(user);
 
-  useEffect(() => {
+  const loadTeamTimesheets = useCallback(() => {
     if (!userEmail) return;
     setLoading(true);
     fetchAPI(`/timesheets/team/${userEmail}`)
@@ -2851,6 +2853,55 @@ function TeamTimesheets({ user }) {
       .catch((err) => { console.error(err); setTimesheets([]); })
       .finally(() => setLoading(false));
   }, [userEmail]);
+
+  useEffect(() => {
+    loadTeamTimesheets();
+  }, [loadTeamTimesheets]);
+
+  const handleApprove = async (timesheet) => {
+    const id = timesheet?._id || timesheet?.id;
+    if (!id || !window.confirm('Approve this timesheet?')) return;
+    const ep = timesheet.status === 'pending_manager'
+      ? `/timesheets/approve/manager/${id}`
+      : `/timesheets/approve/lead/${id}`;
+    setLoading(true);
+    try {
+      await fetchAPI(ep, {
+        method: 'PUT',
+        body: JSON.stringify({ approved_by: userId, comments: '' }),
+      });
+      alert('Timesheet approved successfully');
+      setViewingTimesheet(null);
+      loadTeamTimesheets();
+    } catch (err) {
+      alert(`Approval failed: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReject = async (timesheet) => {
+    const id = timesheet?._id || timesheet?.id;
+    const reason = window.prompt('Please provide a reason for rejection:');
+    if (!id || !reason?.trim()) return;
+    const ep = timesheet.status === 'pending_manager'
+      ? `/timesheets/reject/manager/${id}`
+      : `/timesheets/reject/lead/${id}`;
+    setLoading(true);
+    try {
+      await fetchAPI(ep, {
+        method: 'PUT',
+        body: JSON.stringify({ rejected_by: userId, rejection_reason: reason }),
+      });
+      alert('Timesheet rejected');
+      setViewingTimesheet(null);
+      loadTeamTimesheets();
+    } catch (err) {
+      alert(`Rejection failed: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filtered = timesheets.filter((ts) => {
     const name  = (ts.employee_name  || '').toLowerCase();
@@ -2957,6 +3008,7 @@ function TeamTimesheets({ user }) {
                   ) : filtered.length === 0 ? (
                     <tr><td colSpan={6} style={{ ...S.tdMid, textAlign: 'center', padding: '40px' }}>No timesheets found</td></tr>
                   ) : filtered.map((ts, i) => {
+                    const isPending = ['pending_lead', 'pending_manager'].includes(ts.status);
                     const period = ts.period_start && ts.period_end
                       ? `${format(new Date(ts.period_start), 'MMM d')} – ${format(new Date(ts.period_end), 'MMM d, yyyy')}`
                       : '—';
@@ -2973,19 +3025,42 @@ function TeamTimesheets({ user }) {
                         </td>
                         <td style={S.tdCenter}><StatusBadge status={ts.status} /></td>
                         <td style={S.tdCenter}>
-                          <button
-                            onClick={async () => {
-                              try {
-                                const full = await fetchAPI(`/timesheets/${ts._id}`);
-                                setViewingTimesheet(full);
-                              } catch (_) {
-                                setViewingTimesheet(ts);
-                              }
-                            }}
-                            style={S.btnIcon}
-                          >
-                            <Eye size={15} />
-                          </button>
+                          <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const full = await fetchAPI(`/timesheets/${ts._id}`);
+                                  setViewingTimesheet(full);
+                                } catch (_) {
+                                  setViewingTimesheet(ts);
+                                }
+                              }}
+                              style={S.btnIcon}
+                              title="View full timesheet"
+                            >
+                              <Eye size={15} />
+                            </button>
+                            {isPending && (
+                              <>
+                                <button
+                                  onClick={() => handleApprove(ts)}
+                                  disabled={loading}
+                                  style={{ ...S.btnIcon, color: C.green }}
+                                  title="Approve"
+                                >
+                                  <CheckCircle size={15} />
+                                </button>
+                                <button
+                                  onClick={() => handleReject(ts)}
+                                  disabled={loading}
+                                  style={{ ...S.btnIcon, color: C.red }}
+                                  title="Reject"
+                                >
+                                  <XCircle size={15} />
+                                </button>
+                              </>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -3003,8 +3078,8 @@ function TeamTimesheets({ user }) {
             user={user}
             ccLookup={ccLookup}
             onClose={() => setViewingTimesheet(null)}
-            onApprove={null}
-            onReject={null}
+            onApprove={['pending_lead', 'pending_manager'].includes(viewingTimesheet.status) ? () => handleApprove(viewingTimesheet) : null}
+            onReject={['pending_lead', 'pending_manager'].includes(viewingTimesheet.status) ? () => handleReject(viewingTimesheet) : null}
           />
         </div>
       )}
@@ -3299,7 +3374,15 @@ function ChargeCodesWorkspace({ user, adminMode = false }) {
   const [employees, setEmployees] = useState([]);
   const [selectedRows, setSelectedRows] = useState([]);
   const [displayRows, setDisplayRows] = useState({});
-  const [entryCode, setEntryCode] = useState('');
+  const emptyChargeCodeForm = {
+    code: '',
+    type: '',
+    subType: '',
+    client: '',
+    country: '',
+    description: '',
+  };
+  const [chargeCodeForm, setChargeCodeForm] = useState(emptyChargeCodeForm);
   const [filter, setFilter] = useState('All');
   const [selectedEmployees, setSelectedEmployees] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -3368,7 +3451,7 @@ function ChargeCodesWorkspace({ user, adminMode = false }) {
   };
 
   const handleAddCode = async () => {
-    const code = entryCode.trim();
+    const code = chargeCodeForm.code.trim();
     if (!code) {
       alert('Enter a charge code');
       return;
@@ -3388,14 +3471,18 @@ function ChargeCodesWorkspace({ user, adminMode = false }) {
         method: 'POST',
         body: JSON.stringify({
           code,
-          name: code,
-          description: '',
-          project_name: '',
+          name: chargeCodeForm.description.trim() || code,
+          description: chargeCodeForm.description.trim(),
+          project_name: chargeCodeForm.client.trim(),
+          type: chargeCodeForm.type.trim(),
+          sub_type: chargeCodeForm.subType.trim(),
+          client: chargeCodeForm.client.trim(),
+          country: chargeCodeForm.country.trim(),
           is_active: true,
           created_by: userId,
         }),
       });
-      setEntryCode('');
+      setChargeCodeForm(emptyChargeCodeForm);
       loadCodes();
     } catch (err) {
       alert(`Failed to add charge code: ${err.message}`);
@@ -3451,12 +3538,44 @@ function ChargeCodesWorkspace({ user, adminMode = false }) {
     <div className="mte-chargecodes-shell">
       <div className="mte-chargecodes-topbar">
         <div className="mte-chargecodes-add">
-          <input
-            value={entryCode}
-            onChange={(event) => setEntryCode(event.target.value)}
-            placeholder="Enter Charge Code"
-            disabled={!adminMode || loading}
-          />
+          <div className="mte-chargecodes-add-grid">
+            <input
+              value={chargeCodeForm.code}
+              onChange={(event) => setChargeCodeForm((previous) => ({ ...previous, code: event.target.value }))}
+              placeholder="Charge Code"
+              disabled={!adminMode || loading}
+            />
+            <input
+              value={chargeCodeForm.type}
+              onChange={(event) => setChargeCodeForm((previous) => ({ ...previous, type: event.target.value }))}
+              placeholder="Type"
+              disabled={!adminMode || loading}
+            />
+            <input
+              value={chargeCodeForm.subType}
+              onChange={(event) => setChargeCodeForm((previous) => ({ ...previous, subType: event.target.value }))}
+              placeholder="Subtype"
+              disabled={!adminMode || loading}
+            />
+            <input
+              value={chargeCodeForm.client}
+              onChange={(event) => setChargeCodeForm((previous) => ({ ...previous, client: event.target.value }))}
+              placeholder="Client"
+              disabled={!adminMode || loading}
+            />
+            <input
+              value={chargeCodeForm.country}
+              onChange={(event) => setChargeCodeForm((previous) => ({ ...previous, country: event.target.value }))}
+              placeholder="Country"
+              disabled={!adminMode || loading}
+            />
+            <input
+              value={chargeCodeForm.description}
+              onChange={(event) => setChargeCodeForm((previous) => ({ ...previous, description: event.target.value }))}
+              placeholder="Description"
+              disabled={!adminMode || loading}
+            />
+          </div>
           <button type="button" onClick={handleAddCode} disabled={!adminMode || loading}>Add</button>
         </div>
 
@@ -3499,7 +3618,7 @@ function ChargeCodesWorkspace({ user, adminMode = false }) {
             <option>Selected</option>
           </select>
           <button type="button" onClick={() => {
-            setEntryCode('');
+            setChargeCodeForm(emptyChargeCodeForm);
             setSelectedRows([]);
             setFilter('All');
           }}>

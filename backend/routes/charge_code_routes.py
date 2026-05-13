@@ -24,6 +24,11 @@ def serialize_all(obj):
     return obj
 
 
+def clean_text(value):
+    """Normalize optional text fields from JSON payloads."""
+    return str(value or "").strip()
+
+
 # ========================================
 # CREATE CHARGE CODE (ADMIN)
 # ========================================
@@ -43,10 +48,14 @@ def create_charge_code():
     """
     try:
         data         = request.get_json() or {}
-        code         = data.get("code", "").strip().upper()
-        name         = data.get("name", "").strip()
-        description  = data.get("description", "")
-        project_name = data.get("project_name", "")
+        code         = clean_text(data.get("code")).upper()
+        name         = clean_text(data.get("name"))
+        description  = clean_text(data.get("description"))
+        project_name = clean_text(data.get("project_name"))
+        charge_type  = clean_text(data.get("type", data.get("charge_type", "")))
+        sub_type     = clean_text(data.get("sub_type", data.get("subtype", data.get("subType", ""))))
+        client       = clean_text(data.get("client"))
+        country      = clean_text(data.get("country", data.get("country_region", "")))
         is_active    = bool(data.get("is_active", True))
         created_by   = data.get("created_by")
 
@@ -75,6 +84,10 @@ def create_charge_code():
             "name":         name,
             "description":  description,
             "project_name": project_name,
+            "type":         charge_type,
+            "sub_type":     sub_type,
+            "client":       client,
+            "country":      country,
             "is_active":    is_active,
             "created_by":   creator_id,
             "created_at":   datetime.utcnow(),
@@ -122,7 +135,7 @@ def get_all_charge_codes():
 def update_charge_code(charge_code_id):
     """
     Update a charge code.
-    Body: { name, description, project_name, is_active }
+    Body: { name, description, project_name, type, sub_type, client, country, is_active }
     """
     try:
         data = request.get_json() or {}
@@ -139,11 +152,27 @@ def update_charge_code(charge_code_id):
         update_data = {"updated_at": datetime.utcnow()}
 
         if "name" in data:
-            update_data["name"] = data["name"].strip()
+            update_data["name"] = clean_text(data["name"])
         if "description" in data:
-            update_data["description"] = data["description"]
+            update_data["description"] = clean_text(data["description"])
         if "project_name" in data:
-            update_data["project_name"] = data["project_name"]
+            update_data["project_name"] = clean_text(data["project_name"])
+        if "type" in data:
+            update_data["type"] = clean_text(data["type"])
+        if "charge_type" in data:
+            update_data["type"] = clean_text(data["charge_type"])
+        if "sub_type" in data:
+            update_data["sub_type"] = clean_text(data["sub_type"])
+        if "subtype" in data:
+            update_data["sub_type"] = clean_text(data["subtype"])
+        if "subType" in data:
+            update_data["sub_type"] = clean_text(data["subType"])
+        if "client" in data:
+            update_data["client"] = clean_text(data["client"])
+        if "country" in data:
+            update_data["country"] = clean_text(data["country"])
+        if "country_region" in data:
+            update_data["country"] = clean_text(data["country_region"])
         if "is_active" in data:
             update_data["is_active"] = bool(data["is_active"])
 
@@ -364,6 +393,12 @@ def get_employee_charge_codes(employee_id):
                     "charge_code_id":   str(charge_code["_id"]),
                     "charge_code":      charge_code.get("code"),
                     "charge_code_name": charge_code.get("name"),
+                    "description":      charge_code.get("description", ""),
+                    "project_name":     charge_code.get("project_name", ""),
+                    "type":             charge_code.get("type", ""),
+                    "sub_type":         charge_code.get("sub_type", ""),
+                    "client":           charge_code.get("client", ""),
+                    "country":          charge_code.get("country", ""),
                 })
 
         print(f"✅ Found {len(result)} assigned charge codes for employee {employee_id}")
