@@ -462,6 +462,8 @@ function TimesheetGrid({
   const displayHours = (hours) => (hours ? hours.toFixed(1) : '');
   const holidayHoursForDate = (dateStr) => (holidayByDate[dateStr] ? WORKDAY_HOURS : 0);
   const leaveHoursForDate = (dateStr) => (leaveByDate[dateStr]?.hours || 0);
+  const workHourLimitForDate = (dateStr) =>
+    Math.max(0, WORKDAY_HOURS - holidayHoursForDate(dateStr) - leaveHoursForDate(dateStr));
   const totalHoursForDate = (dateStr) => getColTotal(dateStr) + holidayHoursForDate(dateStr) + leaveHoursForDate(dateStr);
   const workScheduleForDate = (dateStr) => (isWeekday(dateStr) ? WORKDAY_HOURS : 0);
   const supportCheckboxRows = [
@@ -513,7 +515,7 @@ function TimesheetGrid({
                         {format(parseISO(d), 'EEE')}
                       </span>
                       <span>{format(parseISO(d), 'MMM d')}</span>
-                      {isHol && <span style={{ fontSize: '10px' }}>Holiday</span>}
+                      {isHol && <span style={{ fontSize: '10px' }}>PH</span>}
                     </div>
                   </th>
                 );
@@ -633,13 +635,15 @@ function TimesheetGrid({
                     const isHol = isHoliday(d);
                     const leaveEntry = leaveByDate[d];
                     const entry = getEntry(row, d);
+                    const isFullDayLeave = leaveEntry && !leaveEntry.isHalfDay;
+                    const workHourLimit = workHourLimitForDate(d);
                     return (
                       <td key={d} style={{
                         padding: '8px', textAlign: 'center',
                         borderLeft: `1px solid ${C.borderLight}`,
                         background: isHol ? '#fffbeb' : leaveEntry ? C.purpleLight : 'transparent',
                       }}>
-                        {isHol || leaveEntry ? (
+                        {isHol || isFullDayLeave ? (
                           <span
                             style={{
                               display: 'inline-flex',
@@ -654,25 +658,26 @@ function TimesheetGrid({
                               color: isHol ? C.holidayText : C.purple,
                             }}
                             title={isHol
-                              ? holidayByDate[d]?.holiday_name || 'Holiday'
+                              ? holidayByDate[d]?.holiday_name || 'Public holiday'
                               : `${leaveEntry.label}${leaveEntry.isHalfDay && leaveEntry.halfDayPeriod ? ` (${leaveEntry.halfDayPeriod})` : ''}`}
                           >
-                            {isHol ? 'HOL' : leaveEntry.code}
+                            {isHol ? 'PH' : leaveEntry.code}
                           </span>
                         ) : (
                           <input
                             className="mte-sheet-hour-input"
                             type="number"
                             min="0"
-                            max={DAILY_WORK_HOUR_LIMIT}
+                            max={workHourLimit}
                             step="0.25"
                             value={entry.value ?? ''}
                             disabled={readOnly}
+                            title={leaveEntry ? `${leaveEntry.label} covers ${displayHours(leaveEntry.hours)} hours on this date` : undefined}
                             onChange={(e) => {
                               const typedValue = e.target.value;
                               const typedHours = parseFloat(typedValue);
                               const cappedHours = Number.isFinite(typedHours)
-                                ? Math.min(Math.max(typedHours, 0), DAILY_WORK_HOUR_LIMIT)
+                                ? Math.min(Math.max(typedHours, 0), workHourLimit)
                                 : 0;
                               const nextValue = typedValue === ''
                                 ? ''
@@ -757,7 +762,7 @@ function TimesheetGrid({
                   borderRight: `1px solid ${C.borderLight}`,
                   boxShadow: '2px 0 4px rgba(0,0,0,0.04)',
                 }}>
-                  <span className="mte-sheet-static-row-title">{`${holidayByDate[dateStr].holiday_name || 'Public holiday'} (97OX00)`}</span>
+                  <span className="mte-sheet-static-row-title">{`${holidayByDate[dateStr].holiday_name || 'Public holiday'} (PH)`}</span>
                 </td>
                 {dates.map((d) => (
                   <td key={`holiday-cell-${dateStr}-${d}`} className="mte-sheet-static-value-cell">
@@ -927,7 +932,12 @@ function TimesheetPage({ user, selectedPeriod, onSelectedPeriodChange, embedded 
     [approvedLeaveEntries, holidayByDate]
   );
   const lockedDateSet = useMemo(
-    () => new Set([...Object.keys(holidayByDate), ...Object.keys(approvedLeaveByDate)]),
+    () => new Set([
+      ...Object.keys(holidayByDate),
+      ...Object.values(approvedLeaveByDate)
+        .filter((leave) => !leave.isHalfDay)
+        .map((leave) => leave.date),
+    ]),
     [holidayByDate, approvedLeaveByDate]
   );
 
@@ -1050,14 +1060,16 @@ function TimesheetPage({ user, selectedPeriod, onSelectedPeriodChange, embedded 
         }
         return sum + (isNaN(hours) ? 0 : hours);
       }, 0);
-      if (approvedLeaveByDate[date] && total > 0) {
+      const approvedLeave = approvedLeaveByDate[date];
+      const systemHours = (approvedLeave?.hours || 0) + (holidayByDate[date] ? DAILY_WORK_HOUR_LIMIT : 0);
+      if (approvedLeave && !approvedLeave.isHalfDay && total > 0) {
         errors.push(`${date} is already marked as ${approvedLeaveByDate[date].label} (${approvedLeaveByDate[date].code})`);
       }
       if (holidayByDate[date] && total > 0) {
         errors.push(`${date} is a holiday and cannot contain work hours`);
       }
-      if (total > DAILY_WORK_HOUR_LIMIT) {
-        errors.push(`${date} has ${total} hours. Maximum allowed is ${DAILY_WORK_HOUR_LIMIT} hours`);
+      if (total + systemHours > DAILY_WORK_HOUR_LIMIT) {
+        errors.push(`${date} has ${total + systemHours} total hours. Maximum allowed is ${DAILY_WORK_HOUR_LIMIT} hours`);
       }
     });
     return errors;
@@ -1108,9 +1120,14 @@ function TimesheetPage({ user, selectedPeriod, onSelectedPeriodChange, embedded 
       });
     });
 
-    const overLimit = Object.entries(totalsByDate).find(([, total]) => total > DAILY_WORK_HOUR_LIMIT);
+    const overLimit = Object.entries(totalsByDate).find(([date, total]) => {
+      const systemHours = (approvedLeaveByDate[date]?.hours || 0) + (holidayByDate[date] ? DAILY_WORK_HOUR_LIMIT : 0);
+      return total + systemHours > DAILY_WORK_HOUR_LIMIT;
+    });
     if (overLimit) {
-      throw new Error(`${overLimit[0]} has ${overLimit[1]} hours. Maximum allowed is ${DAILY_WORK_HOUR_LIMIT} hours`);
+      const [date, total] = overLimit;
+      const systemHours = (approvedLeaveByDate[date]?.hours || 0) + (holidayByDate[date] ? DAILY_WORK_HOUR_LIMIT : 0);
+      throw new Error(`${date} has ${total + systemHours} total hours. Maximum allowed is ${DAILY_WORK_HOUR_LIMIT} hours`);
     }
 
     return entries;
@@ -1574,7 +1591,7 @@ function TimesheetDetailModal({ timesheet, onClose, ccLookup = {} }) {
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
                           <span style={{ fontSize: '10px', color: isHol ? C.holidayText : isWkd ? C.textMid : C.textMid, fontWeight: '400' }}>{dow}</span>
                           <span>{format(parseISO(date), 'MMM d')}</span>
-                          {isHol && <span style={{ fontSize: '9px' }}>Holiday</span>}
+                          {isHol && <span style={{ fontSize: '9px' }}>PH</span>}
                         </div>
                       </th>
                     );
@@ -1861,7 +1878,7 @@ function TimesheetFullPageView({ timesheet, onClose, onApprove, onReject, user, 
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
                             <span style={{ fontSize: '10px', fontWeight: '400', color: isHol ? C.holidayText : C.textMid }}>{dow}</span>
                             <span>{format(parseISO(date), 'MMM d')}</span>
-                            {isHol && <span style={{ fontSize: '9px' }}>Holiday</span>}
+                            {isHol && <span style={{ fontSize: '9px' }}>PH</span>}
                           </div>
                         </th>
                       );

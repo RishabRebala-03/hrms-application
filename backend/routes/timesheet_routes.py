@@ -177,13 +177,14 @@ def build_system_generated_entries(employee_id, period_start, period_end):
             "date": date_key,
             "entry_type": "holiday",
             "holiday_name": holiday.get("name"),
+            "code": "PH",
             "hours": WORKDAY_HOURS,
             "description": f"Public Holiday: {holiday.get('name')}",
         })
         locked_dates[date_key] = {
             "kind": "holiday",
             "label": holiday.get("name") or "Holiday",
-            "code": "HOL",
+            "code": "PH",
         }
 
     leave_docs = list(mongo.db.leaves.find({
@@ -233,11 +234,12 @@ def build_system_generated_entries(employee_id, period_start, period_end):
                 "is_half_day": is_half_day,
                 "half_day_period": half_day_period if is_half_day else "",
             })
-            locked_dates[date_key] = {
-                "kind": "leave",
-                "label": leave_type,
-                "code": leave_code,
-            }
+            if not is_half_day:
+                locked_dates[date_key] = {
+                    "kind": "leave",
+                    "label": leave_type,
+                    "code": leave_code,
+                }
 
     return holiday_entries, leave_entries, locked_dates
 
@@ -249,6 +251,15 @@ def build_validated_timesheet_entries(employee_id, period_start, period_end, ent
     )
 
     validated_work_entries = []
+    work_totals_by_date = {}
+    system_hours_by_date = {}
+    for item in leave_entries + holiday_entries:
+        item_date = normalize_date_key(item.get("date"))
+        if item_date:
+            system_hours_by_date[item_date] = (
+                system_hours_by_date.get(item_date, 0) + float(item.get("hours", 0) or 0)
+            )
+
     for entry in entries or []:
         if entry.get("entry_type", "work") != "work":
             continue
@@ -282,6 +293,9 @@ def build_validated_timesheet_entries(employee_id, period_start, period_end, ent
             return None, None, f"You don't have access to charge code {charge_code_id}"
 
         charge_code = mongo.db.charge_codes.find_one({"_id": cc_obj_id})
+        work_hours = float(entry.get("hours") or 0)
+        work_totals_by_date[entry_date] = work_totals_by_date.get(entry_date, 0) + work_hours
+
         validated_work_entries.append({
             "_id": ObjectId(),
             "date": entry_date,
@@ -289,9 +303,17 @@ def build_validated_timesheet_entries(employee_id, period_start, period_end, ent
             "charge_code_id": cc_obj_id,
             "charge_code": charge_code.get("code") if charge_code else "Unknown",
             "charge_code_name": charge_code.get("name") if charge_code else "",
-            "hours": float(entry.get("hours") or 0),
+            "hours": work_hours,
             "description": entry.get("description", ""),
         })
+
+    for entry_date, work_total in work_totals_by_date.items():
+        total_for_date = work_total + system_hours_by_date.get(entry_date, 0)
+        if total_for_date > WORKDAY_HOURS:
+            return None, None, (
+                f"{entry_date} has {total_for_date} total hours. "
+                f"Maximum allowed is {WORKDAY_HOURS} hours."
+            )
 
     merged_entries = validated_work_entries + leave_entries + holiday_entries
     total_hours = sum(float(item.get("hours", 0) or 0) for item in merged_entries)
@@ -1009,7 +1031,8 @@ def populate_holidays():
                 "date":         h["date"],
                 "entry_type":   "holiday",
                 "holiday_name": h.get("name"),
-                "hours":        8.0,
+                "hours":        WORKDAY_HOURS,
+                "code":         "PH",
                 "description":  f"Public Holiday: {h.get('name')}",
             }
             for h in holidays
