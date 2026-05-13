@@ -348,6 +348,81 @@ const getTimesheetAssignmentMeta = (source = {}) => {
   };
 };
 
+const LEAVE_CODE_MAP = {
+  planned: 'PL',
+  sick: 'SL',
+  optional: 'OL',
+  lwp: 'LWP',
+  lop: 'LWP',
+  'early logout': 'EL',
+};
+
+const normalizeDateKey = (value) => {
+  if (!value) return '';
+  return String(value).slice(0, 10);
+};
+
+const getLeaveCode = (leaveType) => {
+  const key = String(leaveType || '').trim().toLowerCase();
+  return LEAVE_CODE_MAP[key] || String(leaveType || 'LV').slice(0, 3).toUpperCase();
+};
+
+const getLeaveDisplayLabel = (leaveType) => {
+  const label = String(leaveType || 'Leave').trim();
+  return label ? `${label} Leave` : 'Leave';
+};
+
+const buildApprovedLeaveEntries = (approvedLeaves = [], dates = []) => {
+  if (!dates.length) return [];
+
+  const dateSet = new Set(dates);
+  const leaveByDate = new Map();
+
+  approvedLeaves.forEach((leave) => {
+    const start = normalizeDateKey(leave.approved_start_date || leave.start_date);
+    const end = normalizeDateKey(leave.approved_end_date || leave.end_date || start);
+    if (!start || !end) return;
+
+    eachDayOfInterval({ start: parseISO(start), end: parseISO(end) }).forEach((dateValue) => {
+      const dateKey = format(dateValue, 'yyyy-MM-dd');
+      const dayOfWeek = dateValue.getDay();
+      if (!dateSet.has(dateKey) || dayOfWeek === 0 || dayOfWeek === 6 || leaveByDate.has(dateKey)) return;
+
+      const code = getLeaveCode(leave.leave_type);
+      const isHalfDay = Boolean(leave.is_half_day);
+      const hours = isHalfDay ? DAILY_WORK_HOUR_LIMIT / 2 : DAILY_WORK_HOUR_LIMIT;
+
+      leaveByDate.set(dateKey, {
+        date: dateKey,
+        code,
+        hours,
+        leaveType: leave.leave_type || 'Leave',
+        label: getLeaveDisplayLabel(leave.leave_type),
+        isHalfDay,
+        halfDayPeriod: leave.half_day_period || '',
+        leaveId: leave._id || leave.id || '',
+      });
+    });
+  });
+
+  return Array.from(leaveByDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+};
+
+const createEmptyWorkEntries = (dates, lockedDateSet = new Set()) =>
+  dates.map((date) => ({
+    date,
+    hours: 0,
+    value: '',
+    entry_type: 'work',
+    locked: lockedDateSet.has(date),
+  }));
+
+const createEmptyWorkRow = (id, dates, lockedDateSet = new Set()) => ({
+  id,
+  chargeCodeId: '',
+  entries: createEmptyWorkEntries(dates, lockedDateSet),
+});
+
 // ─── TimesheetGrid ────────────────────────────────────────────────────────────
 function TimesheetGrid({
   dates, rows, chargeCodes, onRowUpdate, onRowAdd, onRowDelete,
@@ -373,6 +448,12 @@ function TimesheetGrid({
     row.entries.reduce((s, e) => s + numericVal(e), 0);
 
   const holidayByDate = Object.fromEntries((holidays || []).map((holiday) => [holiday.date, holiday]));
+  const approvedLeaveEntries = useMemo(
+    () => buildApprovedLeaveEntries(approvedLeaves, dates)
+      .filter((leave) => !holidayByDate[leave.date]),
+    [approvedLeaves, dates, holidayByDate]
+  );
+  const leaveByDate = Object.fromEntries(approvedLeaveEntries.map((leave) => [leave.date, leave]));
   const holidayDates = Object.keys(holidayByDate);
   const isWeekday = (dateStr) => {
     const day = parseISO(dateStr).getDay();
@@ -380,7 +461,8 @@ function TimesheetGrid({
   };
   const displayHours = (hours) => (hours ? hours.toFixed(1) : '');
   const holidayHoursForDate = (dateStr) => (holidayByDate[dateStr] ? WORKDAY_HOURS : 0);
-  const totalHoursForDate = (dateStr) => getColTotal(dateStr) + holidayHoursForDate(dateStr);
+  const leaveHoursForDate = (dateStr) => (leaveByDate[dateStr]?.hours || 0);
+  const totalHoursForDate = (dateStr) => getColTotal(dateStr) + holidayHoursForDate(dateStr) + leaveHoursForDate(dateStr);
   const workScheduleForDate = (dateStr) => (isWeekday(dateStr) ? WORKDAY_HOURS : 0);
   const supportCheckboxRows = [
     'Shift Allowance – Shift Type B',
@@ -549,46 +631,69 @@ function TimesheetGrid({
 
                   {dates.map((d) => {
                     const isHol = isHoliday(d);
+                    const leaveEntry = leaveByDate[d];
                     const entry = getEntry(row, d);
                     return (
                       <td key={d} style={{
                         padding: '8px', textAlign: 'center',
                         borderLeft: `1px solid ${C.borderLight}`,
-                        background: isHol ? '#fffbeb' : 'transparent',
+                        background: isHol ? '#fffbeb' : leaveEntry ? C.purpleLight : 'transparent',
                       }}>
-                        <input
-                          className="mte-sheet-hour-input"
-                          type="number"
-                          min="0"
-                          max={DAILY_WORK_HOUR_LIMIT}
-                          step="0.25"
-                          value={entry.value ?? ''}
-                          disabled={readOnly}
-                          onChange={(e) => {
-                            const typedValue = e.target.value;
-                            const typedHours = parseFloat(typedValue);
-                            const cappedHours = Number.isFinite(typedHours)
-                              ? Math.min(Math.max(typedHours, 0), DAILY_WORK_HOUR_LIMIT)
-                              : 0;
-                            const nextValue = typedValue === ''
-                              ? ''
-                              : String(cappedHours);
-                            onRowUpdate(row.id, {
-                              entries: row.entries.map((ent) =>
-                                ent.date === d
-                                  ? { ...ent, value: nextValue, hours: cappedHours, entry_type: 'work' }
-                                  : ent
-                              ),
-                            });
-                          }}
-                          style={{
-                            width: '52px', padding: '4px 6px',
-                            border: `1px solid ${isHol ? '#e5c84a' : C.border}`, borderRadius: '4px',
-                            textAlign: 'center', fontSize: '13px', outline: 'none',
-                            background: readOnly ? C.headerBg : isHol ? '#fffde7' : C.white,
-                            color: C.text,
-                          }}
-                        />
+                        {isHol || leaveEntry ? (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              minWidth: '44px',
+                              justifyContent: 'center',
+                              padding: '5px 6px',
+                              borderRadius: '999px',
+                              fontSize: '11px',
+                              fontWeight: '700',
+                              border: `1px solid ${isHol ? C.amberBorder : C.purpleBorder}`,
+                              background: isHol ? '#fff7d6' : C.white,
+                              color: isHol ? C.holidayText : C.purple,
+                            }}
+                            title={isHol
+                              ? holidayByDate[d]?.holiday_name || 'Holiday'
+                              : `${leaveEntry.label}${leaveEntry.isHalfDay && leaveEntry.halfDayPeriod ? ` (${leaveEntry.halfDayPeriod})` : ''}`}
+                          >
+                            {isHol ? 'HOL' : leaveEntry.code}
+                          </span>
+                        ) : (
+                          <input
+                            className="mte-sheet-hour-input"
+                            type="number"
+                            min="0"
+                            max={DAILY_WORK_HOUR_LIMIT}
+                            step="0.25"
+                            value={entry.value ?? ''}
+                            disabled={readOnly}
+                            onChange={(e) => {
+                              const typedValue = e.target.value;
+                              const typedHours = parseFloat(typedValue);
+                              const cappedHours = Number.isFinite(typedHours)
+                                ? Math.min(Math.max(typedHours, 0), DAILY_WORK_HOUR_LIMIT)
+                                : 0;
+                              const nextValue = typedValue === ''
+                                ? ''
+                                : String(cappedHours);
+                              onRowUpdate(row.id, {
+                                entries: row.entries.map((ent) =>
+                                  ent.date === d
+                                    ? { ...ent, value: nextValue, hours: cappedHours, entry_type: 'work' }
+                                    : ent
+                                ),
+                              });
+                            }}
+                            style={{
+                              width: '52px', padding: '4px 6px',
+                              border: `1px solid ${C.border}`, borderRadius: '4px',
+                              textAlign: 'center', fontSize: '13px', outline: 'none',
+                              background: readOnly ? C.headerBg : C.white,
+                              color: C.text,
+                            }}
+                          />
+                        )}
                       </td>
                     );
                   })}
@@ -617,6 +722,30 @@ function TimesheetGrid({
                 </tr>
               );
             })}
+
+            {approvedLeaveEntries.map((leave) => (
+              <tr key={`leave-${leave.date}`} className="mte-sheet-static-row">
+                <td className="mte-sheet-static-label" style={{
+                  padding: '10px 16px',
+                  position: 'sticky', left: 0,
+                  background: C.white,
+                  zIndex: 10,
+                  borderRight: `1px solid ${C.borderLight}`,
+                  boxShadow: '2px 0 4px rgba(0,0,0,0.04)',
+                }}>
+                  <span className="mte-sheet-static-row-title">
+                    {`${leave.label} (${leave.code})`}
+                  </span>
+                </td>
+                {dates.map((d) => (
+                  <td key={`leave-cell-${leave.date}-${d}`} className="mte-sheet-static-value-cell">
+                    {d === leave.date ? displayHours(leave.hours) : ''}
+                  </td>
+                ))}
+                <td className="mte-sheet-static-total-cell">{displayHours(leave.hours)}</td>
+                {!readOnly && <td className="mte-sheet-sticky-end" />}
+              </tr>
+            ))}
 
             {holidayDates.map((dateStr) => (
               <tr key={`holiday-${dateStr}`} className="mte-sheet-static-row">
@@ -781,6 +910,26 @@ function TimesheetPage({ user, selectedPeriod, onSelectedPeriodChange, embedded 
       end:   parseISO(period.end),
     }).map((d) => format(d, 'yyyy-MM-dd'));
   }, [activePeriod, availablePeriods]);
+  const approvedLeaveEntries = useMemo(
+    () => buildApprovedLeaveEntries(approvedLeaves, dates),
+    [approvedLeaves, dates]
+  );
+  const holidayByDate = useMemo(
+    () => Object.fromEntries((holidays || []).map((holiday) => [holiday.date, holiday])),
+    [holidays]
+  );
+  const approvedLeaveByDate = useMemo(
+    () => Object.fromEntries(
+      approvedLeaveEntries
+        .filter((leave) => !holidayByDate[leave.date])
+        .map((leave) => [leave.date, leave])
+    ),
+    [approvedLeaveEntries, holidayByDate]
+  );
+  const lockedDateSet = useMemo(
+    () => new Set([...Object.keys(holidayByDate), ...Object.keys(approvedLeaveByDate)]),
+    [holidayByDate, approvedLeaveByDate]
+  );
 
   useEffect(() => {
     if (!userId) return;
@@ -832,6 +981,7 @@ function TimesheetPage({ user, selectedPeriod, onSelectedPeriodChange, embedded 
           // Store the full label (code + name) alongside entries
           const ccMap = {};
           (match.entries || []).forEach((e) => {
+            if (e.entry_type && e.entry_type !== 'work') return;
             if (!e.charge_code_id && !e.charge_code) return;
             // Use charge_code_id as the stable key to match against chargeCodes dropdown
             const ccId = e.charge_code_id || e.charge_code || '';
@@ -849,7 +999,9 @@ function TimesheetPage({ user, selectedPeriod, onSelectedPeriodChange, embedded 
               id: `loaded-${i}`,
               // Use the charge_code_id that matches the dropdown's option values
               chargeCodeId: matchingCC ? matchingCC.charge_code_id : ccId,
-              entries: dates.map((d) => byDate[d]
+              entries: dates.map((d) => lockedDateSet.has(d)
+                ? { date: d, hours: 0, value: '', entry_type: 'work', locked: true }
+                : byDate[d]
                 // FIX 3: Use hours as the display value, not description
                 ? { date: d, hours: byDate[d].hours || 0, value: String(byDate[d].hours || ''), entry_type: 'work' }
                 : { date: d, hours: 0, value: '', entry_type: 'work' }
@@ -858,25 +1010,35 @@ function TimesheetPage({ user, selectedPeriod, onSelectedPeriodChange, embedded 
           });
 
           if (loadedRows.length === 0) {
-            setRows([{ id: 'row1', chargeCodeId: '', entries: dates.map((d) => ({ date: d, hours: 0, value: '', entry_type: 'work' })) }]);
+            setRows([createEmptyWorkRow('row1', dates, lockedDateSet)]);
           } else {
             setRows(loadedRows);
           }
         } else {
           setTimesheetStatus('draft');
-          setRows([{ id: 'row1', chargeCodeId: '', entries: dates.map((d) => ({ date: d, hours: 0, value: '', entry_type: 'work' })) }]);
+          setRows([createEmptyWorkRow('row1', dates, lockedDateSet)]);
         }
       })
       .catch(() => {
-        setRows([{ id: 'row1', chargeCodeId: '', entries: dates.map((d) => ({ date: d, hours: 0, value: '', entry_type: 'work' })) }]);
+        setRows([createEmptyWorkRow('row1', dates, lockedDateSet)]);
       });
-  }, [userId, dates, chargeCodes, reloadTrigger]); // FIX 2: reloadTrigger added
+  }, [userId, dates, chargeCodes, reloadTrigger, lockedDateSet]); // FIX 2: reloadTrigger added
 
   const validate = useCallback(() => {
     const errors = [];
-    if (rows.length === 0)           errors.push('Add at least one charge code row');
-    if (rows.some((r) => !r.chargeCodeId)) errors.push(`${rows.filter((r) => !r.chargeCodeId).length} row(s) missing a charge code`);
-    if (rows.every((r) => r.entries.every((e) => !e.hours || e.hours === 0)))
+    const hasSystemEntries = approvedLeaveEntries.length > 0 || holidays.length > 0;
+    const rowsWithHours = rows.filter((row) =>
+      row.entries.some((entry) => {
+        const rawValue = entry?.value !== undefined ? entry.value : String(entry?.hours ?? '');
+        const hours = parseFloat(rawValue);
+        return !isNaN(hours) && hours > 0;
+      })
+    );
+    if (rows.length === 0 && !hasSystemEntries) errors.push('Add at least one charge code row');
+    if (rowsWithHours.some((row) => !row.chargeCodeId)) {
+      errors.push(`${rowsWithHours.filter((row) => !row.chargeCodeId).length} row(s) missing a charge code`);
+    }
+    if (rows.every((r) => r.entries.every((e) => !e.hours || e.hours === 0)) && !hasSystemEntries)
       errors.push('Enter hours for at least one row');
     dates.forEach((date) => {
       const total = rows.reduce((sum, row) => {
@@ -888,12 +1050,18 @@ function TimesheetPage({ user, selectedPeriod, onSelectedPeriodChange, embedded 
         }
         return sum + (isNaN(hours) ? 0 : hours);
       }, 0);
+      if (approvedLeaveByDate[date] && total > 0) {
+        errors.push(`${date} is already marked as ${approvedLeaveByDate[date].label} (${approvedLeaveByDate[date].code})`);
+      }
+      if (holidayByDate[date] && total > 0) {
+        errors.push(`${date} is a holiday and cannot contain work hours`);
+      }
       if (total > DAILY_WORK_HOUR_LIMIT) {
         errors.push(`${date} has ${total} hours. Maximum allowed is ${DAILY_WORK_HOUR_LIMIT} hours`);
       }
     });
     return errors;
-  }, [rows, dates]);
+  }, [rows, dates, approvedLeaveEntries.length, holidays.length, approvedLeaveByDate, holidayByDate]);
 
   useEffect(() => { setValidationErrors(validate()); }, [rows, validate]);
 
@@ -903,7 +1071,11 @@ function TimesheetPage({ user, selectedPeriod, onSelectedPeriodChange, embedded 
         const v = e.value !== undefined ? e.value : String(e.hours ?? '');
         const n = parseFloat(v);
         return s + (isNaN(n) ? 0 : n);
-      }, 0), 0);
+      }, 0), 0)
+    + approvedLeaveEntries
+      .filter((leave) => !holidayByDate[leave.date])
+      .reduce((sum, leave) => sum + (leave.hours || 0), 0)
+    + holidays.reduce((sum, holiday) => sum + (holiday.hours || DAILY_WORK_HOUR_LIMIT), 0);
 
   const buildWorkEntries = ({ requireChargeCode = true } = {}) => {
     const entries = [];
@@ -918,6 +1090,11 @@ function TimesheetPage({ user, selectedPeriod, onSelectedPeriodChange, embedded 
         if (numHrs < 0) throw new Error(`Hours cannot be negative on ${e.date}`);
         if (numHrs > DAILY_WORK_HOUR_LIMIT) {
           throw new Error(`Working hours for any charge code cannot exceed ${DAILY_WORK_HOUR_LIMIT} hours on ${e.date}`);
+        }
+        if (lockedDateSet.has(e.date)) {
+          const leaveEntry = approvedLeaveByDate[e.date];
+          if (leaveEntry) throw new Error(`${e.date} is already marked as ${leaveEntry.label} (${leaveEntry.code})`);
+          if (holidayByDate[e.date]) throw new Error(`${e.date} is a holiday and cannot contain work hours`);
         }
         if (requireChargeCode && !row.chargeCodeId) throw new Error(`Select a charge code for ${e.date}`);
         totalsByDate[e.date] = (totalsByDate[e.date] || 0) + numHrs;
@@ -1049,7 +1226,7 @@ function TimesheetPage({ user, selectedPeriod, onSelectedPeriodChange, embedded 
         await fetchAPI(`/timesheets/delete/${match._id || match.id}`, { method: 'DELETE' });
       }
       setTimesheetStatus('draft');
-      setRows([{ id: 'row1', chargeCodeId: '', entries: dates.map((date) => ({ date, hours: 0, value: '', entry_type: 'work' })) }]);
+      setRows([createEmptyWorkRow('row1', dates, lockedDateSet)]);
       setReloadTrigger((t) => t + 1);
       alert('Timesheet deleted successfully');
     } catch (err) {
@@ -1151,9 +1328,7 @@ function TimesheetPage({ user, selectedPeriod, onSelectedPeriodChange, embedded 
           <span>Delete</span>
         </button>
         <button type="button" className="mte-tool-button" onClick={() => setRows((previous) => [...previous, {
-          id: `row${Date.now()}`,
-          chargeCodeId: '',
-          entries: dates.map((date) => ({ date, hours: 0, value: '', entry_type: 'work' })),
+          ...createEmptyWorkRow(`row${Date.now()}`, dates, lockedDateSet),
         }])}>
           <Plus size={18} />
           <span>Add New Row</span>
@@ -1202,11 +1377,7 @@ function TimesheetPage({ user, selectedPeriod, onSelectedPeriodChange, embedded 
         rows={rows}
         chargeCodes={chargeCodes}
         onRowUpdate={(id, u) => setRows((p) => p.map((r) => r.id === id ? { ...r, ...u } : r))}
-        onRowAdd={() => setRows((p) => [...p, {
-          id: `row${Date.now()}`,
-          chargeCodeId: '',
-          entries: dates.map((d) => ({ date: d, hours: 0, value: '', entry_type: 'work' })),
-        }])}
+        onRowAdd={() => setRows((p) => [...p, createEmptyWorkRow(`row${Date.now()}`, dates, lockedDateSet)])}
         onRowDelete={(id) => setRows((p) => p.filter((r) => r.id !== id))}
         readOnly={isReadOnly}
         approvedLeaves={approvedLeaves}

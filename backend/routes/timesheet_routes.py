@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from config.db import mongo
 
 timesheet_bp = Blueprint("timesheet_bp", __name__)
+WORKDAY_HOURS = 9.0
 
 
 # ========================================
@@ -122,6 +123,181 @@ def validate_daily_work_hours(entries):
     return None
 
 
+def normalize_date_key(value):
+    """Normalize stored datetime/string values to YYYY-MM-DD for comparisons."""
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d")
+    if value is None:
+        return ""
+    return str(value)[:10]
+
+
+def is_weekday_date(date_key):
+    try:
+        return datetime.strptime(date_key, "%Y-%m-%d").weekday() < 5
+    except Exception:
+        return False
+
+
+def daterange_keys(start_key, end_key):
+    start = datetime.strptime(start_key, "%Y-%m-%d")
+    end = datetime.strptime(end_key, "%Y-%m-%d")
+    current = start
+    while current <= end:
+        yield current.strftime("%Y-%m-%d")
+        current += timedelta(days=1)
+
+
+def get_leave_code(leave_type):
+    """Map leave types to short SAP-style codes for timesheets."""
+    key = (leave_type or "").strip().lower()
+    return {
+        "planned": "PL",
+        "sick": "SL",
+        "optional": "OL",
+        "lwp": "LWP",
+        "lop": "LWP",
+        "early logout": "EL",
+    }.get(key, (leave_type or "LV")[:3].upper())
+
+
+def build_system_generated_entries(employee_id, period_start, period_end):
+    """Generate locked holiday/leave entries for a timesheet period."""
+    holiday_docs = list(mongo.db.holidays.find({
+        "date": {"$gte": period_start, "$lte": period_end},
+        "type": {"$in": ["public", "company"]},
+    }))
+    holiday_entries = []
+    locked_dates = {}
+
+    for holiday in holiday_docs:
+        date_key = normalize_date_key(holiday.get("date"))
+        holiday_entries.append({
+            "_id": ObjectId(),
+            "date": date_key,
+            "entry_type": "holiday",
+            "holiday_name": holiday.get("name"),
+            "hours": WORKDAY_HOURS,
+            "description": f"Public Holiday: {holiday.get('name')}",
+        })
+        locked_dates[date_key] = {
+            "kind": "holiday",
+            "label": holiday.get("name") or "Holiday",
+            "code": "HOL",
+        }
+
+    leave_docs = list(mongo.db.leaves.find({
+        "employee_id": employee_id,
+        "status": "Approved",
+        "start_date": {"$lte": period_end},
+        "end_date": {"$gte": period_start},
+    }))
+
+    leave_entries = []
+    for leave in leave_docs:
+        effective_start = normalize_date_key(leave.get("approved_start_date") or leave.get("start_date"))
+        effective_end = normalize_date_key(leave.get("approved_end_date") or leave.get("end_date"))
+        if not effective_start or not effective_end:
+            continue
+        if effective_end < period_start or effective_start > period_end:
+            continue
+
+        leave_type = leave.get("leave_type", "Leave")
+        leave_code = get_leave_code(leave_type)
+        is_half_day = bool(leave.get("is_half_day"))
+        leave_hours = WORKDAY_HOURS / 2 if is_half_day else WORKDAY_HOURS
+        half_day_period = leave.get("half_day_period", "")
+
+        for date_key in daterange_keys(max(effective_start, period_start), min(effective_end, period_end)):
+            if not is_weekday_date(date_key):
+                continue
+            if date_key in locked_dates and locked_dates[date_key]["kind"] == "holiday":
+                continue
+            if date_key in locked_dates and locked_dates[date_key]["kind"] == "leave":
+                continue
+
+            leave_entries.append({
+                "_id": ObjectId(),
+                "date": date_key,
+                "entry_type": "leave",
+                "leave_type": leave_type,
+                "leave_code": leave_code,
+                "charge_code": leave_code,
+                "charge_code_name": f"{leave_type} Leave",
+                "hours": leave_hours,
+                "description": (
+                    f"{leave_type} leave"
+                    + (f" ({half_day_period})" if is_half_day and half_day_period else "")
+                ),
+                "leave_id": leave["_id"],
+                "is_half_day": is_half_day,
+                "half_day_period": half_day_period if is_half_day else "",
+            })
+            locked_dates[date_key] = {
+                "kind": "leave",
+                "label": leave_type,
+                "code": leave_code,
+            }
+
+    return holiday_entries, leave_entries, locked_dates
+
+
+def build_validated_timesheet_entries(employee_id, period_start, period_end, entries):
+    """Validate user-entered work rows and merge system-generated leave/holiday rows."""
+    holiday_entries, leave_entries, locked_dates = build_system_generated_entries(
+        employee_id, period_start, period_end
+    )
+
+    validated_work_entries = []
+    for entry in entries or []:
+        if entry.get("entry_type", "work") != "work":
+            continue
+
+        entry_date = normalize_date_key(entry.get("date"))
+        if not entry_date:
+            return None, None, "Entry date is required"
+
+        locked = locked_dates.get(entry_date)
+        if locked:
+            return None, None, (
+                f"{entry_date} is locked for {locked['label']} ({locked['code']}). "
+                "Work hours cannot be entered on approved leave or holiday dates."
+            )
+
+        charge_code_id = entry.get("charge_code_id")
+        if not charge_code_id:
+            return None, None, f"Charge code required for work entry on {entry_date}"
+
+        try:
+            cc_obj_id = ObjectId(charge_code_id)
+        except Exception:
+            return None, None, f"Invalid charge_code_id on {entry_date}"
+
+        assignment = mongo.db.charge_code_assignments.find_one({
+            "employee_id": employee_id,
+            "charge_code_id": cc_obj_id,
+            "is_active": True,
+        })
+        if not assignment:
+            return None, None, f"You don't have access to charge code {charge_code_id}"
+
+        charge_code = mongo.db.charge_codes.find_one({"_id": cc_obj_id})
+        validated_work_entries.append({
+            "_id": ObjectId(),
+            "date": entry_date,
+            "entry_type": "work",
+            "charge_code_id": cc_obj_id,
+            "charge_code": charge_code.get("code") if charge_code else "Unknown",
+            "charge_code_name": charge_code.get("name") if charge_code else "",
+            "hours": float(entry.get("hours") or 0),
+            "description": entry.get("description", ""),
+        })
+
+    merged_entries = validated_work_entries + leave_entries + holiday_entries
+    total_hours = sum(float(item.get("hours", 0) or 0) for item in merged_entries)
+    return merged_entries, total_hours, None
+
+
 # ========================================
 # CREATE / SUBMIT TIMESHEET
 # ========================================
@@ -165,88 +341,11 @@ def create_timesheet():
         if not reporting_lead_id:
             return jsonify({"error": "No reporting lead found for employee"}), 404
 
-        validated_entries = []
-
-        for entry in entries:
-            entry_date  = entry.get("date")
-            entry_type  = entry.get("entry_type", "work")
-            hours       = float(entry.get("hours", 0))
-            description = entry.get("description", "")
-
-            if entry_type == "leave":
-                leave_type = entry.get("leave_type")
-                if not leave_type:
-                    return jsonify({"error": f"Leave type required for leave entry on {entry_date}"}), 400
-
-                approved_leave = mongo.db.leaves.find_one({
-                    "employee_id": emp_obj_id,
-                    "status":      "Approved",
-                    "start_date":  {"$lte": entry_date},
-                    "end_date":    {"$gte": entry_date},
-                })
-                if not approved_leave:
-                    return jsonify({"error": f"No approved leave found for {entry_date}"}), 400
-
-                validated_entries.append({
-                    "_id":        ObjectId(),
-                    "date":       entry_date,
-                    "entry_type": "leave",
-                    "leave_type": leave_type,
-                    "hours":      hours or 8.0,
-                    "description": description,
-                    "leave_id":   approved_leave["_id"],
-                })
-
-            elif entry_type == "holiday":
-                holiday = mongo.db.holidays.find_one({
-                    "date": entry_date,
-                    "type": {"$in": ["public", "company"]},
-                })
-                if not holiday:
-                    return jsonify({"error": f"No public holiday found for {entry_date}"}), 400
-
-                validated_entries.append({
-                    "_id":          ObjectId(),
-                    "date":         entry_date,
-                    "entry_type":   "holiday",
-                    "holiday_name": holiday.get("name"),
-                    "hours":        hours or 8.0,
-                    "description":  description,
-                })
-
-            else:  # work
-                charge_code_id = entry.get("charge_code_id")
-                if not charge_code_id:
-                    return jsonify({"error": f"Charge code required for work entry on {entry_date}"}), 400
-
-                try:
-                    cc_obj_id = ObjectId(charge_code_id)
-                except Exception:
-                    return jsonify({"error": f"Invalid charge_code_id on {entry_date}"}), 400
-
-                assignment = mongo.db.charge_code_assignments.find_one({
-                    "employee_id":    emp_obj_id,
-                    "charge_code_id": cc_obj_id,
-                    "is_active":      True,
-                })
-                if not assignment:
-                    return jsonify({"error": f"You don't have access to charge code {charge_code_id}"}), 400
-
-                charge_code = mongo.db.charge_codes.find_one({"_id": cc_obj_id})
-
-                # FIX: store charge_code_name so the lead view can display "CODE – Name"
-                validated_entries.append({
-                    "_id":              ObjectId(),
-                    "date":             entry_date,
-                    "entry_type":       "work",
-                    "charge_code_id":   cc_obj_id,
-                    "charge_code":      charge_code.get("code") if charge_code else "Unknown",
-                    "charge_code_name": charge_code.get("name") if charge_code else "",
-                    "hours":            hours,
-                    "description":      description,
-                })
-
-        total_hours = sum(e.get("hours", 0) for e in validated_entries)
+        validated_entries, total_hours, entry_error = build_validated_timesheet_entries(
+            emp_obj_id, period_start, period_end, entries
+        )
+        if entry_error:
+            return jsonify({"error": entry_error}), 400
 
         now = datetime.utcnow()
         timesheet = {
@@ -322,22 +421,14 @@ def update_timesheet(timesheet_id):
         if ts.get("status") not in ("draft", "rejected_by_lead", "rejected_by_manager"):
             return jsonify({"error": "Only draft or rejected timesheets can be updated"}), 400
 
-        # FIX: re-hydrate charge_code_name on every work entry during update too
-        validated_entries = []
-        for entry in entries:
-            if entry.get("entry_type") == "work" and entry.get("charge_code_id"):
-                try:
-                    cc_obj_id = ObjectId(entry["charge_code_id"])
-                    charge_code = mongo.db.charge_codes.find_one({"_id": cc_obj_id})
-                    if charge_code:
-                        entry = dict(entry)
-                        entry["charge_code"]      = charge_code.get("code", entry.get("charge_code", ""))
-                        entry["charge_code_name"] = charge_code.get("name", "")
-                except Exception:
-                    pass
-            validated_entries.append(entry)
-
-        total_hours = sum(float(e.get("hours", 0)) for e in validated_entries)
+        validated_entries, total_hours, entry_error = build_validated_timesheet_entries(
+            ts["employee_id"],
+            ts.get("period_start"),
+            ts.get("period_end"),
+            entries,
+        )
+        if entry_error:
+            return jsonify({"error": entry_error}), 400
 
         mongo.db.timesheets.update_one(
             {"_id": ObjectId(timesheet_id)},
@@ -388,39 +479,11 @@ def save_timesheet_draft():
         if existing and existing.get("status") in ("approved", "pending_lead", "pending_manager"):
             return jsonify({"error": "Submitted or approved timesheets cannot be saved as drafts"}), 400
 
-        validated_entries = []
-        for entry in entries:
-            if entry.get("entry_type", "work") != "work":
-                continue
-            charge_code_id = entry.get("charge_code_id")
-            if not charge_code_id:
-                return jsonify({"error": f"Charge code required for work entry on {entry.get('date')}"}), 400
-            try:
-                cc_obj_id = ObjectId(charge_code_id)
-            except Exception:
-                return jsonify({"error": f"Invalid charge_code_id on {entry.get('date')}"}), 400
-
-            assignment = mongo.db.charge_code_assignments.find_one({
-                "employee_id": emp_obj_id,
-                "charge_code_id": cc_obj_id,
-                "is_active": True,
-            })
-            if not assignment:
-                return jsonify({"error": f"You don't have access to charge code {charge_code_id}"}), 400
-
-            charge_code = mongo.db.charge_codes.find_one({"_id": cc_obj_id})
-            validated_entries.append({
-                "_id": ObjectId(),
-                "date": entry.get("date"),
-                "entry_type": "work",
-                "charge_code_id": cc_obj_id,
-                "charge_code": charge_code.get("code") if charge_code else "Unknown",
-                "charge_code_name": charge_code.get("name") if charge_code else "",
-                "hours": float(entry.get("hours") or 0),
-                "description": entry.get("description", ""),
-            })
-
-        total_hours = sum(e.get("hours", 0) for e in validated_entries)
+        validated_entries, total_hours, entry_error = build_validated_timesheet_entries(
+            emp_obj_id, period_start, period_end, entries
+        )
+        if entry_error:
+            return jsonify({"error": entry_error}), 400
         now = datetime.utcnow()
         draft = {
             "employee_id": emp_obj_id,
@@ -495,10 +558,25 @@ def submit_timesheet(timesheet_id):
         if limit_error:
             return jsonify({"error": limit_error}), 400
 
+        work_entries = [
+            entry for entry in (ts.get("entries") or [])
+            if entry.get("entry_type", "work") == "work"
+        ]
+        validated_entries, total_hours, entry_error = build_validated_timesheet_entries(
+            ts["employee_id"],
+            ts.get("period_start"),
+            ts.get("period_end"),
+            work_entries,
+        )
+        if entry_error:
+            return jsonify({"error": entry_error}), 400
+
         now = datetime.utcnow()
         mongo.db.timesheets.update_one(
             {"_id": ObjectId(timesheet_id)},
             {"$set": {
+                "entries":       validated_entries,
+                "total_hours":   total_hours,
                 "status":       "pending_lead",
                 "submitted_at": now,
                 "updated_at":   now,
