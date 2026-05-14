@@ -1367,6 +1367,7 @@ def update_leave_status(leave_id):
             )
 
         removed_orders = 0
+        synced_timesheets = 0
 
         if status == "Approved":
             employee = mongo.db.users.find_one({"_id": leave_record["employee_id"]})
@@ -1416,10 +1417,17 @@ def update_leave_status(leave_id):
                         f"{leave_record.get('employee_name', 'Unknown')} due to approved leave "
                         f"from {approved_range_start} to {approved_range_end}"
                     )
+            try:
+                from routes.timesheet_routes import sync_timesheets_for_approved_leave
+                synced_timesheets = sync_timesheets_for_approved_leave(updated_record)
+            except Exception as sync_error:
+                print(f"⚠️ Could not sync timesheets for approved leave {leave_id}: {sync_error}")
 
         response_message = f"Leave {status.lower()} successfully!"
         if status == "Approved" and removed_orders:
             response_message += f" {removed_orders} tea/coffee order(s) were discarded for the approved leave dates."
+        if status == "Approved" and synced_timesheets:
+            response_message += f" {synced_timesheets} timesheet(s) were updated."
 
         return jsonify({"message": response_message}), 200
 

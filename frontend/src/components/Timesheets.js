@@ -941,7 +941,7 @@ function TimesheetPage({ user, selectedPeriod, onSelectedPeriodChange, embedded 
     [holidayByDate, approvedLeaveByDate]
   );
 
-  useEffect(() => {
+  const loadTimesheetReferenceData = useCallback(() => {
     if (!userId) return;
 
     fetchAPI(`/charge_codes/employee/${userId}?active_only=true`)
@@ -956,6 +956,12 @@ function TimesheetPage({ user, selectedPeriod, onSelectedPeriodChange, embedded 
       .then((data) => setProfile(data))
       .catch(console.error);
   }, [userId]);
+
+  useEffect(() => {
+    loadTimesheetReferenceData();
+    const refreshTimer = setInterval(loadTimesheetReferenceData, 30000);
+    return () => clearInterval(refreshTimer);
+  }, [loadTimesheetReferenceData]);
 
   useEffect(() => {
     setProfile(user || {});
@@ -4876,6 +4882,35 @@ function PortalTimeWorkspace({ user, selectedPeriod, onSelectedPeriodChange }) {
   );
 }
 
+function getEntriesWorkHours(entries = []) {
+  return entries
+    .filter((entry) => (entry.entry_type || 'work') === 'work')
+    .reduce((sum, entry) => sum + Number(entry.hours || 0), 0);
+}
+
+function getEffectiveSummaryEntries(entries = []) {
+  const absenceByDate = {};
+  entries.forEach((entry) => {
+    if (!['leave', 'holiday'].includes(entry.entry_type)) return;
+    const date = entry.date;
+    if (!date) return;
+    absenceByDate[date] = (absenceByDate[date] || 0) + Number(entry.hours || 0);
+  });
+
+  const usedWorkByDate = {};
+  return entries.map((entry) => {
+    if ((entry.entry_type || 'work') !== 'work') return entry;
+    const date = entry.date;
+    const absenceHours = absenceByDate[date] || 0;
+    if (!date || absenceHours <= 0) return entry;
+
+    const remaining = Math.max(DAILY_WORK_HOUR_LIMIT - absenceHours - (usedWorkByDate[date] || 0), 0);
+    const adjustedHours = Math.min(Number(entry.hours || 0), remaining);
+    usedWorkByDate[date] = (usedWorkByDate[date] || 0) + adjustedHours;
+    return { ...entry, hours: adjustedHours };
+  });
+}
+
 function MyTimeSummaryWorkspace({ user, selectedPeriod, periods }) {
   const userId = getUserId(user);
   const isAdmin = user?.role === 'Admin';
@@ -4941,9 +4976,11 @@ function MyTimeSummaryWorkspace({ user, selectedPeriod, periods }) {
 
   useEffect(() => {
     loadSummary();
+    const refreshTimer = setInterval(loadSummary, 30000);
+    return () => clearInterval(refreshTimer);
   }, [loadSummary]);
 
-  const entries = timesheet?.entries || [];
+  const entries = getEffectiveSummaryEntries(timesheet?.entries || []);
   const workEntries = entries.filter((entry) => (entry.entry_type || 'work') === 'work');
   const absenceEntries = entries.filter((entry) => ['leave', 'holiday'].includes(entry.entry_type));
   const expenseTotal = expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
@@ -4977,7 +5014,7 @@ function MyTimeSummaryWorkspace({ user, selectedPeriod, periods }) {
     if (absenceHours > 0) {
       grouped.absence = {
         label: 'Public holiday / Absence',
-        hours: absenceHours,
+        hours: 0,
         expenses: 0,
         absence: absenceHours,
       };
@@ -4987,7 +5024,7 @@ function MyTimeSummaryWorkspace({ user, selectedPeriod, periods }) {
 
   const summaryRows = [
     ...chargeRows,
-    { label: 'Total', hours: workHours + absenceHours, expenses: expenseTotal, absence: absenceHours, isTotal: true },
+    { label: 'Total', hours: workHours, expenses: expenseTotal, absence: absenceHours, isTotal: true },
     { label: 'Work Schedule', hours: workSchedule, expenses: '', absence: '', isMeta: true },
     { label: 'Overtime', hours: overtime || '', expenses: '', absence: '', isMeta: true },
     { label: 'Standard Available Hours', hours: standardAvailable || '', expenses: '', absence: '', isMeta: true },
@@ -5019,7 +5056,7 @@ function MyTimeSummaryWorkspace({ user, selectedPeriod, periods }) {
           documents: [],
         };
       }
-      grouped[key].hours += Number(item.total_hours || 0);
+      grouped[key].hours += getEntriesWorkHours(getEffectiveSummaryEntries(item.entries || []));
     });
     expenses.forEach((expense) => {
       const key = expense.employee_id || expense.employee_email || expense.employee_name || 'unknown';
@@ -5209,12 +5246,12 @@ function MyTimeSummaryWorkspace({ user, selectedPeriod, periods }) {
           <tr>
             <td>{country}</td>
             <td>{location}</td>
-            <td>{(workHours + absenceHours).toFixed(2)}</td>
+            <td>{workHours.toFixed(2)}</td>
           </tr>
           <tr>
             <td />
             <td>Total</td>
-            <td>{(workHours + absenceHours).toFixed(2)}</td>
+            <td>{workHours.toFixed(2)}</td>
           </tr>
         </tbody>
       </table>

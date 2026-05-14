@@ -320,6 +320,141 @@ def build_validated_timesheet_entries(employee_id, period_start, period_end, ent
     return merged_entries, total_hours, None
 
 
+def get_work_hours_total(entries):
+    """Return only employee-entered working hours, excluding leave and holidays."""
+    return sum(
+        float(entry.get("hours", 0) or 0)
+        for entry in entries or []
+        if entry.get("entry_type", "work") == "work"
+    )
+
+
+def fit_work_entries_around_system_entries(work_entries, system_entries):
+    """Remove or trim work entries that now conflict with approved leave/holidays."""
+    system_hours_by_date = {}
+    full_day_locked_dates = set()
+
+    for entry in system_entries or []:
+        date_key = normalize_date_key(entry.get("date"))
+        if not date_key:
+            continue
+        hours = float(entry.get("hours", 0) or 0)
+        system_hours_by_date[date_key] = system_hours_by_date.get(date_key, 0) + hours
+        if hours >= WORKDAY_HOURS and entry.get("entry_type") in ("leave", "holiday"):
+            full_day_locked_dates.add(date_key)
+
+    used_by_date = {}
+    adjusted = []
+    for entry in work_entries or []:
+        if entry.get("entry_type", "work") != "work":
+            continue
+        date_key = normalize_date_key(entry.get("date"))
+        if not date_key or date_key in full_day_locked_dates:
+            continue
+
+        original_hours = float(entry.get("hours", 0) or 0)
+        remaining = WORKDAY_HOURS - system_hours_by_date.get(date_key, 0) - used_by_date.get(date_key, 0)
+        if remaining <= 0:
+            continue
+
+        adjusted_hours = min(original_hours, remaining)
+        if adjusted_hours <= 0:
+            continue
+
+        updated_entry = dict(entry)
+        updated_entry["date"] = date_key
+        updated_entry["hours"] = adjusted_hours
+        used_by_date[date_key] = used_by_date.get(date_key, 0) + adjusted_hours
+        adjusted.append(updated_entry)
+
+    return adjusted
+
+
+def refresh_timesheet_system_entries(timesheet):
+    """Rebuild approved leave/holiday entries for an existing timesheet."""
+    if not timesheet:
+        return None
+
+    period_start = timesheet.get("period_start")
+    period_end = timesheet.get("period_end")
+    employee_id = timesheet.get("employee_id")
+    if not all([employee_id, period_start, period_end]):
+        return None
+
+    holiday_entries, leave_entries, _ = build_system_generated_entries(
+        employee_id, period_start, period_end
+    )
+    work_entries = [
+        entry for entry in timesheet.get("entries", [])
+        if entry.get("entry_type", "work") == "work"
+    ]
+    adjusted_work_entries = fit_work_entries_around_system_entries(
+        work_entries,
+        leave_entries + holiday_entries,
+    )
+    merged_entries = adjusted_work_entries + leave_entries + holiday_entries
+    total_hours = sum(float(item.get("hours", 0) or 0) for item in merged_entries)
+
+    return {
+        "entries": merged_entries,
+        "total_hours": total_hours,
+        "work_hours": get_work_hours_total(merged_entries),
+        "updated_at": datetime.utcnow(),
+        "system_entries_refreshed_at": datetime.utcnow(),
+    }
+
+
+def sync_timesheets_for_approved_leave(leave_record):
+    """Update overlapping timesheets after a leave is approved."""
+    if not leave_record or leave_record.get("status") != "Approved":
+        return 0
+
+    employee_id = leave_record.get("employee_id")
+    leave_start = normalize_date_key(
+        leave_record.get("approved_start_date") or leave_record.get("start_date")
+    )
+    leave_end = normalize_date_key(
+        leave_record.get("approved_end_date") or leave_record.get("end_date")
+    )
+    if not employee_id or not leave_start or not leave_end:
+        return 0
+
+    query = {
+        "employee_id": employee_id,
+        "period_start": {"$lte": leave_end},
+        "period_end": {"$gte": leave_start},
+        "status": {"$in": ["draft", "pending_lead", "pending_manager", "approved"]},
+    }
+    updated_count = 0
+    for timesheet in mongo.db.timesheets.find(query):
+        refreshed = refresh_timesheet_system_entries(timesheet)
+        if not refreshed:
+            continue
+        mongo.db.timesheets.update_one(
+            {"_id": timesheet["_id"]},
+            {"$set": refreshed},
+        )
+        updated_count += 1
+
+    if updated_count:
+        print(f"✅ Synced {updated_count} timesheet(s) for approved leave {leave_record.get('_id')}")
+    return updated_count
+
+
+def refresh_timesheet_for_read(timesheet):
+    """Refresh system entries before returning a timesheet to the UI."""
+    refreshed = refresh_timesheet_system_entries(timesheet)
+    if not refreshed:
+        return timesheet
+
+    mongo.db.timesheets.update_one(
+        {"_id": timesheet["_id"]},
+        {"$set": refreshed},
+    )
+    timesheet.update(refreshed)
+    return timesheet
+
+
 # ========================================
 # CREATE / SUBMIT TIMESHEET
 # ========================================
@@ -379,6 +514,7 @@ def create_timesheet():
             "period_end":          period_end,
             "entries":             validated_entries,
             "total_hours":         total_hours,
+            "work_hours":          get_work_hours_total(validated_entries),
             "status":              "pending_lead",
             "reporting_lead_id":   reporting_lead_id,
             "manager_id":          employee.get("peopleLead"),
@@ -457,6 +593,7 @@ def update_timesheet(timesheet_id):
             {"$set": {
                 "entries":     validated_entries,
                 "total_hours": total_hours,
+                "work_hours":  get_work_hours_total(validated_entries),
                 "updated_at":  datetime.utcnow(),
             }}
         )
@@ -516,6 +653,7 @@ def save_timesheet_draft():
             "period_end": period_end,
             "entries": validated_entries,
             "total_hours": total_hours,
+            "work_hours": get_work_hours_total(validated_entries),
             "status": "draft",
             "reporting_lead_id": employee.get("reportsTo"),
             "manager_id": employee.get("peopleLead"),
@@ -599,6 +737,7 @@ def submit_timesheet(timesheet_id):
             {"$set": {
                 "entries":       validated_entries,
                 "total_hours":   total_hours,
+                "work_hours":    get_work_hours_total(validated_entries),
                 "status":       "pending_lead",
                 "submitted_at": now,
                 "updated_at":   now,
@@ -620,7 +759,7 @@ def submit_timesheet(timesheet_id):
 
         return jsonify({
             "message":     "Timesheet submitted",
-            "total_hours": ts.get("total_hours", 0),
+            "total_hours": total_hours,
         }), 200
 
     except Exception as e:
@@ -670,6 +809,7 @@ def get_employee_timesheets(employee_id):
         timesheets = list(
             mongo.db.timesheets.find({"employee_id": ObjectId(employee_id)}).sort("period_start", -1)
         )
+        timesheets = [refresh_timesheet_for_read(ts) for ts in timesheets]
         timesheets = [enrich_timesheet_with_employee_assignments(ts) for ts in timesheets]
         return jsonify(serialize_all(timesheets)), 200
 
@@ -691,6 +831,7 @@ def get_pending_for_lead(user_id):
                 "status": "pending_lead",
             }).sort("submitted_at", -1)
         )
+        timesheets = [refresh_timesheet_for_read(ts) for ts in timesheets]
         timesheets = [enrich_timesheet_with_employee_assignments(ts) for ts in timesheets]
         return jsonify(serialize_all(timesheets)), 200
 
@@ -986,6 +1127,7 @@ def get_all_timesheets():
 
         result = []
         for ts in timesheets:
+            ts = refresh_timesheet_for_read(ts)
             ts = enrich_timesheet_with_employee_assignments(ts)
             ts = serialize_all(ts)
             employee_id = ts.get("employee_id")
@@ -1066,6 +1208,7 @@ def get_team_timesheets(manager_email):
             ts_list = list(mongo.db.timesheets.find({"employee_id": emp["_id"]}).sort("period_start", -1))
             all_ts.extend(ts_list)
 
+        all_ts = [refresh_timesheet_for_read(ts) for ts in all_ts]
         all_ts = [enrich_timesheet_with_employee_assignments(ts) for ts in all_ts]
         return jsonify(serialize_all(all_ts)), 200
 
@@ -1084,6 +1227,7 @@ def get_timesheet(timesheet_id):
         ts = mongo.db.timesheets.find_one({"_id": ObjectId(timesheet_id)})
         if not ts:
             return jsonify({"error": "Timesheet not found"}), 404
+        ts = refresh_timesheet_for_read(ts)
         ts = enrich_timesheet_with_employee_assignments(ts)
         return jsonify(serialize_all(ts)), 200
 
