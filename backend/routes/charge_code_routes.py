@@ -29,6 +29,19 @@ def clean_text(value):
     return str(value or "").strip()
 
 
+def first_non_empty(*values):
+    """Return the first value that is not None or blank after trimming."""
+    for value in values:
+        if value is None:
+            continue
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                continue
+        return value
+    return ""
+
+
 # ========================================
 # CREATE CHARGE CODE (ADMIN)
 # ========================================
@@ -312,6 +325,12 @@ def assign_charge_code():
                         "employee_name": employee.get("name"),
                         "charge_code": charge_code.get("code"),
                         "charge_code_name": charge_code.get("name"),
+                        "description": charge_code.get("description", ""),
+                        "project_name": charge_code.get("project_name", ""),
+                        "type": charge_code.get("type", ""),
+                        "sub_type": charge_code.get("sub_type", ""),
+                        "client": charge_code.get("client", ""),
+                        "country": charge_code.get("country", ""),
                         "assigned_by": assigner_obj_id,
                         "assigned_at": datetime.utcnow(),
                         "is_active": True,
@@ -330,6 +349,12 @@ def assign_charge_code():
                 "charge_code_id":   cc_obj_id,
                 "charge_code":      charge_code.get("code"),
                 "charge_code_name": charge_code.get("name"),
+                "description":      charge_code.get("description", ""),
+                "project_name":     charge_code.get("project_name", ""),
+                "type":             charge_code.get("type", ""),
+                "sub_type":         charge_code.get("sub_type", ""),
+                "client":           charge_code.get("client", ""),
+                "country":          charge_code.get("country", ""),
                 "assigned_by":      assigner_obj_id,
                 "assigned_at":      datetime.utcnow(),
                 "is_active":        True,
@@ -393,12 +418,12 @@ def get_employee_charge_codes(employee_id):
                     "charge_code_id":   str(charge_code["_id"]),
                     "charge_code":      charge_code.get("code"),
                     "charge_code_name": charge_code.get("name"),
-                    "description":      charge_code.get("description", ""),
-                    "project_name":     charge_code.get("project_name", ""),
-                    "type":             charge_code.get("type", ""),
-                    "sub_type":         charge_code.get("sub_type", ""),
-                    "client":           charge_code.get("client", ""),
-                    "country":          charge_code.get("country", ""),
+                    "description":      first_non_empty(assignment.get("description"), charge_code.get("description")),
+                    "project_name":     first_non_empty(assignment.get("project_name"), charge_code.get("project_name")),
+                    "type":             first_non_empty(assignment.get("type"), charge_code.get("type")),
+                    "sub_type":         first_non_empty(assignment.get("sub_type"), charge_code.get("sub_type")),
+                    "client":           first_non_empty(assignment.get("client"), charge_code.get("client")),
+                    "country":          first_non_empty(assignment.get("country"), charge_code.get("country")),
                 })
 
         print(f"✅ Found {len(result)} assigned charge codes for employee {employee_id}")
@@ -520,6 +545,12 @@ def bulk_assign_charge_codes():
                     "charge_code_id":   cc_obj_id,
                     "charge_code":      charge_code.get("code"),
                     "charge_code_name": charge_code.get("name"),
+                    "description":      charge_code.get("description", ""),
+                    "project_name":     charge_code.get("project_name", ""),
+                    "type":             charge_code.get("type", ""),
+                    "sub_type":         charge_code.get("sub_type", ""),
+                    "client":           charge_code.get("client", ""),
+                    "country":          charge_code.get("country", ""),
                     "assigned_by":      ObjectId(assigned_by),
                     "assigned_at":      datetime.utcnow(),
                     "is_active":        True,

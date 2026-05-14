@@ -585,11 +585,16 @@
 .mte-chargecodes-topbar {
   min-height: 52px;
   display: grid;
-  grid-template-columns: minmax(520px, 1.4fr) minmax(180px, auto) minmax(240px, 0.8fr) minmax(320px, auto);
+  grid-template-columns: minmax(500px, 1fr) minmax(170px, auto) minmax(210px, 0.7fr) minmax(280px, auto);
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   padding: 10px 12px;
   border-bottom: 1px solid #d4d4d4;
+}
+
+.mte-chargecodes-topbar.is-employee {
+  grid-template-columns: minmax(180px, auto) minmax(320px, auto);
+  justify-content: end;
 }
 
 .mte-chargecodes-add {
@@ -600,7 +605,7 @@
 
 .mte-chargecodes-add-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(130px, 1fr));
+  grid-template-columns: repeat(3, minmax(110px, 1fr));
   gap: 6px;
   width: 100%;
 }
@@ -640,7 +645,7 @@
 .mte-chargecodes-business {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   color: #4b4b4b;
   font-size: 11px;
   white-space: nowrap;
@@ -671,11 +676,11 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 12px;
+  gap: 10px;
 }
 
 .mte-chargecodes-actions select {
-  min-width: 190px;
+  min-width: 150px;
 }
 
 .mte-chargecodes-actions button {
@@ -709,13 +714,14 @@
 }
 
 .mte-chargecodes-table-wrap {
-  overflow: auto;
-  max-height: calc(100vh - 290px);
+  overflow-x: hidden;
+  overflow-y: visible;
+  max-height: none;
 }
 
 .mte-chargecodes-table {
   width: 100%;
-  min-width: 1180px;
+  min-width: 0;
   border-collapse: collapse;
   table-layout: fixed;
 }
@@ -724,12 +730,13 @@
 .mte-chargecodes-table td {
   border-right: 1px solid #dcdcdc;
   border-bottom: 1px solid #d5d5d5;
-  padding: 9px 10px;
+  padding: 8px 8px;
   font-size: 13px;
   color: #242424;
   text-align: left;
   vertical-align: middle;
   background: #fff;
+  overflow-wrap: anywhere;
 }
 
 .mte-chargecodes-table th {
@@ -743,49 +750,49 @@
 
 .mte-chargecodes-table th:nth-child(1),
 .mte-chargecodes-table td:nth-child(1) {
-  width: 56px;
+  width: 5%;
   text-align: center;
 }
 
 .mte-chargecodes-table th:nth-child(2),
 .mte-chargecodes-table td:nth-child(2) {
-  width: 86px;
+  width: 7%;
   text-align: center;
 }
 
 .mte-chargecodes-table th:nth-child(3),
 .mte-chargecodes-table td:nth-child(3) {
-  width: 160px;
+  width: 12%;
 }
 
 .mte-chargecodes-table th:nth-child(4),
 .mte-chargecodes-table td:nth-child(4) {
-  width: 180px;
+  width: 12%;
 }
 
 .mte-chargecodes-table th:nth-child(5),
 .mte-chargecodes-table td:nth-child(5) {
-  width: 240px;
+  width: 16%;
 }
 
 .mte-chargecodes-table th:nth-child(6),
 .mte-chargecodes-table td:nth-child(6) {
-  width: 150px;
+  width: 10%;
 }
 
 .mte-chargecodes-table th:nth-child(7),
 .mte-chargecodes-table td:nth-child(7) {
-  width: 300px;
+  width: 21%;
 }
 
 .mte-chargecodes-table th:nth-child(8),
 .mte-chargecodes-table td:nth-child(8) {
-  width: 135px;
+  width: 9%;
 }
 
 .mte-chargecodes-table th:nth-child(9),
 .mte-chargecodes-table td:nth-child(9) {
-  width: 190px;
+  width: 8%;
   border-right: none;
 }
 

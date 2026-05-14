@@ -3350,7 +3350,7 @@ function getChargeCodeGridRow(item = {}, index = 0) {
   const description = item.description || item.charge_code_name || item.name || item.project_name || '-';
   const client = item.client || item.project_name || item.client_name || '-';
   const country = item.country || item.countryRegion || item.country_region || '-';
-  const type = item.type || item.charge_type || (item.entry_type === 'absence' ? 'Training/Recruiting/Absence' : 'Chargeable');
+  const type = item.type || item.charge_type || '-';
   const subType = item.subType || item.sub_type || item.subtype || '-';
   const owner = item.owner || item.owner_email || item.created_by_name || item.assigned_by_name || '-';
 
@@ -3536,48 +3536,50 @@ function ChargeCodesWorkspace({ user, adminMode = false }) {
 
   return (
     <div className="mte-chargecodes-shell">
-      <div className="mte-chargecodes-topbar">
-        <div className="mte-chargecodes-add">
-          <div className="mte-chargecodes-add-grid">
-            <input
-              value={chargeCodeForm.code}
-              onChange={(event) => setChargeCodeForm((previous) => ({ ...previous, code: event.target.value }))}
-              placeholder="Charge Code"
-              disabled={!adminMode || loading}
-            />
-            <input
-              value={chargeCodeForm.type}
-              onChange={(event) => setChargeCodeForm((previous) => ({ ...previous, type: event.target.value }))}
-              placeholder="Type"
-              disabled={!adminMode || loading}
-            />
-            <input
-              value={chargeCodeForm.subType}
-              onChange={(event) => setChargeCodeForm((previous) => ({ ...previous, subType: event.target.value }))}
-              placeholder="Subtype"
-              disabled={!adminMode || loading}
-            />
-            <input
-              value={chargeCodeForm.client}
-              onChange={(event) => setChargeCodeForm((previous) => ({ ...previous, client: event.target.value }))}
-              placeholder="Client"
-              disabled={!adminMode || loading}
-            />
-            <input
-              value={chargeCodeForm.country}
-              onChange={(event) => setChargeCodeForm((previous) => ({ ...previous, country: event.target.value }))}
-              placeholder="Country"
-              disabled={!adminMode || loading}
-            />
-            <input
-              value={chargeCodeForm.description}
-              onChange={(event) => setChargeCodeForm((previous) => ({ ...previous, description: event.target.value }))}
-              placeholder="Description"
-              disabled={!adminMode || loading}
-            />
+      <div className={`mte-chargecodes-topbar ${adminMode ? '' : 'is-employee'}`}>
+        {adminMode ? (
+          <div className="mte-chargecodes-add">
+            <div className="mte-chargecodes-add-grid">
+              <input
+                value={chargeCodeForm.code}
+                onChange={(event) => setChargeCodeForm((previous) => ({ ...previous, code: event.target.value }))}
+                placeholder="Charge Code"
+                disabled={loading}
+              />
+              <input
+                value={chargeCodeForm.type}
+                onChange={(event) => setChargeCodeForm((previous) => ({ ...previous, type: event.target.value }))}
+                placeholder="Type"
+                disabled={loading}
+              />
+              <input
+                value={chargeCodeForm.subType}
+                onChange={(event) => setChargeCodeForm((previous) => ({ ...previous, subType: event.target.value }))}
+                placeholder="Subtype"
+                disabled={loading}
+              />
+              <input
+                value={chargeCodeForm.client}
+                onChange={(event) => setChargeCodeForm((previous) => ({ ...previous, client: event.target.value }))}
+                placeholder="Client"
+                disabled={loading}
+              />
+              <input
+                value={chargeCodeForm.country}
+                onChange={(event) => setChargeCodeForm((previous) => ({ ...previous, country: event.target.value }))}
+                placeholder="Country"
+                disabled={loading}
+              />
+              <input
+                value={chargeCodeForm.description}
+                onChange={(event) => setChargeCodeForm((previous) => ({ ...previous, description: event.target.value }))}
+                placeholder="Description"
+                disabled={loading}
+              />
+            </div>
+            <button type="button" onClick={handleAddCode} disabled={loading}>Add</button>
           </div>
-          <button type="button" onClick={handleAddCode} disabled={!adminMode || loading}>Add</button>
-        </div>
+        ) : null}
 
         <div className="mte-chargecodes-business">
           <button type="button" aria-label="Business development charge codes">
@@ -3656,7 +3658,7 @@ function ChargeCodesWorkspace({ user, adminMode = false }) {
               <th>Type</th>
               <th>SubType</th>
               <th>Client</th>
-              <th>Country/Region</th>
+              <th>Country</th>
               <th>Description</th>
               <th>Charge Code</th>
               <th>Owner</th>
